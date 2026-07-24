@@ -1,0 +1,52 @@
+{
+  "app": {
+    "name": "Work Management Platform",
+    "shortName": "Work Mgmt"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "tasks": "Tasks",
+    "employees": "Employees",
+    "departments": "Departments",
+    "attendance": "Attendance",
+    "workLogs": "Work Logs",
+    "leave": "Leave",
+    "approvals": "Approvals",
+    "announcements": "Announcements",
+    "notifications": "Notifications",
+    "reports": "Reports",
+    "settings": "Settings",
+    "main": "Main",
+    "organization": "Organization",
+    "operations": "Operations",
+    "communication": "Communication",
+    "analytics": "Analytics",
+    "administration": "Administration",
+    "menu": "Menu",
+    "closeMenu": "Close menu"
+  },
+  "header": {
+    "userPlaceholder": "User",
+    "notifications": "Notifications"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "description": "Welcome to the Work Management Platform. Modules will be enabled in later milestones.",
+    "emptyTitle": "No data yet",
+    "emptyDescription": "Authentication and users will be set up in the next milestone."
+  },
+  "states": {
+    "loading": "Loading...",
+    "errorTitle": "Something went wrong",
+    "errorDescription": "The operation could not be completed. Please try again.",
+    "emptyTitle": "No items",
+    "emptyDescription": "There is nothing to show right now.",
+    "retry": "Retry"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications yet",
+    "comingSoon": "The notification center will be enabled after authentication is set up."
+  }
+}

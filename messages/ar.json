@@ -1,0 +1,52 @@
+{
+  "app": {
+    "name": "منصة إدارة العمل",
+    "shortName": "إدارة العمل"
+  },
+  "nav": {
+    "dashboard": "الرئيسية",
+    "projects": "المشاريع",
+    "tasks": "المهام",
+    "employees": "الموظفون",
+    "departments": "الأقسام",
+    "attendance": "الحضور",
+    "workLogs": "سجلات العمل",
+    "leave": "الإجازات",
+    "approvals": "الموافقات",
+    "announcements": "الإعلانات",
+    "notifications": "الإشعارات",
+    "reports": "التقارير",
+    "settings": "الإعدادات",
+    "main": "الرئيسية",
+    "organization": "التنظيم",
+    "operations": "العمليات",
+    "communication": "التواصل",
+    "analytics": "التحليلات",
+    "administration": "الإدارة",
+    "menu": "القائمة",
+    "closeMenu": "إغلاق القائمة"
+  },
+  "header": {
+    "userPlaceholder": "المستخدم",
+    "notifications": "الإشعارات"
+  },
+  "dashboard": {
+    "title": "الرئيسية",
+    "description": "مرحباً بك في منصة إدارة العمل. سيتم تفعيل الوحدات في المراحل القادمة.",
+    "emptyTitle": "لا توجد بيانات بعد",
+    "emptyDescription": "ابدأ بإعداد المستخدمين والمصادقة في المرحلة التالية."
+  },
+  "states": {
+    "loading": "جارٍ التحميل...",
+    "errorTitle": "حدث خطأ",
+    "errorDescription": "تعذر إكمال العملية. حاول مرة أخرى.",
+    "emptyTitle": "لا توجد عناصر",
+    "emptyDescription": "لا يوجد محتوى لعرضه حالياً.",
+    "retry": "إعادة المحاولة"
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "empty": "لا توجد إشعارات حالياً",
+    "comingSoon": "سيتم تفعيل مركز الإشعارات بعد إعداد المصادقة."
+  }
+}
