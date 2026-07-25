@@ -31,9 +31,7 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   todo: "bg-muted",
   in_progress: "bg-sky-500/10 border-sky-500/30",
   blocked: "bg-orange-500/10 border-orange-500/30",
-  review: "bg-violet-500/10 border-violet-500/30",
   completed: "bg-emerald-500/10 border-emerald-500/30",
-  cancelled: "bg-muted opacity-70",
 };
 
 async function fetchProject(id: string): Promise<Project> {
@@ -232,7 +230,11 @@ export function ProjectBoardClient({
                 return;
               }
               const task = boardCards.find((item) => item.id === draggingId);
-              if (task && task.status !== column.status) {
+              if (
+                task &&
+                task.status !== column.status &&
+                !(task.incompleteDependencyCount ?? 0)
+              ) {
                 statusMutation.mutate({
                   taskId: draggingId,
                   status: column.status,
@@ -250,16 +252,28 @@ export function ProjectBoardClient({
             <div className="space-y-2">
               {column.tasks.map((task) => {
                 const isSubtask = Boolean(task.parentTaskId);
+                const statusLocked = (task.incompleteDependencyCount ?? 0) > 0;
+                const canDrag = canUpdateStatus && !statusLocked;
                 return (
                   <div
                     key={task.id}
-                    draggable={canUpdateStatus}
-                    onDragStart={() => setDraggingId(task.id)}
+                    draggable={canDrag}
+                    onDragStart={() => {
+                      if (canDrag) {
+                        setDraggingId(task.id);
+                      }
+                    }}
                     onDragEnd={() => setDraggingId(null)}
+                    title={
+                      statusLocked
+                        ? t("statusLockedByDependencies")
+                        : undefined
+                    }
                     className={cn(
                       "rounded-md border bg-background p-3 shadow-sm",
                       isSubtask && "border-dashed ps-2",
-                      canUpdateStatus && "cursor-grab active:cursor-grabbing",
+                      canDrag && "cursor-grab active:cursor-grabbing",
+                      statusLocked && "opacity-80",
                       draggingId === task.id && "opacity-60",
                     )}
                   >

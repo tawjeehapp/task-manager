@@ -720,6 +720,9 @@ Password reset (`POST /api/users/[id]/reset-password`) requires `user.reset_pass
 | DELETE | `/api/projects/[id]/members/[userId]` | `project.view` + service scope (admin or department manager) |
 | GET | `/api/tasks` | `project.view` (scoped) |
 | POST | `/api/tasks` | `task.create` |
+
+Create body may include optional `dependsOnTaskIds: string[]` (same-project finish-to-start links created with the task).
+
 | GET | `/api/tasks/[id]` | authenticated + access assert |
 | PATCH | `/api/tasks/[id]` | assign/manage, or assignee status-only |
 
@@ -746,6 +749,55 @@ Permissions seeded in M3:
 - `task.create` / `task.assign` — granted to department_manager (admin already had them)
 
 Department managers manage members and tasks inside department projects via service-layer scope, not `project.manage`.
+
+---
+
+# Task Intelligence API (Milestone 4)
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET | `/api/tasks/[id]/dependencies` | authenticated + task access |
+| POST | `/api/tasks/[id]/dependencies` | `task.assign` or project manage scope |
+| DELETE | `/api/tasks/[id]/dependencies/[dependencyId]` | `task.assign` or project manage scope |
+| GET | `/api/tasks/[id]/activity` | authenticated + task access (paginated) |
+| GET | `/api/users/[id]/workload` | `task.assign` |
+
+Dependency rules (finish-to-start):
+
+- Same project only; no self-edges; no cycles
+- Root tasks may only depend on other **root** tasks (not subtasks)
+- Subtasks may only depend on **sibling** subtasks under the same parent
+- Status is forced to `blocked` while any dependency is incomplete; status changes are rejected (`STATUS_LOCKED_BY_DEPENDENCIES` 409)
+- When prerequisites are satisfied, blocked dependents return to `todo`
+- Adding an incomplete dependency forces the dependent task to `blocked`
+
+Workload response:
+
+```
+{
+  userId,
+  activeTaskCount,
+  estimatedHours
+}
+```
+
+Active tasks = assigned tasks with status not `completed`.
+
+Activity is written on task create, assign, status change, field updates, and dependency add/remove.
+
+Notable error codes:
+
+- `DEPENDENCIES_INCOMPLETE` (409)
+- `STATUS_LOCKED_BY_DEPENDENCIES` (409)
+- `DEPENDENCY_SELF` (409)
+- `DEPENDENCY_CYCLE` (409)
+- `DEPENDENCY_ROOT_ON_SUBTASK` (409)
+- `DEPENDENCY_SUBTASK_SCOPE` (409)
+- `DEPENDENCY_PROJECT_MISMATCH` (409)
+- `DEPENDENCY_ALREADY_EXISTS` (409)
+- `DEPENDENCY_INVALID_FOR_STATUS` (409)
+- `DEPENDENCY_NOT_FOUND` (404)
+- `DEPENDENCY_TASK_NOT_FOUND` (404)
 
 ---
 

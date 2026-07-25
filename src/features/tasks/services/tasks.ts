@@ -11,6 +11,16 @@ import {
   assertCanCreateTaskInProject,
 } from "@/features/tasks/services/assert-can-access-task";
 import { assertCanAccessProject } from "@/features/projects/services/assert-can-access-project";
+import {
+  addTaskDependency,
+  assertStatusNotLockedByDependencies,
+  assertDependencyHierarchyAllowed,
+  areDependenciesSatisfied,
+  ensureBlockedWhenDependenciesIncomplete,
+  syncDependentsAfterPrerequisiteChange,
+  taskHasIncompleteDependencies,
+} from "@/features/tasks/services/dependencies";
+import { logTaskActivity } from "@/features/tasks/services/activity-logs";
 import type {
   CreateTaskInput,
   ListTasksQuery,
@@ -97,7 +107,14 @@ function toHours(value: number | string | null): number | null {
   return typeof value === "number" ? value : Number(value);
 }
 
-export function mapTask(row: TaskWithRelations, subtaskCount?: number): Task {
+export function mapTask(
+  row: TaskWithRelations,
+  extras?: {
+    subtaskCount?: number;
+    dependencyCount?: number;
+    incompleteDependencyCount?: number;
+  },
+): Task {
   return {
     id: row.id,
     projectId: row.project_id,
@@ -118,7 +135,9 @@ export function mapTask(row: TaskWithRelations, subtaskCount?: number): Task {
     completedAt: row.completed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    subtaskCount,
+    subtaskCount: extras?.subtaskCount,
+    dependencyCount: extras?.dependencyCount,
+    incompleteDependencyCount: extras?.incompleteDependencyCount,
   };
 }
 
@@ -149,6 +168,42 @@ async function getSubtaskAggregates(
     const current = aggregates.get(id) ?? { count: 0, hours: 0 };
     current.count += 1;
     current.hours += toHours(row.estimated_hours as number | string | null) ?? 0;
+    aggregates.set(id, current);
+  }
+
+  return aggregates;
+}
+
+async function getDependencyAggregates(
+  taskIds: string[],
+): Promise<Map<string, { count: number; incompleteCount: number }>> {
+  const aggregates = new Map<string, { count: number; incompleteCount: number }>();
+  if (taskIds.length === 0) {
+    return aggregates;
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("task_dependencies")
+    .select("task_id, depends_on_task:tasks!depends_on_task_id(status)")
+    .in("task_id", taskIds);
+
+  if (error) {
+    throw new ApiError(
+      "تعذر حساب تبعيات المهام.",
+      500,
+      "DEPENDENCY_COUNT_FAILED",
+    );
+  }
+
+  for (const row of data ?? []) {
+    const id = row.task_id as string;
+    const dep = row.depends_on_task as unknown as { status: string } | null;
+    const current = aggregates.get(id) ?? { count: 0, incompleteCount: 0 };
+    current.count += 1;
+    if (dep?.status !== "completed") {
+      current.incompleteCount += 1;
+    }
     aggregates.set(id, current);
   }
 
@@ -237,13 +292,23 @@ async function loadTaskById(id: string): Promise<Task> {
   }
 
   const row = data as unknown as TaskWithRelations;
+  const depAggregates = await getDependencyAggregates([row.id]);
+  const deps = depAggregates.get(row.id);
+
   if (row.parent_task_id) {
-    return mapTask(row);
+    return mapTask(row, {
+      dependencyCount: deps?.count ?? 0,
+      incompleteDependencyCount: deps?.incompleteCount ?? 0,
+    });
   }
 
   const aggregates = await getSubtaskAggregates([row.id]);
   const aggregate = aggregates.get(row.id);
-  const mapped = mapTask(row, aggregate?.count ?? 0);
+  const mapped = mapTask(row, {
+    subtaskCount: aggregate?.count ?? 0,
+    dependencyCount: deps?.count ?? 0,
+    incompleteDependencyCount: deps?.incompleteCount ?? 0,
+  });
   return {
     ...mapped,
     estimatedHours: aggregate?.hours ?? 0,
@@ -323,8 +388,57 @@ export async function createTask(
     input.assignedTo ?? null,
   );
 
-  const completedAt =
-    input.status === "completed" ? new Date().toISOString() : null;
+  const dependsOnTaskIds = [
+    ...new Set(input.dependsOnTaskIds ?? []),
+  ];
+
+  let createStatus = input.status;
+  let completedAt =
+    createStatus === "completed" ? new Date().toISOString() : null;
+
+  if (dependsOnTaskIds.length > 0) {
+    const { data: depTasks, error: depLookupError } = await admin
+      .from("tasks")
+      .select("id, project_id, status, parent_task_id")
+      .in("id", dependsOnTaskIds);
+
+    if (depLookupError) {
+      throw new ApiError(
+        "تعذر التحقق من التبعيات.",
+        500,
+        "DEPENDENCY_CHECK_FAILED",
+      );
+    }
+
+    if ((depTasks ?? []).length !== dependsOnTaskIds.length) {
+      throw new ApiError(
+        "المهمة المعتمد عليها غير موجودة.",
+        404,
+        "DEPENDENCY_TASK_NOT_FOUND",
+      );
+    }
+
+    for (const dep of depTasks ?? []) {
+      if (dep.project_id !== input.projectId) {
+        throw new ApiError(
+          "يجب أن تكون التبعية ضمن نفس المشروع.",
+          409,
+          "DEPENDENCY_PROJECT_MISMATCH",
+        );
+      }
+
+      assertDependencyHierarchyAllowed({
+        taskParentTaskId: input.parentTaskId ?? null,
+        dependsOnParentTaskId: (dep.parent_task_id as string | null) ?? null,
+      });
+    }
+
+    const statuses = (depTasks ?? []).map((row) => row.status as string);
+    if (!areDependenciesSatisfied(statuses)) {
+      createStatus = "blocked";
+      completedAt = null;
+    }
+  }
 
   const isSubtask = Boolean(input.parentTaskId);
   const estimatedHours = isSubtask ? (input.estimatedHours ?? null) : 0;
@@ -336,7 +450,7 @@ export async function createTask(
       parent_task_id: input.parentTaskId ?? null,
       title: input.title,
       description: input.description,
-      status: input.status,
+      status: createStatus,
       priority: input.priority,
       assigned_to: input.assignedTo ?? null,
       created_by: viewer.id,
@@ -354,6 +468,26 @@ export async function createTask(
 
   const created = data as TaskRow;
   await syncParentEstimatedHours(created.parent_task_id);
+
+  await logTaskActivity(viewer.id, created.id, "task.created", {
+    title: created.title,
+    status: created.status,
+    assignedTo: created.assigned_to,
+    projectId: created.project_id,
+    parentTaskId: created.parent_task_id,
+  });
+
+  if (created.assigned_to) {
+    await logTaskActivity(viewer.id, created.id, "task.assigned", {
+      from: null,
+      to: created.assigned_to,
+    });
+  }
+
+  for (const dependsOnTaskId of dependsOnTaskIds) {
+    await addTaskDependency(viewer, created.id, { dependsOnTaskId });
+  }
+
   return loadTaskById(created.id);
 }
 
@@ -406,6 +540,22 @@ export async function updateTask(
   }
 
   const admin = createAdminClient();
+
+  const { data: existing, error: existingError } = await admin
+    .from("tasks")
+    .select(
+      "parent_task_id, status, assigned_to, title, description, priority, start_date, due_date, estimated_hours",
+    )
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (existingError || !existing) {
+    throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+  }
+
+  await ensureBlockedWhenDependenciesIncomplete(taskId, viewer.id);
+  const statusLocked = await taskHasIncompleteDependencies(taskId);
+
   const patch: Record<string, unknown> = {};
 
   if (input.title !== undefined) {
@@ -427,17 +577,7 @@ export async function updateTask(
     patch.due_date = input.dueDate;
   }
   if (input.estimatedHours !== undefined) {
-    const { data: existingForHours, error: hoursLookupError } = await admin
-      .from("tasks")
-      .select("parent_task_id")
-      .eq("id", taskId)
-      .maybeSingle();
-
-    if (hoursLookupError || !existingForHours) {
-      throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
-    }
-
-    if (!existingForHours.parent_task_id) {
+    if (!existing.parent_task_id) {
       throw new ApiError(
         "ساعات المهمة الأب تُحسب تلقائياً من المهام الفرعية.",
         409,
@@ -448,22 +588,23 @@ export async function updateTask(
     patch.estimated_hours = input.estimatedHours;
   }
   if (input.status !== undefined) {
-    patch.status = input.status;
-    if (input.status === "completed") {
-      patch.completed_at = new Date().toISOString();
+    if (statusLocked) {
+      if (input.status !== "blocked" && input.status !== existing.status) {
+        await assertStatusNotLockedByDependencies(taskId);
+      }
+      // Keep forced blocked; do not apply other status while locked.
     } else {
-      patch.completed_at = null;
+      patch.status = input.status;
+      if (input.status === "completed") {
+        patch.completed_at = new Date().toISOString();
+      } else {
+        patch.completed_at = null;
+      }
     }
   }
 
-  const { data: existing, error: existingError } = await admin
-    .from("tasks")
-    .select("parent_task_id")
-    .eq("id", taskId)
-    .maybeSingle();
-
-  if (existingError || !existing) {
-    throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+  if (Object.keys(patch).length === 0) {
+    return loadTaskById(taskId);
   }
 
   const { error } = await admin.from("tasks").update(patch).eq("id", taskId);
@@ -474,6 +615,53 @@ export async function updateTask(
 
   if (input.estimatedHours !== undefined) {
     await syncParentEstimatedHours(existing.parent_task_id as string | null);
+  }
+
+  if (
+    input.assignedTo !== undefined &&
+    input.assignedTo !== existing.assigned_to
+  ) {
+    await logTaskActivity(viewer.id, taskId, "task.assigned", {
+      from: existing.assigned_to,
+      to: input.assignedTo,
+    });
+  }
+
+  if (
+    input.status !== undefined &&
+    input.status !== existing.status &&
+    !statusLocked &&
+    patch.status !== undefined
+  ) {
+    await logTaskActivity(viewer.id, taskId, "task.status_changed", {
+      from: existing.status,
+      to: input.status,
+    });
+
+    await syncDependentsAfterPrerequisiteChange(taskId, viewer.id);
+  }
+
+  const otherChanged =
+    (input.title !== undefined && input.title !== existing.title) ||
+    (input.description !== undefined &&
+      input.description !== existing.description) ||
+    (input.priority !== undefined && input.priority !== existing.priority) ||
+    (input.startDate !== undefined &&
+      input.startDate !== existing.start_date) ||
+    (input.dueDate !== undefined && input.dueDate !== existing.due_date) ||
+    (input.estimatedHours !== undefined &&
+      input.estimatedHours !==
+        (existing.estimated_hours === null ||
+        existing.estimated_hours === undefined
+          ? null
+          : Number(existing.estimated_hours)));
+
+  if (otherChanged) {
+    await logTaskActivity(viewer.id, taskId, "task.updated", {
+      fields: Object.keys(patch).filter(
+        (key) => key !== "assigned_to" && key !== "status" && key !== "completed_at",
+      ),
+    });
   }
 
   return loadTaskById(taskId);
@@ -609,16 +797,29 @@ export async function listTasksForViewer(
 
   const rows = (data ?? []) as unknown as TaskWithRelations[];
   const rootIds = rows.filter((r) => !r.parent_task_id).map((r) => r.id);
-  const aggregates = await getSubtaskAggregates(rootIds);
+  const allIds = rows.map((r) => r.id);
+  const [aggregates, depAggregates] = await Promise.all([
+    getSubtaskAggregates(rootIds),
+    getDependencyAggregates(allIds),
+  ]);
   const total = count ?? 0;
 
   return {
     items: rows.map((row) => {
+      const deps = depAggregates.get(row.id);
+      const depExtras = {
+        dependencyCount: deps?.count ?? 0,
+        incompleteDependencyCount: deps?.incompleteCount ?? 0,
+      };
+
       if (row.parent_task_id) {
-        return mapTask(row);
+        return mapTask(row, depExtras);
       }
       const aggregate = aggregates.get(row.id);
-      const mapped = mapTask(row, aggregate?.count ?? 0);
+      const mapped = mapTask(row, {
+        subtaskCount: aggregate?.count ?? 0,
+        ...depExtras,
+      });
       return {
         ...mapped,
         estimatedHours: aggregate?.hours ?? 0,

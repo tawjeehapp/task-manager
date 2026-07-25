@@ -422,15 +422,13 @@ Notes:
 
 # Task Status
 
-Initial statuses:
+Statuses:
 
 ```
-todo
-in_progress
-blocked
-review
-completed
-cancelled
+todo          — Not Started (task hasn't begun yet)
+in_progress   — In Progress (someone is actively working on it)
+blocked       — Blocked (cannot proceed; a dependency isn't ready)
+completed     — Done (completed)
 ```
 
 ---

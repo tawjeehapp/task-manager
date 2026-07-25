@@ -224,6 +224,24 @@ See [06-roadmap.md](./06-roadmap.md) for the full roadmap.
 
 ---
 
+## Milestone 4 — Task Management Intelligence
+
+Includes:
+
+- Finish-to-start task dependencies with start/complete guards
+- Employee workload view before assignment (active task count + estimated hours)
+- Task activity history (assignment, status, updates)
+
+Apply migration: `supabase/migrations/20260725150000_milestone4_dependencies_activity.sql`
+
+Does **not** include:
+
+- Comments, attachments
+- Notifications product
+- Attendance, leave, dashboards, Gantt
+
+---
+
 # Documentation Map
 
 | Document | Purpose |

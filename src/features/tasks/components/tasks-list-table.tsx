@@ -4,14 +4,18 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { ChevronDown, ChevronLeft, Copy, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, Copy, ExternalLink, GitBranch, Pencil, Plus, Trash2 } from "lucide-react";
 
 import type {
   Task,
   TaskPriority,
   TaskStatus,
 } from "@/features/tasks/types/task.types";
-import type { ProjectMember } from "@/features/projects/types/project.types";
+import { AssigneeSelect } from "@/features/tasks/components/assignee-select";
+import type { AssigneeOption } from "@/features/tasks/components/assignee-select";
+import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
+import { TaskDependenciesPanel } from "@/features/tasks/components/task-dependencies-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,11 +37,6 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-type AssigneeOption = {
-  id: string;
-  fullName: string;
-};
-
 type TasksListTableProps = {
   tasks: Task[];
   canEdit: boolean;
@@ -50,15 +49,45 @@ const STATUSES: TaskStatus[] = [
   "todo",
   "in_progress",
   "blocked",
-  "review",
   "completed",
-  "cancelled",
 ];
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high"];
 
 const selectClassName =
   "border-input bg-background h-8 max-w-[9.5rem] rounded-md border px-2 text-sm";
+
+function DependencyCountCell({ task }: { task: Task }) {
+  const t = useTranslations("tasks");
+  const count = task.dependencyCount ?? 0;
+  const incomplete = task.incompleteDependencyCount ?? 0;
+
+  if (count === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5"
+      title={
+        incomplete > 0
+          ? t("dependencyColumnIncomplete", {
+              incomplete,
+              count,
+            })
+          : t("dependencyColumnComplete", { count })
+      }
+    >
+      <GitBranch className="text-muted-foreground size-3.5 shrink-0" />
+      <span className="tabular-nums text-sm">{count}</span>
+      {incomplete > 0 ? (
+        <Badge variant="secondary" className="text-xs">
+          {t("dependencyBlocking")}
+        </Badge>
+      ) : null}
+    </span>
+  );
+}
 
 async function fetchSubtasks(parentTaskId: string): Promise<Task[]> {
   const params = new URLSearchParams({
@@ -78,24 +107,48 @@ async function fetchSubtasks(parentTaskId: string): Promise<Task[]> {
   return payload.data!.items;
 }
 
-async function fetchProjectMembers(
+async function fetchAssigneeOptions(
   projectId: string,
+  departmentId: string | null | undefined,
 ): Promise<AssigneeOption[]> {
-  const response = await fetch(`/api/projects/${projectId}/members`);
-  const payload = (await response.json()) as {
-    data?: { items: ProjectMember[] };
-    error?: { message: string };
-  };
-  if (!response.ok) {
-    throw new Error(payload.error?.message ?? "Failed");
+  const requests: Promise<Response>[] = [
+    fetch(`/api/projects/${projectId}/members`),
+  ];
+  if (departmentId) {
+    requests.push(fetch(`/api/departments/${departmentId}/members`));
   }
-  return (payload.data?.items ?? [])
-    .map((member) =>
-      member.user
-        ? { id: member.user.id, fullName: member.user.fullName }
-        : null,
-    )
-    .filter((option): option is AssigneeOption => option !== null);
+
+  const responses = await Promise.all(requests);
+  const byId = new Map<string, AssigneeOption>();
+
+  for (const response of responses) {
+    const payload = (await response.json()) as {
+      data?: {
+        items: Array<{
+          userId?: string;
+          user?: { id: string; fullName: string; employeeNumber?: string };
+        }>;
+      };
+    };
+    if (!response.ok) {
+      continue;
+    }
+    for (const member of payload.data?.items ?? []) {
+      const user = member.user;
+      if (!user) {
+        continue;
+      }
+      byId.set(user.id, {
+        id: user.id,
+        fullName: user.fullName,
+        employeeNumber: user.employeeNumber,
+      });
+    }
+  }
+
+  return [...byId.values()].sort((a, b) =>
+    a.fullName.localeCompare(b.fullName),
+  );
 }
 
 async function patchTask(
@@ -161,8 +214,13 @@ function TaskInlineFields({
   const canEditHours = canEditFull && Boolean(isSubtask);
 
   const membersQuery = useQuery({
-    queryKey: ["projects", task.projectId, "members", "assignee-options"],
-    queryFn: () => fetchProjectMembers(task.projectId),
+    queryKey: [
+      "task-assignees",
+      task.projectId,
+      task.project?.departmentId,
+    ],
+    queryFn: () =>
+      fetchAssigneeOptions(task.projectId, task.project?.departmentId),
     enabled: canEditFull,
     staleTime: 60_000,
   });
@@ -191,6 +249,8 @@ function TaskInlineFields({
       ? String(task.estimatedHours)
       : "—"
     : String(task.estimatedHours ?? 0);
+
+  const statusLockedByDeps = (task.incompleteDependencyCount ?? 0) > 0;
 
   const titleCell = (
     <div
@@ -279,6 +339,9 @@ function TaskInlineFields({
           </span>
         </TableCell>
         <TableCell>{task.dueDate ?? "—"}</TableCell>
+        <TableCell>
+          <DependencyCountCell task={task} />
+        </TableCell>
       </>
     );
   }
@@ -310,7 +373,14 @@ function TaskInlineFields({
         <select
           className={selectClassName}
           value={task.status}
-          disabled={patchMutation.isPending || (!canEditFull && !canEditStatus)}
+          disabled={
+            patchMutation.isPending ||
+            statusLockedByDeps ||
+            (!canEditFull && !canEditStatus)
+          }
+          title={
+            statusLockedByDeps ? t("statusLockedByDependencies") : undefined
+          }
           onChange={(event) =>
             patchMutation.mutate({ status: event.target.value })
           }
@@ -346,30 +416,27 @@ function TaskInlineFields({
       </TableCell>
       <TableCell onClick={(event) => event.stopPropagation()}>
         {canEditFull ? (
-          <select
+          <AssigneeSelect
             className={selectClassName}
-            value={task.assignedTo ?? ""}
+            value={task.assignedTo}
             disabled={patchMutation.isPending || membersQuery.isLoading}
-            onChange={(event) =>
-              patchMutation.mutate({
-                assignedTo: event.target.value || null,
-              })
+            options={(() => {
+              const options = [...(membersQuery.data ?? [])];
+              if (
+                task.assignedTo &&
+                !options.some((m) => m.id === task.assignedTo)
+              ) {
+                options.push({
+                  id: task.assignedTo,
+                  fullName: task.assignee?.fullName ?? task.assignedTo,
+                });
+              }
+              return options;
+            })()}
+            onChange={(userId) =>
+              patchMutation.mutate({ assignedTo: userId })
             }
-            aria-label={t("assignee")}
-          >
-            <option value="">—</option>
-            {(membersQuery.data ?? []).map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.fullName}
-              </option>
-            ))}
-            {task.assignedTo &&
-            !(membersQuery.data ?? []).some((m) => m.id === task.assignedTo) ? (
-              <option value={task.assignedTo}>
-                {task.assignee?.fullName ?? task.assignedTo}
-              </option>
-            ) : null}
-          </select>
+          />
         ) : (
           (task.assignee?.fullName ?? "—")
         )}
@@ -427,6 +494,9 @@ function TaskInlineFields({
           (task.dueDate ?? "—")
         )}
       </TableCell>
+      <TableCell>
+        <DependencyCountCell task={task} />
+      </TableCell>
     </>
   );
 }
@@ -446,9 +516,11 @@ function TaskRowActions({
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const [subtaskOpen, setSubtaskOpen] = useState(false);
+  const [depsOpen, setDepsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [subtaskHours, setSubtaskHours] = useState("");
+  const [subtaskDependsOn, setSubtaskDependsOn] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const createSubtaskMutation = useMutation({
@@ -462,11 +534,13 @@ function TaskRowActions({
         assignedTo: null,
         estimatedHours:
           subtaskHours === "" ? null : Number(subtaskHours),
+        dependsOnTaskIds: subtaskDependsOn,
       }),
     onSuccess: async () => {
       setSubtaskOpen(false);
       setSubtaskTitle("");
       setSubtaskHours("");
+      setSubtaskDependsOn([]);
       setActionError(null);
       onAddedSubtask?.();
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -535,6 +609,18 @@ function TaskRowActions({
         type="button"
         size="icon-sm"
         variant="ghost"
+        aria-label={t("tabDependencies")}
+        onClick={() => {
+          setActionError(null);
+          setDepsOpen(true);
+        }}
+      >
+        <GitBranch className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
         aria-label={t("copy")}
         disabled={copyMutation.isPending}
         onClick={() => copyMutation.mutate()}
@@ -594,6 +680,13 @@ function TaskRowActions({
                 onChange={(event) => setSubtaskHours(event.target.value)}
               />
             </div>
+            <TaskDependencyPicker
+              projectId={task.projectId}
+              parentTaskId={task.id}
+              value={subtaskDependsOn}
+              onChange={setSubtaskDependsOn}
+              disabled={createSubtaskMutation.isPending}
+            />
             {createSubtaskMutation.isError ? (
               <p className="text-destructive text-sm">
                 {(createSubtaskMutation.error as Error).message}
@@ -619,6 +712,21 @@ function TaskRowActions({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={depsOpen} onOpenChange={setDepsOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("tabDependencies")}</DialogTitle>
+            <DialogDescription>{task.title}</DialogDescription>
+          </DialogHeader>
+          <TaskDependenciesPanel
+            taskId={task.id}
+            projectId={task.projectId}
+            parentTaskId={task.parentTaskId}
+            canManage={canEdit}
+          />
         </DialogContent>
       </Dialog>
 
@@ -808,7 +916,7 @@ export function TasksListTable({
   className,
 }: TasksListTableProps) {
   const t = useTranslations("tasks");
-  const colSpan = (showProject ? 8 : 7) + 2;
+  const colSpan = (showProject ? 9 : 8) + 2;
 
   return (
     <div className={cn("overflow-x-auto rounded-lg border", className)}>
@@ -824,6 +932,7 @@ export function TasksListTable({
             <TableHead>{t("assignee")}</TableHead>
             <TableHead>{t("estimatedHours")}</TableHead>
             <TableHead>{t("dueDate")}</TableHead>
+            <TableHead>{t("tabDependencies")}</TableHead>
             <TableHead className="w-28">{t("actions")}</TableHead>
           </TableRow>
         </TableHeader>

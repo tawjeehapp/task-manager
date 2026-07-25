@@ -26,6 +26,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { TasksListTable } from "@/features/tasks/components/tasks-list-table";
+import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -160,8 +161,12 @@ export function TasksPageClient({
       dueDate: null,
       estimatedHours: null,
       parentTaskId: null,
+      dependsOnTaskIds: [],
     },
   });
+
+  const watchedProjectId = createForm.watch("projectId");
+  const watchedDependsOn = createForm.watch("dependsOnTaskIds") ?? [];
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateTaskInput) => {
@@ -278,7 +283,6 @@ export function TasksPageClient({
                           {statusLabel("in_progress")}
                         </option>
                         <option value="blocked">{statusLabel("blocked")}</option>
-                        <option value="review">{statusLabel("review")}</option>
                       </select>
                     </div>
                     <div className="space-y-2">
@@ -298,6 +302,14 @@ export function TasksPageClient({
                       />
                     </div>
                   </div>
+                  <TaskDependencyPicker
+                    projectId={watchedProjectId || null}
+                    parentTaskId={null}
+                    value={watchedDependsOn}
+                    onChange={(ids) =>
+                      createForm.setValue("dependsOnTaskIds", ids)
+                    }
+                  />
                   {createMutation.isError ? (
                     <Alert variant="destructive">
                       <AlertDescription>
@@ -354,14 +366,7 @@ export function TasksPageClient({
         >
           <option value="">{t("filterAllStatuses")}</option>
           {(
-            [
-              "todo",
-              "in_progress",
-              "blocked",
-              "review",
-              "completed",
-              "cancelled",
-            ] as const
+            ["todo", "in_progress", "blocked", "completed"] as const
           ).map((status) => (
             <option key={status} value={status}>
               {statusLabel(status)}

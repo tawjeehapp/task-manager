@@ -300,6 +300,7 @@ Support:
 Rules:
 
 A task cannot start before dependencies are completed.
+A sub-task cannot start before dependencies are completed.
 
 ---
 

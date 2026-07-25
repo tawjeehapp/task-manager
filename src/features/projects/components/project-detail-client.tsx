@@ -27,6 +27,9 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { TabPanel, Tabs } from "@/components/shared/tabs";
 import { TasksListTable } from "@/features/tasks/components/tasks-list-table";
+import { AssigneeSelect } from "@/features/tasks/components/assignee-select";
+import type { AssigneeOption } from "@/features/tasks/components/assignee-select";
+import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -266,6 +269,7 @@ export function ProjectDetailClient({
       startDate: null,
       dueDate: null,
       estimatedHours: null,
+      dependsOnTaskIds: [],
     },
   });
 
@@ -298,6 +302,7 @@ export function ProjectDetailClient({
         startDate: null,
         dueDate: null,
         estimatedHours: null,
+        dependsOnTaskIds: [],
       });
       setTaskError(null);
       setSuccessMessage(tTasks("createSuccess"));
@@ -335,6 +340,32 @@ export function ProjectDetailClient({
       (managedDepartmentId != null &&
         managedDepartmentId === project.departmentId));
   const allowProjectEdit = canManageProject;
+
+  const createTaskAssigneeOptions: AssigneeOption[] = (() => {
+    const byId = new Map<string, AssigneeOption>();
+    for (const member of departmentMembersQuery.data ?? []) {
+      if (member.user) {
+        byId.set(member.userId, {
+          id: member.user.id,
+          fullName: member.user.fullName,
+          employeeNumber: member.user.employeeNumber,
+        });
+      }
+    }
+    for (const member of members) {
+      if (member.user && !byId.has(member.userId)) {
+        byId.set(member.userId, {
+          id: member.user.id,
+          fullName: member.user.fullName,
+          employeeNumber: member.user.employeeNumber,
+        });
+      }
+    }
+    return [...byId.values()].sort((a, b) =>
+      a.fullName.localeCompare(b.fullName),
+    );
+  })();
+  const watchedCreateAssignee = createTaskForm.watch("assignedTo");
 
   function statusLabel(status: string) {
     return t(`status_${status}` as "status_draft");
@@ -791,35 +822,24 @@ export function ProjectDetailClient({
                     {tTasks("status_in_progress")}
                   </option>
                   <option value="blocked">{tTasks("status_blocked")}</option>
-                  <option value="review">{tTasks("status_review")}</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="task-assignee">{tTasks("assignee")}</Label>
-                <select
+                <AssigneeSelect
                   id="task-assignee"
-                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                  {...createTaskForm.register("assignedTo")}
-                >
-                  <option value="">{tTasks("unassigned")}</option>
-                  {(departmentMembersQuery.data ?? []).map((member) => (
-                    <option key={member.userId} value={member.userId}>
-                      {member.user?.fullName ?? member.userId}
-                    </option>
-                  ))}
-                  {members
-                    .filter(
-                      (m) =>
-                        !(departmentMembersQuery.data ?? []).some(
-                          (d) => d.userId === m.userId,
-                        ),
-                    )
-                    .map((member) => (
-                      <option key={member.userId} value={member.userId}>
-                        {member.user?.fullName ?? member.userId}
-                      </option>
-                    ))}
-                </select>
+                  value={
+                    typeof watchedCreateAssignee === "string"
+                      ? watchedCreateAssignee
+                      : null
+                  }
+                  options={createTaskAssigneeOptions}
+                  onChange={(userId) =>
+                    createTaskForm.setValue("assignedTo", userId, {
+                      shouldDirty: true,
+                    })
+                  }
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="task-start">{tTasks("startDate")}</Label>
@@ -838,6 +858,14 @@ export function ProjectDetailClient({
                 />
               </div>
             </div>
+            <TaskDependencyPicker
+              projectId={projectId}
+              parentTaskId={null}
+              value={createTaskForm.watch("dependsOnTaskIds") ?? []}
+              onChange={(ids) =>
+                createTaskForm.setValue("dependsOnTaskIds", ids)
+              }
+            />
             {taskError ? (
               <Alert variant="destructive">
                 <AlertDescription>{taskError}</AlertDescription>

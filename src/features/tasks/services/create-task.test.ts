@@ -99,6 +99,7 @@ describe("createTask subtask depth", () => {
         startDate: null,
         dueDate: null,
         estimatedHours: null,
+        dependsOnTaskIds: [],
       }),
     ).rejects.toMatchObject({
       code: "SUBTASK_DEPTH_EXCEEDED",
@@ -137,6 +138,7 @@ describe("createTask subtask depth", () => {
         startDate: null,
         dueDate: null,
         estimatedHours: null,
+        dependsOnTaskIds: [],
       }),
     ).rejects.toMatchObject({
       code: "PROJECT_ARCHIVED",

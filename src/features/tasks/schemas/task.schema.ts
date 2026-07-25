@@ -4,9 +4,7 @@ export const taskStatusSchema = z.enum([
   "todo",
   "in_progress",
   "blocked",
-  "review",
   "completed",
-  "cancelled",
 ]);
 
 export const taskPrioritySchema = z.enum(["low", "medium", "high"]);
@@ -39,6 +37,9 @@ export const createTaskSchema = z.object({
     .nonnegative("الساعات المقدرة غير صالحة")
     .optional()
     .nullable(),
+  dependsOnTaskIds: z
+    .array(z.string().uuid("معرّف المهمة غير صالح"))
+    .optional(),
 });
 
 export const updateTaskSchema = z

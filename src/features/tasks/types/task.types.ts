@@ -2,9 +2,7 @@ export type TaskStatus =
   | "todo"
   | "in_progress"
   | "blocked"
-  | "review"
-  | "completed"
-  | "cancelled";
+  | "completed";
 
 export type TaskPriority = "low" | "medium" | "high";
 
@@ -41,6 +39,10 @@ export type Task = {
   createdAt: string;
   updatedAt: string;
   subtaskCount?: number;
+  /** Number of finish-to-start prerequisites. */
+  dependencyCount?: number;
+  /** Prerequisites that are not yet completed. */
+  incompleteDependencyCount?: number;
 };
 
 export type TaskRow = {
@@ -66,7 +68,57 @@ export const TASK_STATUSES: TaskStatus[] = [
   "todo",
   "in_progress",
   "blocked",
-  "review",
   "completed",
-  "cancelled",
 ];
+
+/** Statuses that count toward employee workload (active work). */
+export const ACTIVE_TASK_STATUSES: TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "blocked",
+];
+
+export type TaskDependency = {
+  id: string;
+  taskId: string;
+  dependsOnTaskId: string;
+  dependsOnTask: {
+    id: string;
+    title: string;
+    status: TaskStatus;
+    projectId: string;
+  } | null;
+  createdAt: string;
+};
+
+export type TaskDependencyRow = {
+  id: string;
+  task_id: string;
+  depends_on_task_id: string;
+  created_at: string;
+};
+
+export type TaskActivityAction =
+  | "task.created"
+  | "task.assigned"
+  | "task.status_changed"
+  | "task.updated"
+  | "task.dependency_added"
+  | "task.dependency_removed";
+
+export type TaskActivityLog = {
+  id: string;
+  userId: string;
+  user: TaskUserSummary | null;
+  action: TaskActivityAction | string;
+  entityType: string;
+  entityId: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export type EmployeeWorkload = {
+  userId: string;
+  activeTaskCount: number;
+  estimatedHours: number;
+};

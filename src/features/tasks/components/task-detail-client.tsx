@@ -14,11 +14,16 @@ import {
   type UpdateTaskInput,
 } from "@/features/tasks/schemas/task.schema";
 import type { Task } from "@/features/tasks/types/task.types";
+import { AssigneeSelect } from "@/features/tasks/components/assignee-select";
+import { TaskActivityPanel } from "@/features/tasks/components/task-activity-panel";
+import { TaskDependenciesPanel } from "@/features/tasks/components/task-dependencies-panel";
+import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
+import { TabPanel, Tabs } from "@/components/shared/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,9 +80,7 @@ const TASK_STATUSES = [
   "todo",
   "in_progress",
   "blocked",
-  "review",
   "completed",
-  "cancelled",
 ] as const;
 
 async function fetchTask(id: string): Promise<Task> {
@@ -170,6 +173,7 @@ export function TaskDetailClient({
   const queryClient = useQueryClient();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [subtaskOpen, setSubtaskOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
 
   const canEditFull = canAssign || canCreate;
   const taskQuery = useQuery({
@@ -199,6 +203,9 @@ export function TaskDetailClient({
 
   const isAssignee = taskQuery.data?.assignedTo === viewerId;
   const canEditStatus = canEditFull || isAssignee;
+  const statusLockedByDeps =
+    (taskQuery.data?.incompleteDependencyCount ?? 0) > 0;
+  const canChangeStatus = canEditStatus && !statusLockedByDeps;
 
   const editForm = useForm<UpdateTaskInput>({
     resolver: zodResolver(updateTaskSchema) as never,
@@ -229,6 +236,7 @@ export function TaskDetailClient({
       startDate: null,
       dueDate: null,
       estimatedHours: null,
+      dependsOnTaskIds: [],
     },
   });
 
@@ -325,6 +333,9 @@ export function TaskDetailClient({
   const subtasks = subtasksQuery.data ?? [];
   const isRoot = !task.parentTaskId;
   const assignees = assigneesQuery.data ?? [];
+  const watchedAssignee = editForm.watch("assignedTo");
+  const watchedSubtaskAssignee = subtaskForm.watch("assignedTo");
+  const watchedSubtaskDependsOn = subtaskForm.watch("dependsOnTaskIds") ?? [];
 
   function statusLabel(status: string) {
     return t(`status_${status}` as "status_todo");
@@ -379,6 +390,7 @@ export function TaskDetailClient({
                       startDate: null,
                       dueDate: null,
                       estimatedHours: null,
+                      dependsOnTaskIds: [],
                     });
                     setSubtaskOpen(true);
                   }}
@@ -397,283 +409,359 @@ export function TaskDetailClient({
         </Alert>
       ) : null}
 
-      {canEditFull ? (
-        <section className="space-y-4 rounded-lg border p-4">
-          <h2 className="text-lg font-semibold">{t("editTitle")}</h2>
-          <form
-            className="space-y-4"
-            onSubmit={editForm.handleSubmit((values) => {
-              const payload = taskQuery.data?.parentTaskId
-                ? values
-                : { ...values, estimatedHours: undefined };
-              patchMutation.mutate(payload);
-            })}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="edit-title">{t("titleLabel")}</Label>
-              <Input id="edit-title" {...editForm.register("title")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-description">{t("descriptionLabel")}</Label>
-              <textarea
-                id="edit-description"
-                className="border-input bg-background min-h-24 w-full rounded-md border px-3 py-2 text-sm"
-                {...editForm.register("description")}
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">{t("status")}</Label>
-                <select
-                  id="edit-status"
-                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                  {...editForm.register("status")}
+      {statusMutation.isError ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {(statusMutation.error as Error).message}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <Tabs
+        items={[
+          { id: "overview", label: t("tabOverview") },
+          { id: "dependencies", label: t("tabDependencies") },
+          { id: "activity", label: t("tabActivity") },
+        ]}
+        value={activeTab}
+        onValueChange={setActiveTab}
+      >
+        <TabPanel when="overview" active={activeTab}>
+          <div className="space-y-6">
+            {canEditFull ? (
+              <section className="space-y-4 rounded-lg border p-4">
+                <h2 className="text-lg font-semibold">{t("editTitle")}</h2>
+                <form
+                  className="space-y-4"
+                  onSubmit={editForm.handleSubmit((values) => {
+                    const payload = taskQuery.data?.parentTaskId
+                      ? values
+                      : { ...values, estimatedHours: undefined };
+                    patchMutation.mutate(payload);
+                  })}
                 >
-                  {TASK_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {statusLabel(status)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-priority">{t("priority")}</Label>
-                <select
-                  id="edit-priority"
-                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                  {...editForm.register("priority")}
-                >
-                  <option value="low">{priorityLabel("low")}</option>
-                  <option value="medium">{priorityLabel("medium")}</option>
-                  <option value="high">{priorityLabel("high")}</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-assignee">{t("assignee")}</Label>
-                <select
-                  id="edit-assignee"
-                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                  {...editForm.register("assignedTo")}
-                >
-                  <option value="">{t("unassigned")}</option>
-                  {assignees.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.fullName} ({person.employeeNumber})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-start">{t("startDate")}</Label>
-                <Input
-                  id="edit-start"
-                  type="date"
-                  {...editForm.register("startDate")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-due">{t("dueDate")}</Label>
-                <Input
-                  id="edit-due"
-                  type="date"
-                  {...editForm.register("dueDate")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-hours">{t("estimatedHours")}</Label>
-                {!taskQuery.data?.parentTaskId ? (
-                  <>
-                    <Input
-                      id="edit-hours"
-                      type="number"
-                      value={taskQuery.data?.estimatedHours ?? 0}
-                      disabled
-                      readOnly
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-title">{t("titleLabel")}</Label>
+                    <Input id="edit-title" {...editForm.register("title")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-description">
+                      {t("descriptionLabel")}
+                    </Label>
+                    <textarea
+                      id="edit-description"
+                      className="border-input bg-background min-h-24 w-full rounded-md border px-3 py-2 text-sm"
+                      {...editForm.register("description")}
                     />
-                    <p className="text-muted-foreground text-xs">
-                      {t("hoursFromSubtasks")}
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-status">{t("status")}</Label>
+                      <select
+                        id="edit-status"
+                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                        disabled={statusLockedByDeps}
+                        title={
+                          statusLockedByDeps
+                            ? t("statusLockedByDependencies")
+                            : undefined
+                        }
+                        {...editForm.register("status")}
+                      >
+                        {TASK_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {statusLabel(status)}
+                          </option>
+                        ))}
+                      </select>
+                      {statusLockedByDeps ? (
+                        <p className="text-muted-foreground text-xs">
+                          {t("statusLockedByDependencies")}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-priority">{t("priority")}</Label>
+                      <select
+                        id="edit-priority"
+                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                        {...editForm.register("priority")}
+                      >
+                        <option value="low">{priorityLabel("low")}</option>
+                        <option value="medium">{priorityLabel("medium")}</option>
+                        <option value="high">{priorityLabel("high")}</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-assignee">{t("assignee")}</Label>
+                      <AssigneeSelect
+                        id="edit-assignee"
+                        value={
+                          typeof watchedAssignee === "string"
+                            ? watchedAssignee
+                            : null
+                        }
+                        options={assignees}
+                        showEmployeeNumber
+                        disabled={!canAssign}
+                        onChange={(userId) =>
+                          editForm.setValue("assignedTo", userId, {
+                            shouldDirty: true,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-start">{t("startDate")}</Label>
+                      <Input
+                        id="edit-start"
+                        type="date"
+                        {...editForm.register("startDate")}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-due">{t("dueDate")}</Label>
+                      <Input
+                        id="edit-due"
+                        type="date"
+                        {...editForm.register("dueDate")}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-hours">{t("estimatedHours")}</Label>
+                      {!taskQuery.data?.parentTaskId ? (
+                        <>
+                          <Input
+                            id="edit-hours"
+                            type="number"
+                            value={taskQuery.data?.estimatedHours ?? 0}
+                            disabled
+                            readOnly
+                          />
+                          <p className="text-muted-foreground text-xs">
+                            {t("hoursFromSubtasks")}
+                          </p>
+                        </>
+                      ) : (
+                        <Input
+                          id="edit-hours"
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          {...editForm.register("estimatedHours", {
+                            setValueAs: (value) =>
+                              value === "" || value == null
+                                ? null
+                                : Number(value),
+                          })}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  {patchMutation.isError ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {(patchMutation.error as Error).message}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  <Button type="submit" disabled={patchMutation.isPending}>
+                    {patchMutation.isPending
+                      ? tCommon("saving")
+                      : tCommon("save")}
+                  </Button>
+                </form>
+              </section>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-lg border p-4">
+                    <p className="text-muted-foreground text-sm">
+                      {t("status")}
                     </p>
-                  </>
-                ) : (
-                  <Input
-                    id="edit-hours"
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    {...editForm.register("estimatedHours", {
-                      setValueAs: (value) =>
-                        value === "" || value == null ? null : Number(value),
-                    })}
-                  />
-                )}
-              </div>
-            </div>
-            {patchMutation.isError ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {(patchMutation.error as Error).message}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            <Button type="submit" disabled={patchMutation.isPending}>
-              {patchMutation.isPending ? tCommon("saving") : tCommon("save")}
-            </Button>
-          </form>
-        </section>
-      ) : (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">{t("status")}</p>
-              {canEditStatus ? (
-                <select
-                  className="border-input bg-background mt-2 h-9 w-full rounded-md border px-3 text-sm"
-                  value={task.status}
-                  disabled={statusMutation.isPending}
-                  onChange={(event) =>
-                    statusMutation.mutate(event.target.value)
-                  }
-                >
-                  {TASK_STATUSES.map((status) => (
-                    <option key={status} value={status}>
-                      {statusLabel(status)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Badge className="mt-2" variant="secondary">
-                  {statusLabel(task.status)}
-                </Badge>
-              )}
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">{t("priority")}</p>
-              <p className="mt-2 font-medium">{priorityLabel(task.priority)}</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">{t("assignee")}</p>
-              <p className="mt-2 font-medium">
-                {task.assignee?.fullName ?? "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">{t("startDate")}</p>
-              <p className="mt-2 font-medium">{task.startDate ?? "—"}</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">{t("dueDate")}</p>
-              <p className="mt-2 font-medium">{task.dueDate ?? "—"}</p>
-            </div>
-            <div className="rounded-lg border p-4">
-              <p className="text-muted-foreground text-sm">
-                {t("estimatedHours")}
-              </p>
-              <p className="mt-2 font-medium">
-                {!task.parentTaskId
-                  ? (task.estimatedHours ?? 0)
-                  : task.estimatedHours != null
-                    ? task.estimatedHours
-                    : "—"}
-              </p>
-              {!task.parentTaskId ? (
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {t("hoursFromSubtasks")}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          {task.description ? (
-            <p className="text-muted-foreground text-sm whitespace-pre-wrap">
-              {task.description}
-            </p>
-          ) : null}
-        </>
-      )}
-
-      {task.parentTaskId ? (
-        <p className="text-sm">
-          <Link
-            href={`/tasks/${task.parentTaskId}`}
-            className="underline-offset-4 hover:underline"
-          >
-            {t("viewParent")}
-          </Link>
-        </p>
-      ) : null}
-
-      {isRoot ? (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">{t("subtasks")}</h2>
-            {canCreate ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => {
-                  subtaskForm.reset({
-                    projectId: task.projectId,
-                    parentTaskId: task.id,
-                    title: "",
-                    description: "",
-                    status: "todo",
-                    priority: "medium",
-                    assignedTo: null,
-                    startDate: null,
-                    dueDate: null,
-                    estimatedHours: null,
-                  });
-                  setSubtaskOpen(true);
-                }}
-              >
-                {t("addSubtask")}
-              </Button>
-            ) : null}
-          </div>
-          {subtasksQuery.isLoading ? <LoadingState /> : null}
-          {subtasks.length === 0 && !subtasksQuery.isLoading ? (
-            <EmptyState
-              title={t("emptySubtasksTitle")}
-              description={t("emptySubtasksDescription")}
-            />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("titleLabel")}</TableHead>
-                    <TableHead>{t("status")}</TableHead>
-                    <TableHead>{t("dueDate")}</TableHead>
-                    <TableHead>{t("assignee")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {subtasks.map((subtask) => (
-                    <TableRow key={subtask.id}>
-                      <TableCell>
-                        <Link
-                          href={`/tasks/${subtask.id}`}
-                          className="font-medium underline-offset-4 hover:underline"
-                        >
-                          {subtask.title}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {statusLabel(subtask.status)}
+                    {canChangeStatus ? (
+                      <select
+                        className="border-input bg-background mt-2 h-9 w-full rounded-md border px-3 text-sm"
+                        value={task.status}
+                        disabled={statusMutation.isPending}
+                        onChange={(event) =>
+                          statusMutation.mutate(event.target.value)
+                        }
+                      >
+                        {TASK_STATUSES.map((status) => (
+                          <option key={status} value={status}>
+                            {statusLabel(status)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <>
+                        <Badge className="mt-2" variant="secondary">
+                          {statusLabel(task.status)}
                         </Badge>
-                      </TableCell>
-                      <TableCell>{subtask.dueDate ?? "—"}</TableCell>
-                      <TableCell>
-                        {subtask.assignee?.fullName ?? "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </section>
-      ) : null}
+                        {statusLockedByDeps ? (
+                          <p className="text-muted-foreground mt-1 text-xs">
+                            {t("statusLockedByDependencies")}
+                          </p>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-muted-foreground text-sm">
+                      {t("priority")}
+                    </p>
+                    <p className="mt-2 font-medium">
+                      {priorityLabel(task.priority)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-muted-foreground text-sm">
+                      {t("assignee")}
+                    </p>
+                    <p className="mt-2 font-medium">
+                      {task.assignee?.fullName ?? "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-muted-foreground text-sm">
+                      {t("startDate")}
+                    </p>
+                    <p className="mt-2 font-medium">{task.startDate ?? "—"}</p>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-muted-foreground text-sm">
+                      {t("dueDate")}
+                    </p>
+                    <p className="mt-2 font-medium">{task.dueDate ?? "—"}</p>
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-muted-foreground text-sm">
+                      {t("estimatedHours")}
+                    </p>
+                    <p className="mt-2 font-medium">
+                      {!task.parentTaskId
+                        ? (task.estimatedHours ?? 0)
+                        : task.estimatedHours != null
+                          ? task.estimatedHours
+                          : "—"}
+                    </p>
+                    {!task.parentTaskId ? (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {t("hoursFromSubtasks")}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                {task.description ? (
+                  <p className="text-muted-foreground text-sm whitespace-pre-wrap">
+                    {task.description}
+                  </p>
+                ) : null}
+              </>
+            )}
+
+            {task.parentTaskId ? (
+              <p className="text-sm">
+                <Link
+                  href={`/tasks/${task.parentTaskId}`}
+                  className="underline-offset-4 hover:underline"
+                >
+                  {t("viewParent")}
+                </Link>
+              </p>
+            ) : null}
+
+            {isRoot ? (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-lg font-semibold">{t("subtasks")}</h2>
+                  {canCreate ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        subtaskForm.reset({
+                          projectId: task.projectId,
+                          parentTaskId: task.id,
+                          title: "",
+                          description: "",
+                          status: "todo",
+                          priority: "medium",
+                          assignedTo: null,
+                          startDate: null,
+                          dueDate: null,
+                          estimatedHours: null,
+                          dependsOnTaskIds: [],
+                        });
+                        setSubtaskOpen(true);
+                      }}
+                    >
+                      {t("addSubtask")}
+                    </Button>
+                  ) : null}
+                </div>
+                {subtasksQuery.isLoading ? <LoadingState /> : null}
+                {subtasks.length === 0 && !subtasksQuery.isLoading ? (
+                  <EmptyState
+                    title={t("emptySubtasksTitle")}
+                    description={t("emptySubtasksDescription")}
+                  />
+                ) : (
+                  <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>{t("titleLabel")}</TableHead>
+                          <TableHead>{t("status")}</TableHead>
+                          <TableHead>{t("dueDate")}</TableHead>
+                          <TableHead>{t("assignee")}</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {subtasks.map((subtask) => (
+                          <TableRow key={subtask.id}>
+                            <TableCell>
+                              <Link
+                                href={`/tasks/${subtask.id}`}
+                                className="font-medium underline-offset-4 hover:underline"
+                              >
+                                {subtask.title}
+                              </Link>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">
+                                {statusLabel(subtask.status)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>{subtask.dueDate ?? "—"}</TableCell>
+                            <TableCell>
+                              {subtask.assignee?.fullName ?? "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </section>
+            ) : null}
+          </div>
+        </TabPanel>
+
+        <TabPanel when="dependencies" active={activeTab}>
+          <TaskDependenciesPanel
+            taskId={taskId}
+            projectId={task.projectId}
+            parentTaskId={task.parentTaskId}
+            canManage={canEditFull}
+          />
+        </TabPanel>
+
+        <TabPanel when="activity" active={activeTab}>
+          <TaskActivityPanel taskId={taskId} />
+        </TabPanel>
+      </Tabs>
 
       <Dialog open={subtaskOpen} onOpenChange={setSubtaskOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -715,18 +803,21 @@ export function TaskDetailClient({
               </div>
               <div className="space-y-2">
                 <Label htmlFor="subtask-assignee">{t("assignee")}</Label>
-                <select
+                <AssigneeSelect
                   id="subtask-assignee"
-                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                  {...subtaskForm.register("assignedTo")}
-                >
-                  <option value="">{t("unassigned")}</option>
-                  {assignees.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.fullName}
-                    </option>
-                  ))}
-                </select>
+                  value={
+                    typeof watchedSubtaskAssignee === "string"
+                      ? watchedSubtaskAssignee
+                      : null
+                  }
+                  options={assignees}
+                  disabled={!canAssign}
+                  onChange={(userId) =>
+                    subtaskForm.setValue("assignedTo", userId, {
+                      shouldDirty: true,
+                    })
+                  }
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="subtask-start">{t("startDate")}</Label>
@@ -758,6 +849,14 @@ export function TaskDetailClient({
                 />
               </div>
             </div>
+            <TaskDependencyPicker
+              projectId={task.projectId}
+              parentTaskId={task.id}
+              value={watchedSubtaskDependsOn}
+              onChange={(ids) =>
+                subtaskForm.setValue("dependsOnTaskIds", ids)
+              }
+            />
             {createSubtaskMutation.isError ? (
               <Alert variant="destructive">
                 <AlertDescription>
