@@ -893,6 +893,28 @@ Deferred: announcement file attachments, Web Push delivery (VAPID env remains un
 
 ---
 
+# Dashboards and Reports (Milestone 8)
+
+No dedicated report tables. Aggregates over existing M1–M7 data via the service role; authorization in the application layer.
+
+Permissions: `report.view` (admin + department_manager). Dashboard home (`/`) is available to all authenticated roles without a separate permission.
+
+| Method | Path | Permission | Notes |
+|--------|------|------------|-------|
+| GET | `/api/dashboard` | Authenticated | Role-scoped summary (admin / manager / employee) |
+| GET | `/api/reports/task-completion` | `report.view` | Paginated; `dateFrom`/`dateTo` (default current month Asia/Riyadh), optional `departmentId`, `projectId`, `assigneeId` |
+| GET | `/api/reports/employee-workload` | `report.view` | Paginated active-task workload per employee |
+| GET | `/api/reports/attendance-summary` | `report.view` | Paginated hours/days by employee in range |
+| GET | `/api/reports/work-log-summary` | `report.view` | Paginated logged hours by employee; optional `projectId`/`taskId` |
+
+Scoping: admin = company-wide (optional department filter); manager = managed department only. List responses use standard pagination (`items`, `total`, `page`, `pageSize`, `totalPages`) with `sortBy` / `sortDir`.
+
+UI: `/` action-oriented role dashboard; `/reports` tabbed tables (hidden from employees).
+
+Out of scope for M8: charts, CSV/PDF export, scheduled reports, Advanced Analytics, Gantt (M9).
+
+---
+
 # API Design Principles
 
 The API should be:

@@ -18,7 +18,7 @@ The application is built incrementally. Each milestone should produce a usable w
 
 ### Current project status
 
-**Milestones 0–7 core product scope is implemented** (M0 PWA offline + Web Push still deferred). **Next up: Milestone 8 — Dashboards and Reporting.**
+**Milestones 0–8 core product scope is implemented** (M0 PWA offline + Web Push still deferred). **Next up: Milestone 9 — Advanced Views.**
 
 ---
 
@@ -33,7 +33,7 @@ Testing infrastructure was introduced in Milestone 1 (Vitest + React Testing Lib
 | **3** | Projects, tasks, access rules | **Completed** — schemas, access asserts, create-task (incl. subtask depth) |
 | **4** | Dependencies, workload, activity | **Partially completed** — dependency service tests present; dedicated workload/activity tests thin |
 | **5** | Attendance calculations, approval, work-log authz | **Completed** |
-| **6+** | Leave, approvals, and later workflows | **Completed for M6–M7** — leave + communication schema/permission tests |
+| **6+** | Leave, approvals, and later workflows | **Completed for M6–M8** — leave + communication + report schema/permission tests |
 
 End-to-end testing with Playwright remains **deferred** until complete business workflows exist (attendance / leave / approvals).
 
@@ -85,7 +85,7 @@ Create the application foundation and development environment.
 | Service worker / offline PWA runtime | **Deferred** | Manifest + icons only; unused `next-pwa` dependency **removed** — revisit when PWA milestone arrives |
 | Notifications DB + API + real center | **Completed (M7)** | In-app persistence + bell + `/notifications`; Web Push still deferred |
 | Push (VAPID env + subscribe stub) | **Deferred** | Env keys documented; delivery deferred past M7 |
-| Dashboard home (`/`) | **Partially completed** | Placeholder empty state until Milestone 8 |
+| Dashboard home (`/`) | **Completed (M8)** | Role-specific operational dashboards |
 
 ## Differences from original plan
 
@@ -414,7 +414,7 @@ Channels:
 
 # Milestone 8 — Dashboards and Reporting
 
-**Status: Remaining**
+**Status: Completed**
 
 ## Goal
 
@@ -457,7 +457,25 @@ Initial reports:
 - Attendance summary
 - Work log summary
 
-**Note:** `/` is currently a placeholder empty state pending this milestone.
+## Implementation status
+
+| Area | Status | Notes |
+|---|---|---|
+| Role dashboards on `/` | **Completed** | Action-oriented cards + lists; deep links |
+| Pending approvals breakdown | **Completed** | Leave + extension + excusal + attendance; links to `/approvals` and `/attendance` |
+| `/reports` tabbed tables | **Completed** | Four reports; admin/manager only (`report.view`) |
+| Report APIs | **Completed** | Paginated aggregates; default date range = current month Asia/Riyadh |
+| Charts / export / scheduling | **Out of scope** | Deferred (Advanced Analytics / future) |
+
+## Migrations
+
+- `20260725190000_milestone8_dashboards_reporting.sql` (permission seed only)
+
+## Differences / notes
+
+- No new business tables; reporting queries existing data.
+- Reports include historical rows (including archived projects where relevant); dashboard “active” metrics exclude archived.
+- Employees do not see Reports nav.
 
 ---
 
@@ -508,7 +526,7 @@ Possible additions:
 | Notifications table, APIs, real center, push | M0 foundation | Milestone 7 (in-app **Completed**; Web Push still deferred) |
 | Announcement file attachments | Milestone 7 roadmap | Later / Storage |
 | Web Push delivery + service worker | Milestone 7 roadmap | Later PWA milestone |
-| Dashboard content | Shell in M0 | Milestone 8 |
+| Dashboard content | Shell in M0 | **Completed in Milestone 8** |
 | Task comments / attachments | DB design (not M3/M4 scope) | Future |
 | `progress_percentage` UI | Schema present | Future / unused |
 | Playwright E2E | After workflows exist | After M5+ workflows |
@@ -540,5 +558,5 @@ Possible additions:
 7. Attendance — **Completed (Milestone 5)**
 8. Leave — **Completed (Milestone 6)**
 9. Communication — **Completed (Milestone 7; push/attachments deferred)**
-10. Reports — **Remaining (Milestone 8)**
+10. Reports — **Completed (Milestone 8)**
 11. Gantt — **Remaining (Milestone 9)**

@@ -250,11 +250,11 @@ Service workers and offline caching are deferred until a dedicated PWA milestone
 
 # Current Milestone
 
-**Milestone 8 — Dashboards and Reporting** is next.
+**Milestone 9 — Advanced Views** is next.
 
-Milestones 0–7 core scope is implemented (M7 in-app announcements/notifications; attachments + Web Push deferred). See [06-roadmap.md](./06-roadmap.md) for accurate status (completed / partial / deferred).
+Milestones 0–8 core scope is implemented (M8 dashboards/reports; M7 attachments + Web Push deferred). See [06-roadmap.md](./06-roadmap.md) for accurate status (completed / partial / deferred).
 
-### Already applied (M1–M7)
+### Already applied (M1–M8)
 
 | Milestone | Migrations (under `supabase/migrations/`) |
 |---|---|
@@ -265,8 +265,9 @@ Milestones 0–7 core scope is implemented (M7 in-app announcements/notification
 | 5 Attendance & work logs | `20260725160000_milestone5_attendance_work_logs.sql` |
 | 6 Leave & employee requests | `20260725170000_milestone6_leave_employee_requests.sql` |
 | 7 Announcements & notifications | `20260725180000_milestone7_announcements_notifications.sql` |
+| 8 Dashboards & reporting | `20260725190000_milestone8_dashboards_reporting.sql` |
 
-### Shipped through M7 (summary)
+### Shipped through M8 (summary)
 
 - Auth, users, permissions, departments, memberships
 - Projects, members, tasks, one-level subtasks, Kanban
@@ -274,13 +275,13 @@ Milestones 0–7 core scope is implemented (M7 in-app announcements/notification
 - Attendance clock in/out, approval/rejection, daily hour totals, task work logs
 - Leave types/balances/requests, task extension/excusal, centralized `/approvals`
 - Announcements (company/department), read tracking, in-app notifications + header bell
+- Role dashboards on `/` and operational reports on `/reports` (`report.view`)
 - Task statuses: `todo | in_progress | blocked | completed`
 
 ### Explicitly not included yet
 
 - Announcement file attachments / Web Push delivery (deferred from M7)
-- Dashboards / reports (Milestone 8)
-- Gantt (Milestone 9)
+- Gantt / advanced filtering product (Milestone 9)
 - Task comments / attachments
 - Service worker / offline PWA runtime
 

@@ -149,9 +149,10 @@ export const navSections: NavSection[] = [
     items: [
       {
         key: "reports",
-        href: "#",
+        href: "/reports",
         icon: FileText,
-        enabled: false,
+        enabled: true,
+        permission: "report.view",
         hideForRoles: ["employee"],
       },
     ],

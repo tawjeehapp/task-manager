@@ -14,6 +14,7 @@ export const PERMISSIONS = {
   ANNOUNCEMENT_VIEW: "announcement.view",
   ANNOUNCEMENT_MANAGE: "announcement.manage",
   NOTIFICATION_VIEW: "notification.view",
+  REPORT_VIEW: "report.view",
   DEPARTMENT_MANAGE: "department.manage",
   DEPARTMENT_VIEW: "department.view",
   PROJECT_VIEW: "project.view",

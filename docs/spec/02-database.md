@@ -883,7 +883,11 @@ task.assign
 leave.approve
 
 attendance.approve
+
+report.view
 ```
+
+Milestone 8 seeds `report.view` for `admin` and `department_manager` (no new entity tables for dashboards/reports).
 
 ---
 

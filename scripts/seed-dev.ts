@@ -331,7 +331,7 @@ async function main() {
       priority: "medium",
       assigned_to: users["1004"],
       created_by: users["1001"],
-      due_date: shiftOrgDate(today, 5),
+      due_date: shiftOrgDate(today, -3),
       estimated_hours: 3,
       progress_percentage: 0,
       completed_at: null,

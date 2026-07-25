@@ -4,7 +4,7 @@ Arabic-first, RTL work management platform for organizations. Built with Next.js
 
 ## Current status
 
-**Milestones 0–7** are implemented for core product scope (in-app communication). **Next: Milestone 8 — Dashboards and Reporting.**
+**Milestones 0–8** are implemented for core product scope (dashboards & reports). **Next: Milestone 9 — Advanced Views.**
 
 | Milestone | Status |
 |---|---|
@@ -16,7 +16,8 @@ Arabic-first, RTL work management platform for organizations. Built with Next.js
 | 5 — Attendance & work logs | Completed |
 | 6 — Leave & employee requests | Completed |
 | 7 — Communication | Completed (attachments + Web Push deferred) |
-| 8 — Dashboards & reports | Remaining |
+| 8 — Dashboards & reports | Completed |
+| 9 — Advanced views | Remaining |
 
 ---
 
@@ -115,10 +116,20 @@ This section explains the live business rules as implemented — useful when wal
   - Users can mark one or all as read. Notification insert failures **never** roll back the primary business action.
 - **Web Push** is **not** delivered in M7 (VAPID env keys remain unused stubs).
 
+### Dashboards & reports (M8)
+
+- **Home `/`** is role-specific and action-oriented (summary metrics + short lists with deep links):
+  - **Admin** — department / active project / employee counts, pending approvals (leave, extensions, excusals, attendance), company workload.
+  - **Manager** — department projects, overdue tasks, team workload, pending approvals (scoped).
+  - **Employee** — assigned tasks, upcoming deadlines (14 days), month attendance summary, own requests.
+- **Reports `/reports`** (admin + department manager; `report.view`):
+  - Tabs: task completion, employee workload, attendance summary, work log summary.
+  - Filterable paginated tables (default date range = current month `Asia/Riyadh`).
+  - No charts, export, or scheduled jobs in M8.
+
 ### What is intentionally not built yet
 
 - Announcement **file attachments** and **Web Push** → deferred past M7
-- Rich **dashboards & reports** → Milestone 8
 - Gantt / advanced filters → Milestone 9
 - Task comments & attachments → future
 - Offline PWA service worker → deferred
