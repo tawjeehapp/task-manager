@@ -42,12 +42,17 @@ export default async function EmployeeProfilePage({ params }: PageProps) {
     redirect("/");
   }
 
+  const canEditTasks =
+    user.role === "admin" ||
+    hasPermission(user.role, PERMISSIONS.TASK_ASSIGN, permissions);
+
   const { id } = await params;
 
   return (
     <EmployeeProfileClient
       userId={id}
       canManage={canManage}
+      canEditTasks={canEditTasks}
       currentUserId={user.id}
     />
   );

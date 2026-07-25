@@ -49,6 +49,7 @@ export function mapDepartment(
   row: DepartmentRow,
   manager: DepartmentManagerSummary | null,
   memberCount: number,
+  activeProjectCount = 0,
 ): Department {
   return {
     id: row.id,
@@ -58,6 +59,7 @@ export function mapDepartment(
     manager,
     status: row.status,
     memberCount,
+    activeProjectCount,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -90,6 +92,37 @@ async function getMemberCounts(
   return counts;
 }
 
+async function getActiveProjectCounts(
+  departmentIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (departmentIds.length === 0) {
+    return counts;
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("projects")
+    .select("department_id")
+    .in("department_id", departmentIds)
+    .eq("status", "active");
+
+  if (error) {
+    throw new ApiError(
+      "تعذر حساب مشاريع الأقسام.",
+      500,
+      "PROJECT_COUNT_FAILED",
+    );
+  }
+
+  for (const row of data ?? []) {
+    const id = row.department_id as string;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
 const DEPARTMENT_SELECT =
   "id, name, description, manager_id, status, created_at, updated_at, manager:users!manager_id(id, full_name, employee_number)";
 
@@ -111,7 +144,13 @@ async function loadDepartmentById(id: string): Promise<Department> {
 
   const row = data as unknown as DepartmentWithManager;
   const counts = await getMemberCounts([row.id]);
-  return mapDepartment(row, mapManager(row.manager), counts.get(row.id) ?? 0);
+  const projectCounts = await getActiveProjectCounts([row.id]);
+  return mapDepartment(
+    row,
+    mapManager(row.manager),
+    counts.get(row.id) ?? 0,
+    projectCounts.get(row.id) ?? 0,
+  );
 }
 
 export async function createDepartment(
@@ -422,6 +461,12 @@ export async function listDepartmentsForViewer(
     builder = builder.eq("status", "active");
   }
 
+  if (options.managerId === "none") {
+    builder = builder.is("manager_id", null);
+  } else if (options.managerId) {
+    builder = builder.eq("manager_id", options.managerId);
+  }
+
   if (viewer.role === "department_manager") {
     builder = builder.eq("manager_id", viewer.id);
   } else if (viewer.role === "employee") {
@@ -444,22 +489,31 @@ export async function listDepartmentsForViewer(
     builder = builder.eq("id", membership.department_id);
   }
 
-  // For memberCount sort, fetch all matching then paginate in memory (small org lists).
-  if (sortBy === "memberCount") {
+  // For computed sorts, fetch all matching then paginate in memory (small org lists).
+  if (sortBy === "memberCount" || sortBy === "activeProjectCount") {
     const { data, error, count } = await builder;
     if (error) {
       throw new ApiError("تعذر جلب الأقسام.", 500, "LIST_DEPARTMENTS_FAILED");
     }
     const rows = (data ?? []) as unknown as DepartmentWithManager[];
-    const counts = await getMemberCounts(rows.map((r) => r.id));
+    const ids = rows.map((r) => r.id);
+    const counts = await getMemberCounts(ids);
+    const projectCounts = await getActiveProjectCounts(ids);
     let items = rows.map((row) =>
-      mapDepartment(row, mapManager(row.manager), counts.get(row.id) ?? 0),
+      mapDepartment(
+        row,
+        mapManager(row.manager),
+        counts.get(row.id) ?? 0,
+        projectCounts.get(row.id) ?? 0,
+      ),
     );
-    items = items.sort((a, b) =>
-      sortDir === "asc"
-        ? a.memberCount - b.memberCount
-        : b.memberCount - a.memberCount,
-    );
+    items = items.sort((a, b) => {
+      const left =
+        sortBy === "memberCount" ? a.memberCount : a.activeProjectCount;
+      const right =
+        sortBy === "memberCount" ? b.memberCount : b.activeProjectCount;
+      return sortDir === "asc" ? left - right : right - left;
+    });
     const total = count ?? items.length;
     const from = (page - 1) * pageSize;
     return {
@@ -480,12 +534,19 @@ export async function listDepartmentsForViewer(
   }
 
   const rows = (data ?? []) as unknown as DepartmentWithManager[];
-  const counts = await getMemberCounts(rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const counts = await getMemberCounts(ids);
+  const projectCounts = await getActiveProjectCounts(ids);
   const total = count ?? 0;
 
   return {
     items: rows.map((row) =>
-      mapDepartment(row, mapManager(row.manager), counts.get(row.id) ?? 0),
+      mapDepartment(
+        row,
+        mapManager(row.manager),
+        counts.get(row.id) ?? 0,
+        projectCounts.get(row.id) ?? 0,
+      ),
     ),
     total,
     page,

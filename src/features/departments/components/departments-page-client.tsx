@@ -66,12 +66,18 @@ type DepartmentsListResult = {
 type FetchDepartmentsParams = {
   page: number;
   pageSize: TablePageSize;
-  includeArchived: boolean;
+  status?: string;
+  managerId?: string;
   sortBy: DepartmentSortBy;
   sortDir: SortDirection;
 };
 
 type BulkAction = "archive" | "delete";
+
+type ManagerOption = {
+  id: string;
+  fullName: string;
+};
 
 async function fetchDepartments(
   params: FetchDepartmentsParams,
@@ -82,8 +88,13 @@ async function fetchDepartments(
     sortBy: params.sortBy,
     sortDir: params.sortDir,
   });
-  if (params.includeArchived) {
+  if (params.status) {
+    searchParams.set("status", params.status);
+  } else {
     searchParams.set("includeArchived", "true");
+  }
+  if (params.managerId) {
+    searchParams.set("managerId", params.managerId);
   }
   const response = await fetch(`/api/departments?${searchParams.toString()}`);
   const payload = (await response.json()) as {
@@ -94,6 +105,27 @@ async function fetchDepartments(
     throw new Error(payload.error?.message ?? "Failed");
   }
   return payload.data!;
+}
+
+async function fetchManagers(): Promise<ManagerOption[]> {
+  const params = new URLSearchParams({
+    role: "department_manager",
+    pageSize: "100",
+    sortBy: "fullName",
+    sortDir: "asc",
+  });
+  const response = await fetch(`/api/users?${params.toString()}`);
+  const payload = (await response.json()) as {
+    data?: { items: { id: string; fullName: string }[] };
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return (payload.data?.items ?? []).map((user) => ({
+    id: user.id,
+    fullName: user.fullName,
+  }));
 }
 
 export function DepartmentsPageClient({
@@ -108,7 +140,8 @@ export function DepartmentsPageClient({
   const [pageSize, setPageSize] = useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
   const [sortBy, setSortBy] = useState<DepartmentSortBy>("name");
   const [sortDir, setSortDir] = useState<SortDirection>("asc");
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [managerFilter, setManagerFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -124,15 +157,29 @@ export function DepartmentsPageClient({
         : t("description");
 
   const departmentsQuery = useQuery({
-    queryKey: ["departments", page, pageSize, includeArchived, sortBy, sortDir],
+    queryKey: [
+      "departments",
+      page,
+      pageSize,
+      statusFilter,
+      managerFilter,
+      sortBy,
+      sortDir,
+    ],
     queryFn: () =>
       fetchDepartments({
         page,
         pageSize,
-        includeArchived,
+        status: statusFilter || undefined,
+        managerId: managerFilter || undefined,
         sortBy,
         sortDir,
       }),
+  });
+
+  const managersQuery = useQuery({
+    queryKey: ["users", "department_managers"],
+    queryFn: fetchManagers,
   });
 
   const createForm = useForm<CreateDepartmentInput>({
@@ -367,23 +414,41 @@ export function DepartmentsPageClient({
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {canManage ? (
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={includeArchived}
-              onChange={(event) => {
-                setIncludeArchived(event.target.checked);
-                setPage(1);
-                setSelectedIds(new Set());
-              }}
-            />
-            {t("includeArchived")}
-          </label>
-        ) : (
-          <span />
-        )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(event.target.value);
+              setPage(1);
+              setSelectedIds(new Set());
+            }}
+            aria-label={t("status")}
+          >
+            <option value="">{t("filterAllStatuses")}</option>
+            <option value="active">{t("active")}</option>
+            <option value="archived">{t("archived")}</option>
+          </select>
+          <select
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+            value={managerFilter}
+            onChange={(event) => {
+              setManagerFilter(event.target.value);
+              setPage(1);
+              setSelectedIds(new Set());
+            }}
+            aria-label={t("manager")}
+          >
+            <option value="">{t("filterAllManagers")}</option>
+            <option value="none">{t("noManager")}</option>
+            {(managersQuery.data ?? []).map((manager) => (
+              <option key={manager.id} value={manager.id}>
+                {manager.fullName}
+              </option>
+            ))}
+          </select>
+        </div>
         {departmentsQuery.data ? (
           <p className="text-sm text-muted-foreground">
             {t("totalCount", { count: total })}
@@ -483,6 +548,13 @@ export function DepartmentsPageClient({
                   onSort={handleSort}
                 />
                 <SortableTableHead
+                  label={t("activeProjects")}
+                  column="activeProjectCount"
+                  sortBy={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTableHead
                   label={t("status")}
                   column="status"
                   sortBy={sortBy}
@@ -530,6 +602,11 @@ export function DepartmentsPageClient({
                     </TableCell>
                     <TableCell>
                       {t("memberCount", { count: department.memberCount })}
+                    </TableCell>
+                    <TableCell>
+                      {t("activeProjectCount", {
+                        count: department.activeProjectCount,
+                      })}
                     </TableCell>
                     <TableCell>
                       <Badge

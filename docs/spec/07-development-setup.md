@@ -198,22 +198,27 @@ Service workers, offline caching, and `next-pwa` runtime integration are deferre
 
 # Current Milestone
 
-**Milestone 2 — Organization Structure**
+**Milestone 3 — Projects and Tasks**
 
 Includes:
 
-- Departments create / edit / assign manager / archive
-- Department memberships (add / remove / move) with history
-- Organization views: department list, department details, employee directory
-- Manager-scoped password reset for department members
-- Employee view of own department
-- RLS helpers for department scope + `department.view` permission
+- Projects (create, dates, priority, archive) scoped to departments
+- Project members (add / remove; must be department members)
+- Tasks (create, assign, dates, priority, estimated hours, status)
+- One-level subtasks
+- Task list, task detail, project Kanban board
+- Permissions: `project.view` (all roles scoped); `project.manage` (admin only); managers get `task.create` / `task.assign` for in-project work
+- Department managers manage members/tasks inside department projects, not the project entity itself
+- RLS helpers: `can_access_project`, `can_access_task`, `is_project_member`
 
 Does **not** include:
 
-- Projects, tasks, subtasks
-- Dependencies / workload
+- Task dependencies / workload views (Milestone 4)
+- Activity history UI / logging product (Milestone 4)
+- Comments, attachments
 - Attendance, leave, announcements
+
+Apply migration: `supabase/migrations/20260725140000_milestone3_projects_tasks.sql`
 
 See [06-roadmap.md](./06-roadmap.md) for the full roadmap.
 

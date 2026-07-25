@@ -227,13 +227,20 @@ Introduce the core work management functionality.
 
 ### Projects
 
-Managers can:
+Admins can:
 
 - Create projects
-- Assign members
-- Set dates
-- Set priority
+- Edit project details and dates/priority
 - Archive projects
+- Assign members
+
+Department managers can:
+
+- View department projects
+- Manage project members
+- Manage tasks within those projects (create, assign, status)
+
+Managers cannot create, edit, or archive the project entity itself.
 
 ---
 
@@ -266,6 +273,13 @@ Create:
 - Task list
 - Task details
 - Kanban board
+
+**Implemented notes (M3):**
+
+- Priority enum: `low | medium | high`
+- Archive projects via status (no permanent delete API)
+- Kanban is project-scoped at `/projects/[id]/board`
+- Activity logs, dependencies, and workload deferred to Milestone 4
 
 ---
 

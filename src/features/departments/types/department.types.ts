@@ -16,6 +16,7 @@ export type Department = {
   manager: DepartmentManagerSummary | null;
   status: DepartmentStatus;
   memberCount: number;
+  activeProjectCount: number;
   createdAt: string;
   updatedAt: string;
 };

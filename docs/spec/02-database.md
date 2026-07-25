@@ -336,6 +336,20 @@ completed
 archived
 ```
 
+Priority (Milestone 3):
+
+```
+low
+medium
+high
+```
+
+Constraints (Milestone 3):
+
+- Projects belong to one department.
+- Archive via `status = archived` (no permanent delete API in M3).
+- RLS helper: `can_access_project(project_id)` — admin, department manager of owning department, or project member.
+
 ---
 
 # Project Members
@@ -356,6 +370,11 @@ project_id
 user_id
 created_at
 ```
+
+Constraints:
+
+- Unique `(project_id, user_id)`
+- Members must be current members of the project's department (enforced in services).
 
 ---
 
@@ -395,6 +414,9 @@ Notes:
 - parent_task_id supports one level of subtasks.
 - Tasks can exist without subtasks.
 - Tasks belong to one project.
+- Priority: `low | medium | high`
+- `progress_percentage` exists (default 0); not exposed in M3 UI.
+- RLS helper: `can_access_task(task_id)` — project access or assignee.
 
 ---
 
@@ -438,6 +460,8 @@ A task cannot:
 
 - Start before dependencies complete.
 - Complete before dependencies complete.
+
+**Milestone note:** `task_dependencies` is implemented in Milestone 4 (not created in M3 migration).
 
 ---
 

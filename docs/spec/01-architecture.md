@@ -372,6 +372,10 @@ task.create
 
 task.assign
 
+project.view
+
+project.manage
+
 attendance.approve
 
 leave.approve

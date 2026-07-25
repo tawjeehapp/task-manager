@@ -226,6 +226,53 @@ Reuse shared helpers:
 Do not load unlimited rows into table pages.
 
 
+# Detail Page Navigation Rules
+
+Detail and nested screens must show **breadcrumbs** above the page header.
+
+Use shared `Breadcrumbs` (`components/shared/breadcrumbs.tsx`).
+
+Rules:
+
+- Show the hierarchy path (e.g. Projects → Department → Project → Task)
+- Intermediate crumbs are links; the last crumb is the current page (not a link)
+- Prefer breadcrumbs over a single “back” text link
+- Support RTL (separator chevron flips automatically)
+
+When a detail page has multiple peer content areas (e.g. members vs tasks), use **tabs** — do not stack those sections vertically on one long page.
+
+Use shared `Tabs` / `TabPanel` (`components/shared/tabs.tsx`).
+
+**Do not place additional content below a data table** on the same tab/panel (history, secondary lists, forms). Long tables push that content off-screen. Put peer content in its own tab instead.
+
+# Inline List Editing
+
+List views for projects, tasks, and subtasks must allow changing important fields **without opening the detail page**.
+
+Typical inline fields:
+
+- Title
+- Status / state
+- Assignee
+- Priority
+- Estimated hours (**subtasks only**; parent hours = sum, or 0 with no subtasks)
+- Due / end dates
+
+Rules:
+
+- Prefer compact controls in the table cell (select / date / number)
+- Stop row navigation when interacting with inline controls
+- Respect the same permission rules as the detail page
+- Persist on change (or on blur for free-text/number/date)
+- Task lists with subtasks must show a **subtask count** and be **expandable** so users can open nested tasks directly
+- Parent task **estimated hours** are always the **sum of subtask hours** (0 when there are none) — never edited on the parent itself
+- List views must support quick **add (+)** (including subtasks), **copy**, and **delete** without leaving the list
+- Creating a task/subtask from a list must **keep the user on the list** (do not auto-navigate to the detail page)
+- List rows must still offer a clear way to **open the detail page** (title link and/or open-details action) for full context, attachments, activity, etc.
+
+Use shared `TasksListTable` where possible for task/subtask lists.
+
+
 # API Rules
 
 API mutations follow:

@@ -707,6 +707,48 @@ Password reset (`POST /api/users/[id]/reset-password`) requires `user.reset_pass
 
 ---
 
+# Projects and Tasks API (Milestone 3)
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET | `/api/projects` | `project.view` (scoped) |
+| POST | `/api/projects` | `project.manage` |
+| GET | `/api/projects/[id]` | `project.view` (scoped) |
+| PATCH | `/api/projects/[id]` | `project.manage` (admin only; archive via `status`) |
+| GET | `/api/projects/[id]/members` | `project.view` (scoped) |
+| POST | `/api/projects/[id]/members` | `project.view` + service scope (admin or department manager) |
+| DELETE | `/api/projects/[id]/members/[userId]` | `project.view` + service scope (admin or department manager) |
+| GET | `/api/tasks` | `project.view` (scoped) |
+| POST | `/api/tasks` | `task.create` |
+| GET | `/api/tasks/[id]` | authenticated + access assert |
+| PATCH | `/api/tasks/[id]` | assign/manage, or assignee status-only |
+
+List filters:
+
+- Projects: `status`, `departmentId`, `includeArchived`, pagination, sort
+- Tasks: `projectId`, `status`, `assignee`, `priority`, `parentTaskId` (`null` = roots), `dueFrom`/`dueTo`, pagination, sort
+
+Notable error codes:
+
+- `PROJECT_NOT_FOUND` (404)
+- `PROJECT_ARCHIVED` (409) — cannot create tasks on archived project
+- `INVALID_PROJECT_MEMBER` (409) — member not in department
+- `ALREADY_PROJECT_MEMBER` (409)
+- `SUBTASK_DEPTH_EXCEEDED` (409) — only one subtask level
+- `INVALID_ASSIGNEE` (409)
+- `PARENT_TASK_NOT_FOUND` (404)
+- `PARENT_PROJECT_MISMATCH` (409)
+
+Permissions seeded in M3:
+
+- `project.view` — admin, department_manager, employee
+- `project.manage` — **admin only** (create/edit/archive project entity)
+- `task.create` / `task.assign` — granted to department_manager (admin already had them)
+
+Department managers manage members and tasks inside department projects via service-layer scope, not `project.manage`.
+
+---
+
 # API Design Principles
 
 The API should be:

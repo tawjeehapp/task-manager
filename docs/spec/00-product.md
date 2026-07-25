@@ -332,7 +332,9 @@ Can:
 - Manage departments
 - Manage users
 - Assign department managers
-- View all projects
+- Create, edit, archive, and view all projects
+- Assign project members across departments
+- Create and assign tasks on any project
 - View all employees
 - View company-wide reports
 - Publish company announcements
@@ -346,8 +348,8 @@ Responsible only for their department.
 
 Can:
 
-- Manage department projects
-- Assign tasks
+- Manage department project members
+- Assign tasks within department projects
 - Review attendance
 - Review work logs
 - Approve leave requests

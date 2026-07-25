@@ -16,11 +16,14 @@ import type {
   Department,
   DepartmentMembership,
 } from "@/features/departments/types/department.types";
+import type { Project } from "@/features/projects/types/project.types";
 import type { UsersListResult } from "@/features/users/types/user.types";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
+import { TabPanel, Tabs } from "@/components/shared/tabs";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,11 +101,37 @@ async function fetchUsers(): Promise<UsersListResult> {
   return payload.data!;
 }
 
+async function fetchDepartmentProjects(
+  departmentId: string,
+): Promise<Project[]> {
+  const params = new URLSearchParams({
+    departmentId,
+    pageSize: "100",
+    includeArchived: "true",
+    sortBy: "name",
+    sortDir: "asc",
+  });
+  const response = await fetch(`/api/projects?${params.toString()}`);
+  const payload = (await response.json()) as {
+    data?: { items: Project[] };
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    // Viewers without project.view still see department; show empty projects.
+    if (response.status === 403) {
+      return [];
+    }
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data!.items;
+}
+
 export function DepartmentDetailClient({
   departmentId,
   canManage,
 }: DepartmentDetailClientProps) {
   const t = useTranslations("departments");
+  const tProjects = useTranslations("projects");
   const tRoles = useTranslations("roles");
   const tCommon = useTranslations("common");
   const router = useRouter();
@@ -124,6 +153,9 @@ export function DepartmentDetailClient({
   const [membersPage, setMembersPage] = useState(1);
   const [membersPageSize, setMembersPageSize] =
     useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
+  const [activeTab, setActiveTab] = useState<
+    "projects" | "members" | "history"
+  >("projects");
 
   const departmentQuery = useQuery({
     queryKey: ["departments", departmentId],
@@ -133,6 +165,11 @@ export function DepartmentDetailClient({
   const membersQuery = useQuery({
     queryKey: ["departments", departmentId, "members", canManage],
     queryFn: () => fetchMembers(departmentId, canManage),
+  });
+
+  const projectsQuery = useQuery({
+    queryKey: ["projects", { departmentId }],
+    queryFn: () => fetchDepartmentProjects(departmentId),
   });
 
   const currentMembers = useMemo(
@@ -280,12 +317,12 @@ export function DepartmentDetailClient({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/departments"
-          className="mb-2 inline-flex h-7 items-center rounded-lg px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          {t("backToList")}
-        </Link>
+        <Breadcrumbs
+          items={[
+            { label: t("title"), href: "/departments" },
+            { label: department.name },
+          ]}
+        />
         <PageHeader
           title={department.name}
           description={department.description ?? undefined}
@@ -320,13 +357,6 @@ export function DepartmentDetailClient({
                     {t("clearManager")}
                   </Button>
                 ) : null}
-                <Button
-                  type="button"
-                  onClick={() => setAddMemberOpen(true)}
-                  disabled={department.status === "archived"}
-                >
-                  {t("addMember")}
-                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -379,105 +409,208 @@ export function DepartmentDetailClient({
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">{t("members")}</h2>
-          {currentMembers.length > 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("memberCount", { count: currentMembers.length })}
-            </p>
-          ) : null}
-        </div>
-        {membersQuery.isLoading ? <LoadingState /> : null}
-        {!membersQuery.isLoading && currentMembers.length === 0 ? (
-          <EmptyState title={t("members")} description="—" />
-        ) : null}
-        {currentMembers.length > 0 ? (
-          <div className="rounded-xl border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("name")}</TableHead>
-                  <TableHead>{tRoles("employee")}</TableHead>
-                  <TableHead>{t("startDate")}</TableHead>
-                  {canManage ? (
-                    <TableHead className="text-start">{t("actions")}</TableHead>
-                  ) : null}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pagedCurrentMembers.map((membership) => (
-                  <TableRow key={membership.id}>
-                    <TableCell>
-                      {membership.user?.fullName ?? membership.userId}
-                    </TableCell>
-                    <TableCell>
-                      {membership.user
-                        ? tRoles(membership.user.role)
-                        : "—"}
-                    </TableCell>
-                    <TableCell>{membership.startDate}</TableCell>
-                    {canManage ? (
-                      <TableCell>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setRemoveMember(membership)}
-                        >
-                          {t("removeMember")}
-                        </Button>
-                      </TableCell>
-                    ) : null}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <TablePagination
-              page={membersPage}
-              pageSize={membersPageSize}
-              total={currentMembers.length}
-              onPageChange={setMembersPage}
-              onPageSizeChange={(size) => {
-                setMembersPageSize(size);
-                setMembersPage(1);
-              }}
+      <Tabs
+        value={activeTab}
+        onValueChange={(id) =>
+          setActiveTab(id as "projects" | "members" | "history")
+        }
+        items={[
+          {
+            id: "projects",
+            label: tProjects("title"),
+            count: projectsQuery.data?.length,
+          },
+          {
+            id: "members",
+            label: t("members"),
+            count: currentMembers.length,
+          },
+          ...(canManage
+            ? [
+                {
+                  id: "history",
+                  label: t("history"),
+                  count: (membersQuery.data ?? []).filter((m) => !m.isCurrent)
+                    .length,
+                },
+              ]
+            : []),
+        ]}
+        actions={
+          activeTab === "members" && canManage ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setAddMemberOpen(true)}
+              disabled={department.status === "archived"}
+            >
+              {t("addMember")}
+            </Button>
+          ) : null
+        }
+      >
+        <TabPanel when="projects" active={activeTab} className="space-y-3">
+          {projectsQuery.isLoading ? <LoadingState /> : null}
+          {projectsQuery.isError ? (
+            <ErrorState
+              title={tCommon("errorTitle")}
+              description={(projectsQuery.error as Error).message}
+              onRetry={() => void projectsQuery.refetch()}
             />
-          </div>
-        ) : null}
+          ) : null}
+          {!projectsQuery.isLoading &&
+          !projectsQuery.isError &&
+          (projectsQuery.data?.length ?? 0) === 0 ? (
+            <EmptyState
+              title={tProjects("emptyTitle")}
+              description={tProjects("emptyDescription")}
+            />
+          ) : null}
+          {(projectsQuery.data?.length ?? 0) > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{tProjects("name")}</TableHead>
+                    <TableHead>{tProjects("status")}</TableHead>
+                    <TableHead>{tProjects("priority")}</TableHead>
+                    <TableHead>{tProjects("members")}</TableHead>
+                    <TableHead>{tProjects("endDate")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(projectsQuery.data ?? []).map((project) => (
+                    <TableRow key={project.id}>
+                      <TableCell>
+                        <Link
+                          href={`/projects/${project.id}`}
+                          className="font-medium underline-offset-4 hover:underline"
+                        >
+                          {project.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {tProjects(
+                            `status_${project.status}` as "status_draft",
+                          )}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {tProjects(
+                          `priority_${project.priority}` as "priority_low",
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {tProjects("memberCount", {
+                          count: project.memberCount,
+                        })}
+                      </TableCell>
+                      <TableCell>{project.endDate ?? "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+        </TabPanel>
 
-        {canManage &&
-        membersQuery.data &&
-        membersQuery.data.some((m) => !m.isCurrent) ? (
-          <div className="space-y-2">
-            <h3 className="text-base font-medium">{t("history")}</h3>
+        <TabPanel when="members" active={activeTab} className="space-y-3">
+          {membersQuery.isLoading ? <LoadingState /> : null}
+          {!membersQuery.isLoading && currentMembers.length === 0 ? (
+            <EmptyState title={t("members")} description="—" />
+          ) : null}
+          {currentMembers.length > 0 ? (
             <div className="rounded-xl border border-border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t("name")}</TableHead>
+                    <TableHead>{t("personName")}</TableHead>
+                    <TableHead>{t("role")}</TableHead>
                     <TableHead>{t("startDate")}</TableHead>
-                    <TableHead>{t("endDate")}</TableHead>
+                    {canManage ? (
+                      <TableHead className="text-start">{t("actions")}</TableHead>
+                    ) : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {membersQuery.data
-                    .filter((m) => !m.isCurrent)
-                    .map((membership) => (
-                      <TableRow key={membership.id}>
+                  {pagedCurrentMembers.map((membership) => (
+                    <TableRow key={membership.id}>
+                      <TableCell>
+                        {membership.user?.fullName ?? membership.userId}
+                      </TableCell>
+                      <TableCell>
+                        {membership.user
+                          ? tRoles(membership.user.role)
+                          : "—"}
+                      </TableCell>
+                      <TableCell>{membership.startDate}</TableCell>
+                      {canManage ? (
                         <TableCell>
-                          {membership.user?.fullName ?? membership.userId}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRemoveMember(membership)}
+                          >
+                            {t("removeMember")}
+                          </Button>
                         </TableCell>
-                        <TableCell>{membership.startDate}</TableCell>
-                        <TableCell>{membership.endDate ?? "—"}</TableCell>
-                      </TableRow>
-                    ))}
+                      ) : null}
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
+              <TablePagination
+                page={membersPage}
+                pageSize={membersPageSize}
+                total={currentMembers.length}
+                onPageChange={setMembersPage}
+                onPageSizeChange={(size) => {
+                  setMembersPageSize(size);
+                  setMembersPage(1);
+                }}
+              />
             </div>
-          </div>
+          ) : null}
+        </TabPanel>
+
+        {canManage ? (
+          <TabPanel when="history" active={activeTab} className="space-y-3">
+            {membersQuery.isLoading ? <LoadingState /> : null}
+            {!membersQuery.isLoading &&
+            !(membersQuery.data ?? []).some((m) => !m.isCurrent) ? (
+              <EmptyState title={t("history")} description="—" />
+            ) : null}
+            {(membersQuery.data ?? []).some((m) => !m.isCurrent) ? (
+              <div className="rounded-xl border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("personName")}</TableHead>
+                      <TableHead>{t("startDate")}</TableHead>
+                      <TableHead>{t("endDate")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(membersQuery.data ?? [])
+                      .filter((m) => !m.isCurrent)
+                      .map((membership) => (
+                        <TableRow key={membership.id}>
+                          <TableCell>
+                            {membership.user?.fullName ?? membership.userId}
+                          </TableCell>
+                          <TableCell>{membership.startDate}</TableCell>
+                          <TableCell>{membership.endDate ?? "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
+          </TabPanel>
         ) : null}
-      </div>
+      </Tabs>
 
       {/* Edit dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

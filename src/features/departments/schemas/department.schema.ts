@@ -39,6 +39,9 @@ export const updateDepartmentSchema = z
 
 export const listDepartmentsQuerySchema = z.object({
   status: departmentStatusSchema.optional(),
+  managerId: z
+    .union([z.literal("none"), z.string().uuid()])
+    .optional(),
   includeArchived: z
     .enum(["true", "false"])
     .optional()
@@ -50,7 +53,9 @@ export const listDepartmentsQuerySchema = z.object({
       message: "حجم الصفحة غير صالح",
     })
     .default(25),
-  sortBy: z.enum(["name", "status", "memberCount", "createdAt"]).default("name"),
+  sortBy: z
+    .enum(["name", "status", "memberCount", "activeProjectCount", "createdAt"])
+    .default("name"),
   sortDir: z.enum(["asc", "desc"]).default("asc"),
 });
 

@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const parsed = listDepartmentsQuerySchema.safeParse({
       status: url.searchParams.get("status") ?? undefined,
+      managerId: url.searchParams.get("managerId") ?? undefined,
       includeArchived: url.searchParams.get("includeArchived") ?? undefined,
       page: url.searchParams.get("page") ?? undefined,
       pageSize: url.searchParams.get("pageSize") ?? undefined,

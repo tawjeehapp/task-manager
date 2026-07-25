@@ -124,41 +124,22 @@ Each major module owns its code.
 Example:
 
 ```
-features/tasks/
+features/
 
-components/
+    projects/
+        components/
+        services/
+        schemas/
+        types/
 
-    task-card.tsx
-    task-table.tsx
-    task-form.tsx
-
-
-services/
-
-    create-task.ts
-    update-task.ts
-
-
-queries/
-
-    use-tasks.ts
-
-
-mutations/
-
-    use-create-task.ts
-
-
-schemas/
-
-    task.schema.ts
-
-
-types/
-
-    task.types.ts
+    tasks/
+        components/
+        services/
+        schemas/
+        types/
 ```
 
+Service files may be split (`create-project.ts`) or grouped (`projects.ts`) — prefer consistency with the surrounding feature.
 ---
 
 # Components

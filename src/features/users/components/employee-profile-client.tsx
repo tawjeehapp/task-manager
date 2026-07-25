@@ -13,10 +13,16 @@ import {
   type UpdateUserInput,
 } from "@/features/users/schemas/user.schema";
 import type { Department } from "@/features/departments/types/department.types";
+import type { Project } from "@/features/projects/types/project.types";
+import type { Task } from "@/features/tasks/types/task.types";
 import type { UserListItem } from "@/features/users/types/user.types";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
+import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
+import { TabPanel, Tabs } from "@/components/shared/tabs";
+import { TasksListTable } from "@/features/tasks/components/tasks-list-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,11 +35,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type EmployeeProfileClientProps = {
   userId: string;
   canManage: boolean;
+  canEditTasks: boolean;
   currentUserId: string;
 };
 
@@ -61,12 +76,53 @@ async function fetchDepartments(): Promise<Department[]> {
   return payload.data!.items;
 }
 
+async function fetchUserProjects(userId: string): Promise<Project[]> {
+  const params = new URLSearchParams({
+    memberUserId: userId,
+    pageSize: "100",
+    includeArchived: "true",
+    sortBy: "createdAt",
+    sortDir: "desc",
+  });
+  const response = await fetch(`/api/projects?${params.toString()}`);
+  const payload = (await response.json()) as {
+    data?: { items: Project[] };
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data!.items;
+}
+
+async function fetchUserTasks(userId: string): Promise<Task[]> {
+  const params = new URLSearchParams({
+    assignee: userId,
+    parentTaskId: "null",
+    pageSize: "100",
+    sortBy: "createdAt",
+    sortDir: "desc",
+  });
+  const response = await fetch(`/api/tasks?${params.toString()}`);
+  const payload = (await response.json()) as {
+    data?: { items: Task[] };
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data!.items;
+}
+
 export function EmployeeProfileClient({
   userId,
   canManage,
+  canEditTasks,
   currentUserId,
 }: EmployeeProfileClientProps) {
   const t = useTranslations("employees");
+  const tProjects = useTranslations("projects");
+  const tTasks = useTranslations("tasks");
   const tRoles = useTranslations("roles");
   const tCommon = useTranslations("common");
   const router = useRouter();
@@ -78,6 +134,7 @@ export function EmployeeProfileClient({
   const [editOpen, setEditOpen] = useState(false);
   const [membershipOpen, setMembershipOpen] = useState(false);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
+  const [activeTab, setActiveTab] = useState<"projects" | "tasks">("projects");
   const [confirmAction, setConfirmAction] = useState<
     "delete" | "reset" | "deactivate" | "activate" | "removeDepartment" | null
   >(null);
@@ -93,7 +150,19 @@ export function EmployeeProfileClient({
     enabled: canManage && membershipOpen,
   });
 
+  const projectsQuery = useQuery({
+    queryKey: ["projects", { memberUserId: userId }],
+    queryFn: () => fetchUserProjects(userId),
+  });
+
+  const tasksQuery = useQuery({
+    queryKey: ["tasks", { assignee: userId, parentTaskId: null }],
+    queryFn: () => fetchUserTasks(userId),
+  });
+
   const user = userQuery.data;
+  const projects = projectsQuery.data ?? [];
+  const tasks = tasksQuery.data ?? [];
 
   const editForm = useForm<UpdateUserInput>({
     resolver: zodResolver(updateUserSchema) as never,
@@ -303,12 +372,12 @@ export function EmployeeProfileClient({
   return (
     <div className="space-y-6">
       <div>
-        <Link
-          href="/employees"
-          className="mb-2 inline-flex h-7 items-center rounded-lg px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          {t("backToList")}
-        </Link>
+        <Breadcrumbs
+          items={[
+            { label: t("title"), href: "/employees" },
+            { label: user.fullName },
+          ]}
+        />
         <PageHeader
           title={user.fullName}
           description={t("profileDescription", {
@@ -390,35 +459,138 @@ export function EmployeeProfileClient({
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-xl border border-border p-4">
-          <p className="text-sm text-muted-foreground">{t("employeeNumber")}</p>
-          <p className="mt-1 font-medium">{user.employeeNumber}</p>
+      <dl className="divide-border max-w-xl divide-y rounded-xl border border-border">
+        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+          <dt className="text-muted-foreground text-sm">{t("employeeNumber")}</dt>
+          <dd className="font-medium sm:text-end">{user.employeeNumber}</dd>
         </div>
-        <div className="rounded-xl border border-border p-4">
-          <p className="text-sm text-muted-foreground">{t("role")}</p>
-          <p className="mt-1 font-medium">{tRoles(user.role)}</p>
+        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+          <dt className="text-muted-foreground text-sm">{t("role")}</dt>
+          <dd className="font-medium sm:text-end">{tRoles(user.role)}</dd>
         </div>
-        <div className="rounded-xl border border-border p-4">
-          <p className="text-sm text-muted-foreground">{t("status")}</p>
-          <Badge
-            className="mt-1"
-            variant={user.isActive ? "default" : "secondary"}
-          >
-            {user.isActive ? t("active") : t("inactive")}
-          </Badge>
+        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+          <dt className="text-muted-foreground text-sm">{t("status")}</dt>
+          <dd className="sm:text-end">
+            <Badge variant={user.isActive ? "default" : "secondary"}>
+              {user.isActive ? t("active") : t("inactive")}
+            </Badge>
+          </dd>
         </div>
-        <div className="rounded-xl border border-border p-4">
-          <p className="text-sm text-muted-foreground">{t("phone")}</p>
-          <p className="mt-1 font-medium">{user.phone ?? "—"}</p>
+        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+          <dt className="text-muted-foreground text-sm">{t("phone")}</dt>
+          <dd className="font-medium sm:text-end">{user.phone ?? "—"}</dd>
         </div>
-        <div className="rounded-xl border border-border p-4">
-          <p className="text-sm text-muted-foreground">{t("department")}</p>
-          <p className="mt-1 font-medium">
+        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+          <dt className="text-muted-foreground text-sm">{t("department")}</dt>
+          <dd className="font-medium sm:text-end">
             {user.currentDepartment?.name ?? t("noDepartment")}
-          </p>
+          </dd>
         </div>
-      </div>
+      </dl>
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(id) => setActiveTab(id as "projects" | "tasks")}
+        items={[
+          {
+            id: "projects",
+            label: tProjects("title"),
+            count: projects.length,
+          },
+          {
+            id: "tasks",
+            label: tTasks("title"),
+            count: tasks.length,
+          },
+        ]}
+      >
+        <TabPanel when="projects" active={activeTab} className="space-y-3">
+          {projectsQuery.isLoading ? <LoadingState /> : null}
+          {projectsQuery.isError ? (
+            <ErrorState
+              title={tCommon("errorTitle")}
+              description={(projectsQuery.error as Error).message}
+              onRetry={() => void projectsQuery.refetch()}
+            />
+          ) : null}
+          {!projectsQuery.isLoading &&
+          !projectsQuery.isError &&
+          projects.length === 0 ? (
+            <EmptyState
+              title={t("emptyProjectsTitle")}
+              description={t("emptyProjectsDescription")}
+            />
+          ) : null}
+          {projects.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{tProjects("name")}</TableHead>
+                    <TableHead>{tProjects("status")}</TableHead>
+                    <TableHead>{tProjects("priority")}</TableHead>
+                    <TableHead>{tProjects("endDate")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {projects.map((project) => (
+                    <TableRow key={project.id}>
+                      <TableCell>
+                        <Link
+                          href={`/projects/${project.id}`}
+                          className="font-medium underline-offset-4 hover:underline"
+                        >
+                          {project.name}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {tProjects(
+                            `status_${project.status}` as "status_draft",
+                          )}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {tProjects(
+                          `priority_${project.priority}` as "priority_low",
+                        )}
+                      </TableCell>
+                      <TableCell>{project.endDate ?? "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+        </TabPanel>
+
+        <TabPanel when="tasks" active={activeTab} className="space-y-3">
+          {tasksQuery.isLoading ? <LoadingState /> : null}
+          {tasksQuery.isError ? (
+            <ErrorState
+              title={tCommon("errorTitle")}
+              description={(tasksQuery.error as Error).message}
+              onRetry={() => void tasksQuery.refetch()}
+            />
+          ) : null}
+          {!tasksQuery.isLoading &&
+          !tasksQuery.isError &&
+          tasks.length === 0 ? (
+            <EmptyState
+              title={t("emptyTasksTitle")}
+              description={t("emptyTasksDescription")}
+            />
+          ) : null}
+          {tasks.length > 0 ? (
+            <TasksListTable
+              tasks={tasks}
+              canEdit={canEditTasks}
+              viewerId={currentUserId}
+              showProject
+            />
+          ) : null}
+        </TabPanel>
+      </Tabs>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>

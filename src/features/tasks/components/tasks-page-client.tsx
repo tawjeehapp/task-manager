@@ -1,0 +1,426 @@
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslations } from "next-intl";
+import { Plus } from "lucide-react";
+
+import {
+  createTaskSchema,
+  type CreateTaskInput,
+  type TaskSortBy,
+} from "@/features/tasks/schemas/task.schema";
+import type { Task } from "@/features/tasks/types/task.types";
+import type { Project } from "@/features/projects/types/project.types";
+import type { Role } from "@/lib/permissions";
+import {
+  DEFAULT_TABLE_PAGE_SIZE,
+  type SortDirection,
+  type TablePageSize,
+} from "@/lib/table/constants";
+import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
+import { ErrorState } from "@/components/shared/error-state";
+import { LoadingState } from "@/components/shared/loading-state";
+import { TablePagination } from "@/components/shared/table-pagination";
+import { TasksListTable } from "@/features/tasks/components/tasks-list-table";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+type TasksPageClientProps = {
+  canCreate: boolean;
+  viewerRole: Role;
+  viewerId: string;
+};
+
+type TasksListResult = {
+  items: Task[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+async function fetchTasks(params: {
+  page: number;
+  pageSize: TablePageSize;
+  sortBy: TaskSortBy;
+  sortDir: SortDirection;
+  status?: string;
+  projectId?: string;
+  assignee?: string;
+}): Promise<TasksListResult> {
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+    sortBy: params.sortBy,
+    sortDir: params.sortDir,
+    parentTaskId: "null",
+  });
+  if (params.status) {
+    searchParams.set("status", params.status);
+  }
+  if (params.projectId) {
+    searchParams.set("projectId", params.projectId);
+  }
+  if (params.assignee) {
+    searchParams.set("assignee", params.assignee);
+  }
+  const response = await fetch(`/api/tasks?${searchParams.toString()}`);
+  const payload = (await response.json()) as {
+    data?: TasksListResult;
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data!;
+}
+
+async function fetchProjects(): Promise<Project[]> {
+  const response = await fetch("/api/projects?pageSize=100");
+  const payload = (await response.json()) as {
+    data?: { items: Project[] };
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data!.items;
+}
+
+export function TasksPageClient({
+  canCreate,
+  viewerRole,
+  viewerId,
+}: TasksPageClientProps) {
+  const t = useTranslations("tasks");
+  const tCommon = useTranslations("common");
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
+  const [sortBy] = useState<TaskSortBy>("createdAt");
+  const [sortDir] = useState<SortDirection>("desc");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [mineOnly, setMineOnly] = useState(viewerRole === "employee");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const tasksQuery = useQuery({
+    queryKey: [
+      "tasks",
+      page,
+      pageSize,
+      sortBy,
+      sortDir,
+      statusFilter,
+      projectFilter,
+      mineOnly,
+    ],
+    queryFn: () =>
+      fetchTasks({
+        page,
+        pageSize,
+        sortBy,
+        sortDir,
+        status: statusFilter || undefined,
+        projectId: projectFilter || undefined,
+        assignee: mineOnly ? viewerId : undefined,
+      }),
+  });
+
+  const projectsQuery = useQuery({
+    queryKey: ["projects", "for-task-filters"],
+    queryFn: fetchProjects,
+  });
+
+  const createForm = useForm<CreateTaskInput>({
+    resolver: zodResolver(createTaskSchema) as never,
+    defaultValues: {
+      projectId: "",
+      title: "",
+      description: "",
+      status: "todo",
+      priority: "medium",
+      assignedTo: null,
+      startDate: null,
+      dueDate: null,
+      estimatedHours: null,
+      parentTaskId: null,
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (values: CreateTaskInput) => {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      const payload = (await response.json()) as {
+        data?: Task;
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? t("createFailed"));
+      }
+      return payload.data!;
+    },
+    onSuccess: async () => {
+      setCreateOpen(false);
+      createForm.reset();
+      setSuccessMessage(t("createSuccess"));
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+
+  const items = tasksQuery.data?.items ?? [];
+  const total = tasksQuery.data?.total ?? 0;
+
+  function statusLabel(status: string) {
+    return t(`status_${status}` as "status_todo");
+  }
+
+  function priorityLabel(priority: string) {
+    return t(`priority_${priority}` as "priority_low");
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={t("title")}
+        description={
+          viewerRole === "employee" ? t("employeeDescription") : t("description")
+        }
+        actions={
+          canCreate ? (
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger
+                render={<Button type="button" className="gap-2" />}
+              >
+                <Plus className="size-4" />
+                {t("create")}
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t("createTitle")}</DialogTitle>
+                </DialogHeader>
+                <form
+                  className="space-y-4"
+                  onSubmit={createForm.handleSubmit((values) =>
+                    createMutation.mutate(values),
+                  )}
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="projectId">{t("project")}</Label>
+                    <select
+                      id="projectId"
+                      className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                      {...createForm.register("projectId")}
+                    >
+                      <option value="">{t("selectProject")}</option>
+                      {(projectsQuery.data ?? [])
+                        .filter((p) => p.status !== "archived")
+                        .map((project) => (
+                          <option key={project.id} value={project.id}>
+                            {project.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="title">{t("titleLabel")}</Label>
+                    <Input id="title" {...createForm.register("title")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">{t("descriptionLabel")}</Label>
+                    <textarea
+                      id="description"
+                      className="border-input bg-background min-h-20 w-full rounded-md border px-3 py-2 text-sm"
+                      {...createForm.register("description")}
+                    />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="priority">{t("priority")}</Label>
+                      <select
+                        id="priority"
+                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                        {...createForm.register("priority")}
+                      >
+                        <option value="low">{priorityLabel("low")}</option>
+                        <option value="medium">{priorityLabel("medium")}</option>
+                        <option value="high">{priorityLabel("high")}</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="status">{t("status")}</Label>
+                      <select
+                        id="status"
+                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                        {...createForm.register("status")}
+                      >
+                        <option value="todo">{statusLabel("todo")}</option>
+                        <option value="in_progress">
+                          {statusLabel("in_progress")}
+                        </option>
+                        <option value="blocked">{statusLabel("blocked")}</option>
+                        <option value="review">{statusLabel("review")}</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="startDate">{t("startDate")}</Label>
+                      <Input
+                        id="startDate"
+                        type="date"
+                        {...createForm.register("startDate")}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="dueDate">{t("dueDate")}</Label>
+                      <Input
+                        id="dueDate"
+                        type="date"
+                        {...createForm.register("dueDate")}
+                      />
+                    </div>
+                  </div>
+                  {createMutation.isError ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {(createMutation.error as Error).message}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setCreateOpen(false)}
+                    >
+                      {tCommon("cancel")}
+                    </Button>
+                    <Button type="submit" disabled={createMutation.isPending}>
+                      {createMutation.isPending
+                        ? tCommon("saving")
+                        : tCommon("save")}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : null
+        }
+      />
+
+      {successMessage ? (
+        <Alert>
+          <AlertDescription>{successMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={mineOnly}
+            onChange={(event) => {
+              setMineOnly(event.target.checked);
+              setPage(1);
+            }}
+          />
+          {t("mineOnly")}
+        </label>
+        <select
+          className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+          value={statusFilter}
+          onChange={(event) => {
+            setStatusFilter(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">{t("filterAllStatuses")}</option>
+          {(
+            [
+              "todo",
+              "in_progress",
+              "blocked",
+              "review",
+              "completed",
+              "cancelled",
+            ] as const
+          ).map((status) => (
+            <option key={status} value={status}>
+              {statusLabel(status)}
+            </option>
+          ))}
+        </select>
+        <select
+          className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+          value={projectFilter}
+          onChange={(event) => {
+            setProjectFilter(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">{t("filterAllProjects")}</option>
+          {(projectsQuery.data ?? []).map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {tasksQuery.isLoading ? <LoadingState /> : null}
+      {tasksQuery.isError ? (
+        <ErrorState
+          title={tCommon("errorTitle")}
+          description={(tasksQuery.error as Error).message}
+          onRetry={() => void tasksQuery.refetch()}
+        />
+      ) : null}
+
+      {tasksQuery.isSuccess && items.length === 0 ? (
+        <EmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
+      ) : null}
+
+      {tasksQuery.isSuccess && items.length > 0 ? (
+        <>
+          <p className="text-muted-foreground text-sm">
+            {t("totalCount", { count: total })}
+          </p>
+          <TasksListTable
+            tasks={items}
+            canEdit={canCreate}
+            viewerId={viewerId}
+            showProject
+          />
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
+        </>
+      ) : null}
+    </div>
+  );
+}
