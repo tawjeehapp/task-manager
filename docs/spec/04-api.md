@@ -614,6 +614,7 @@ Tasks:
 status
 assignee
 project
+department
 priority
 date range
 ```
@@ -912,6 +913,25 @@ Scoping: admin = company-wide (optional department filter); manager = managed de
 UI: `/` action-oriented role dashboard; `/reports` tabbed tables (hidden from employees).
 
 Out of scope for M8: charts, CSV/PDF export, scheduled reports, Advanced Analytics, Gantt (M9).
+
+---
+
+# Milestone 9 — Advanced Views (Gantt, Filters, Comments, Attachments)
+
+Task list filters (server-side): `projectId`, `departmentId`, `status`, `assignee`, `priority`, `parentTaskId`, `dueFrom`, `dueTo`.
+
+| Method | Path | Authz | Notes |
+|--------|------|-------|-------|
+| GET | `/api/projects/[id]/gantt` | Project access | Tasks + dependency edges; optional `status`, `assignee`, `dueFrom`, `dueTo` |
+| GET/POST | `/api/tasks/[id]/comments` | Task access | List / create comment |
+| PATCH/DELETE | `/api/tasks/[id]/comments/[commentId]` | Author (edit); author or admin/manager (delete) | |
+| GET/POST | `/api/tasks/[id]/attachments` | Task access | List / multipart upload (`file`) |
+| DELETE | `/api/tasks/[id]/attachments/[attachmentId]` | Uploader or admin/manager | Removes Storage object + row |
+| GET | `/api/tasks/[id]/attachments/[attachmentId]/download` | Task access | `{ url, fileName }` signed URL |
+
+Task PATCH accepts `progressPercentage` (0–100).
+
+UI: `/projects/[id]/gantt`; `/tasks` advanced filters; task detail tabs Comments + Attachments.
 
 ---
 

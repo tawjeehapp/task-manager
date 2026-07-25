@@ -4,7 +4,7 @@ Arabic-first, RTL work management platform for organizations. Built with Next.js
 
 ## Current status
 
-**Milestones 0–8** are implemented for core product scope (dashboards & reports). **Next: Milestone 9 — Advanced Views.**
+**Milestones 0–9** are implemented for core product scope (Gantt, advanced filters, task comments/attachments).
 
 | Milestone | Status |
 |---|---|
@@ -17,7 +17,7 @@ Arabic-first, RTL work management platform for organizations. Built with Next.js
 | 6 — Leave & employee requests | Completed |
 | 7 — Communication | Completed (attachments + Web Push deferred) |
 | 8 — Dashboards & reports | Completed |
-| 9 — Advanced views | Remaining |
+| 9 — Advanced views | Completed |
 
 ---
 
@@ -127,12 +127,18 @@ This section explains the live business rules as implemented — useful when wal
   - Filterable paginated tables (default date range = current month `Asia/Riyadh`).
   - No charts, export, or scheduled jobs in M8.
 
+### Advanced views (M9)
+
+- **Gantt** at `/projects/[id]/gantt` — timeline bars, dependency lines, overdue highlighting; linked from project detail.
+- **Advanced filters** on `/tasks` — department, assignee, priority, due date range (plus status/project/mine).
+- **Task comments** and **attachments** on task detail tabs; files in private Storage bucket `task-files` (signed download URLs).
+- Task **progress %** is editable and shown on Gantt bars.
+
 ### What is intentionally not built yet
 
 - Announcement **file attachments** and **Web Push** → deferred past M7
-- Gantt / advanced filters → Milestone 9
-- Task comments & attachments → future
 - Offline PWA service worker → deferred
+- Global company-wide Gantt / drag-to-reschedule on Gantt
 
 ---
 
@@ -145,7 +151,7 @@ This section explains the live business rules as implemented — useful when wal
 5. Link the project: `npm run supabase:link` (same project as `.env.local`)
 6. Push migrations: `npm run supabase:db:push`
 7. Seed admin: `npm run seed:admin` (employee `0000` / password `0000`)
-8. Optional QA dataset: `npm run seed:dev` (deterministic M1–M7 users and scenarios)
+8. Optional QA dataset: `npm run seed:dev` (deterministic M1–M9 users and scenarios)
 9. Run: `npm run dev`
 
 See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for full setup details.

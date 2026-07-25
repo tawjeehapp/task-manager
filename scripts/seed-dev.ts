@@ -74,6 +74,7 @@ async function main() {
     console.log("Deleting seed-owned rows by fixed IDs…");
     // FK-safe order
     await deleteByIds(admin, "notifications", RESET_ID_SETS.notifications);
+    await deleteByIds(admin, "task_comments", RESET_ID_SETS.task_comments);
     await deleteByIds(admin, "announcements", RESET_ID_SETS.announcements);
     await deleteByIds(admin, "employee_requests", RESET_ID_SETS.employee_requests);
     await deleteByIds(admin, "leave_requests", RESET_ID_SETS.leave_requests);
@@ -1002,6 +1003,33 @@ async function main() {
     },
   ]);
 
+  await upsertRows(admin, "task_comments", [
+    {
+      id: IDS.commentSara1,
+      task_id: IDS.taskAttendanceUi,
+      user_id: users["1003"],
+      content: "بدأت العمل على واجهة الحضور. سأشارك مسودة قريباً.",
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: IDS.commentAhmed1,
+      task_id: IDS.taskAttendanceUi,
+      user_id: users["1001"],
+      content: "ممتاز — راجعي أيضاً حالات الاعتماد المرفوض.",
+      created_at: now,
+      updated_at: now,
+    },
+    {
+      id: IDS.commentKhalid1,
+      task_id: IDS.taskWireApi,
+      user_id: users["1004"],
+      content: "أحتاج مواصفات الـ API قبل المتابعة.",
+      created_at: now,
+      updated_at: now,
+    },
+  ]);
+
   // --- Summary ---
   console.log("\n=== Development seed complete ===\n");
   console.log("Credentials (password = employee number for newly created Auth users).");
@@ -1073,6 +1101,15 @@ async function main() {
   );
   console.log(
     `  • Leave balances / manage types: admin 0000 on /leave → Manage`,
+  );
+  console.log(
+    `  • Gantt: open /projects/{platform}/gantt — bars + dependency lines + overdue`,
+  );
+  console.log(
+    `  • Task comments: سارة/أحمد on إعداد واجهة الحضور; خالد on ربط الـ API`,
+  );
+  console.log(
+    `  • Advanced filters on /tasks: department, assignee, priority, due range`,
   );
   console.log("\nRe-run: npm run seed:dev");
   console.log("Reset seed-owned rows then reseed: npm run seed:dev -- --reset");

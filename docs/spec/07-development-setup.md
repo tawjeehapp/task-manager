@@ -250,11 +250,9 @@ Service workers and offline caching are deferred until a dedicated PWA milestone
 
 # Current Milestone
 
-**Milestone 9 — Advanced Views** is next.
+Milestones **0–9** core product scope is implemented (M0 PWA offline + Web Push still deferred; M7 announcement attachments deferred). See [06-roadmap.md](./06-roadmap.md) for accurate status.
 
-Milestones 0–8 core scope is implemented (M8 dashboards/reports; M7 attachments + Web Push deferred). See [06-roadmap.md](./06-roadmap.md) for accurate status (completed / partial / deferred).
-
-### Already applied (M1–M8)
+### Already applied (M1–M9)
 
 | Milestone | Migrations (under `supabase/migrations/`) |
 |---|---|
@@ -266,24 +264,25 @@ Milestones 0–8 core scope is implemented (M8 dashboards/reports; M7 attachment
 | 6 Leave & employee requests | `20260725170000_milestone6_leave_employee_requests.sql` |
 | 7 Announcements & notifications | `20260725180000_milestone7_announcements_notifications.sql` |
 | 8 Dashboards & reporting | `20260725190000_milestone8_dashboards_reporting.sql` |
+| 9 Advanced views | `20260725200000_milestone9_advanced_views.sql` |
 
-### Shipped through M8 (summary)
+### Shipped through M9 (summary)
 
 - Auth, users, permissions, departments, memberships
-- Projects, members, tasks, one-level subtasks, Kanban
+- Projects, members, tasks, one-level subtasks, Kanban, Gantt
 - Finish-to-start dependencies, assignee workload hints, task activity history
 - Attendance clock in/out, approval/rejection, daily hour totals, task work logs
 - Leave types/balances/requests, task extension/excusal, centralized `/approvals`
 - Announcements (company/department), read tracking, in-app notifications + header bell
 - Role dashboards on `/` and operational reports on `/reports` (`report.view`)
+- Advanced task filters; task comments; task attachments (`task-files` Storage)
 - Task statuses: `todo | in_progress | blocked | completed`
 
 ### Explicitly not included yet
 
 - Announcement file attachments / Web Push delivery (deferred from M7)
-- Gantt / advanced filtering product (Milestone 9)
-- Task comments / attachments
 - Service worker / offline PWA runtime
+- Global company-wide Gantt / drag-to-reschedule on Gantt
 
 ---
 

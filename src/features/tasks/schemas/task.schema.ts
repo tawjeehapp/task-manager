@@ -91,6 +91,12 @@ export const updateTaskSchema = z
       .nonnegative("الساعات المقدرة غير صالحة")
       .nullable()
       .optional(),
+    progressPercentage: z
+      .number()
+      .int("نسبة التقدم غير صالحة")
+      .min(0, "نسبة التقدم غير صالحة")
+      .max(100, "نسبة التقدم غير صالحة")
+      .optional(),
   })
   .refine(
     (data) =>
@@ -101,12 +107,14 @@ export const updateTaskSchema = z
       data.assignedTo !== undefined ||
       data.startDate !== undefined ||
       data.dueDate !== undefined ||
-      data.estimatedHours !== undefined,
+      data.estimatedHours !== undefined ||
+      data.progressPercentage !== undefined,
     { message: "لا توجد بيانات للتحديث" },
   );
 
 export const listTasksQuerySchema = z.object({
   projectId: z.string().uuid().optional(),
+  departmentId: z.string().uuid().optional(),
   status: taskStatusSchema.optional(),
   assignee: z.string().uuid().optional(),
   priority: taskPrioritySchema.optional(),

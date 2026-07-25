@@ -1,8 +1,6 @@
-new milestone prompt example
-
 You are continuing development of the Work Management Platform.
 
-Milestone 3 is complete.
+Milestone 8 is complete.
 
 Respect milestone boundaries. If a future requirement is needed to complete Milestone 3, explain why before implementing it.
 
@@ -15,11 +13,11 @@ Before writing any code:
 2. Review the existing implementation and understand:
    - current architecture
    - existing patterns
-   - completed work from Milestone 0
+   - completed work from Milestone 8
 
 We are now starting:
 
-Milestone 4 from:
+Milestone 9 from:
 docs/spec/06-roadmap.md
 
 Follow the milestone specification exactly.

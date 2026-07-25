@@ -61,7 +61,11 @@ async function fetchTasks(params: {
   sortDir: SortDirection;
   status?: string;
   projectId?: string;
+  departmentId?: string;
   assignee?: string;
+  priority?: string;
+  dueFrom?: string;
+  dueTo?: string;
 }): Promise<TasksListResult> {
   const searchParams = new URLSearchParams({
     page: String(params.page),
@@ -76,8 +80,20 @@ async function fetchTasks(params: {
   if (params.projectId) {
     searchParams.set("projectId", params.projectId);
   }
+  if (params.departmentId) {
+    searchParams.set("departmentId", params.departmentId);
+  }
   if (params.assignee) {
     searchParams.set("assignee", params.assignee);
+  }
+  if (params.priority) {
+    searchParams.set("priority", params.priority);
+  }
+  if (params.dueFrom) {
+    searchParams.set("dueFrom", params.dueFrom);
+  }
+  if (params.dueTo) {
+    searchParams.set("dueTo", params.dueTo);
   }
   const response = await fetch(`/api/tasks?${searchParams.toString()}`);
   const payload = (await response.json()) as {
@@ -102,6 +118,33 @@ async function fetchProjects(): Promise<Project[]> {
   return payload.data!.items;
 }
 
+type DepartmentOption = { id: string; name: string };
+type UserOption = { id: string; fullName: string; employeeNumber: string };
+
+async function fetchDepartments(): Promise<DepartmentOption[]> {
+  const response = await fetch("/api/departments?pageSize=100");
+  const payload = (await response.json()) as {
+    data?: { items: DepartmentOption[] };
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data!.items;
+}
+
+async function fetchUsersForFilter(): Promise<UserOption[]> {
+  const response = await fetch("/api/users?pageSize=100&isActive=true");
+  const payload = (await response.json()) as {
+    data?: { items: UserOption[] };
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data!.items;
+}
+
 export function TasksPageClient({
   canCreate,
   viewerRole,
@@ -116,9 +159,18 @@ export function TasksPageClient({
   const [sortDir] = useState<SortDirection>("desc");
   const [statusFilter, setStatusFilter] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("");
+  const [dueFrom, setDueFrom] = useState("");
+  const [dueTo, setDueTo] = useState("");
   const [mineOnly, setMineOnly] = useState(viewerRole === "employee");
   const [createOpen, setCreateOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const canFilterDepartment =
+    viewerRole === "admin" || viewerRole === "department_manager";
+  const canFilterAssignee =
+    viewerRole === "admin" || viewerRole === "department_manager";
 
   const tasksQuery = useQuery({
     queryKey: [
@@ -129,6 +181,11 @@ export function TasksPageClient({
       sortDir,
       statusFilter,
       projectFilter,
+      departmentFilter,
+      assigneeFilter,
+      priorityFilter,
+      dueFrom,
+      dueTo,
       mineOnly,
     ],
     queryFn: () =>
@@ -139,13 +196,29 @@ export function TasksPageClient({
         sortDir,
         status: statusFilter || undefined,
         projectId: projectFilter || undefined,
-        assignee: mineOnly ? viewerId : undefined,
+        departmentId: departmentFilter || undefined,
+        assignee: mineOnly ? viewerId : assigneeFilter || undefined,
+        priority: priorityFilter || undefined,
+        dueFrom: dueFrom || undefined,
+        dueTo: dueTo || undefined,
       }),
   });
 
   const projectsQuery = useQuery({
     queryKey: ["projects", "for-task-filters"],
     queryFn: fetchProjects,
+  });
+
+  const departmentsQuery = useQuery({
+    queryKey: ["departments", "for-task-filters"],
+    enabled: canFilterDepartment,
+    queryFn: fetchDepartments,
+  });
+
+  const usersQuery = useQuery({
+    queryKey: ["users", "for-task-filters"],
+    enabled: canFilterAssignee,
+    queryFn: fetchUsersForFilter,
   });
 
   const createForm = useForm<CreateTaskInput>({
@@ -351,6 +424,9 @@ export function TasksPageClient({
             checked={mineOnly}
             onChange={(event) => {
               setMineOnly(event.target.checked);
+              if (event.target.checked) {
+                setAssigneeFilter("");
+              }
               setPage(1);
             }}
           />
@@ -375,6 +451,38 @@ export function TasksPageClient({
         </select>
         <select
           className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+          value={priorityFilter}
+          onChange={(event) => {
+            setPriorityFilter(event.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">{t("filterAllPriorities")}</option>
+          {(["low", "medium", "high"] as const).map((priority) => (
+            <option key={priority} value={priority}>
+              {priorityLabel(priority)}
+            </option>
+          ))}
+        </select>
+        {canFilterDepartment ? (
+          <select
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+            value={departmentFilter}
+            onChange={(event) => {
+              setDepartmentFilter(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">{t("filterAllDepartments")}</option>
+            {(departmentsQuery.data ?? []).map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <select
+          className="border-input bg-background h-9 rounded-md border px-3 text-sm"
           value={projectFilter}
           onChange={(event) => {
             setProjectFilter(event.target.value);
@@ -382,12 +490,62 @@ export function TasksPageClient({
           }}
         >
           <option value="">{t("filterAllProjects")}</option>
-          {(projectsQuery.data ?? []).map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-            </option>
-          ))}
+          {(projectsQuery.data ?? [])
+            .filter(
+              (project) =>
+                !departmentFilter || project.departmentId === departmentFilter,
+            )
+            .map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
         </select>
+        {canFilterAssignee && !mineOnly ? (
+          <select
+            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+            value={assigneeFilter}
+            onChange={(event) => {
+              setAssigneeFilter(event.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">{t("filterAllAssignees")}</option>
+            {(usersQuery.data ?? []).map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.fullName}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground whitespace-nowrap">
+            {t("dueFrom")}
+          </span>
+          <Input
+            type="date"
+            className="h-9 w-auto"
+            value={dueFrom}
+            onChange={(event) => {
+              setDueFrom(event.target.value);
+              setPage(1);
+            }}
+          />
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground whitespace-nowrap">
+            {t("dueTo")}
+          </span>
+          <Input
+            type="date"
+            className="h-9 w-auto"
+            value={dueTo}
+            onChange={(event) => {
+              setDueTo(event.target.value);
+              setPage(1);
+            }}
+          />
+        </label>
       </div>
 
       {tasksQuery.isLoading ? <LoadingState /> : null}

@@ -422,7 +422,7 @@ Notes:
 - Tasks can exist without subtasks.
 - Tasks belong to one project.
 - Priority: `low | medium | high`
-- `progress_percentage` exists (default 0). **Currently unused** in UI and business logic; retained for possible future progress/Gantt work. Do not add cleanup migrations solely to remove it.
+- `progress_percentage` exists (default 0). Writable via task update API; displayed on Gantt bars (Milestone 9).
 - RLS helper: `can_access_task(task_id)` — project access or assignee.
 
 ---
@@ -472,7 +472,7 @@ A task cannot:
 
 # Task Comments
 
-Table:
+**Milestone 9.** Table:
 
 ```
 task_comments
@@ -489,11 +489,13 @@ created_at
 updated_at
 ```
 
+RLS: SELECT via `can_access_task(task_id)`. Writes use service role.
+
 ---
 
 # Task Attachments
 
-Table:
+**Milestone 9.** Table:
 
 ```
 task_attachments
@@ -507,10 +509,14 @@ task_id
 uploaded_by
 file_name
 storage_path
+byte_size
+content_type
 created_at
 ```
 
-Files stored in Supabase Storage.
+Files stored in private Supabase Storage bucket `task-files` (path `{projectId}/{taskId}/{uuid}-{fileName}`). Downloads use short-lived signed URLs.
+
+RLS: SELECT via `can_access_task(task_id)`. Writes use service role.
 
 ---
 
@@ -888,6 +894,8 @@ report.view
 ```
 
 Milestone 8 seeds `report.view` for `admin` and `department_manager` (no new entity tables for dashboards/reports).
+
+Milestone 9 adds `task_comments`, `task_attachments`, and the private `task-files` Storage bucket (no new permission codes).
 
 ---
 

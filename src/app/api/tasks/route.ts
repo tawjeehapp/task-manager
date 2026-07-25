@@ -20,6 +20,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const parsed = listTasksQuerySchema.safeParse({
       projectId: url.searchParams.get("projectId") ?? undefined,
+      departmentId: url.searchParams.get("departmentId") ?? undefined,
       status: url.searchParams.get("status") ?? undefined,
       assignee: url.searchParams.get("assignee") ?? undefined,
       priority: url.searchParams.get("priority") ?? undefined,

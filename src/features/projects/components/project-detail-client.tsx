@@ -403,6 +403,12 @@ export function ProjectDetailClient({
               >
                 {t("kanban")}
               </Link>
+              <Link
+                href={`/projects/${projectId}/gantt`}
+                className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
+              >
+                {t("gantt")}
+              </Link>
               {allowProjectEdit ? (
                 <>
                   <Button

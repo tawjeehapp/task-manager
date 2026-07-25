@@ -18,7 +18,7 @@ The application is built incrementally. Each milestone should produce a usable w
 
 ### Current project status
 
-**Milestones 0–8 core product scope is implemented** (M0 PWA offline + Web Push still deferred). **Next up: Milestone 9 — Advanced Views.**
+**Milestones 0–9 core product scope is implemented** (M0 PWA offline + Web Push still deferred).
 
 ---
 
@@ -33,7 +33,7 @@ Testing infrastructure was introduced in Milestone 1 (Vitest + React Testing Lib
 | **3** | Projects, tasks, access rules | **Completed** — schemas, access asserts, create-task (incl. subtask depth) |
 | **4** | Dependencies, workload, activity | **Partially completed** — dependency service tests present; dedicated workload/activity tests thin |
 | **5** | Attendance calculations, approval, work-log authz | **Completed** |
-| **6+** | Leave, approvals, and later workflows | **Completed for M6–M8** — leave + communication + report schema/permission tests |
+| **6+** | Leave, approvals, and later workflows | **Completed for M6–M9** — leave + communication + report + gantt/comment/attachment schema tests |
 
 End-to-end testing with Playwright remains **deferred** until complete business workflows exist (attendance / leave / approvals).
 
@@ -206,7 +206,7 @@ Introduce core work management functionality.
 - Priority enum: `low | medium | high`.
 - Project statuses: `draft | active | completed | archived`.
 - Task statuses originally included `review` and `cancelled` in the M3 migration; simplified in M4 follow-up to `todo | in_progress | blocked | completed`.
-- `progress_percentage` exists on `tasks` but is **unused** in UI/business logic (retained for possible future progress/Gantt).
+- `progress_percentage` exists on `tasks` and is writable in UI (Milestone 9 Gantt).
 - Activity logs, dependencies, and workload were **Deferred to Milestone 4** (as noted during M3).
 - Comments and attachments remain **Out of scope** for M3–M4 (future).
 
@@ -481,11 +481,11 @@ Initial reports:
 
 # Milestone 9 — Advanced Views
 
-**Status: Remaining**
+**Status: Completed**
 
 ## Goal
 
-Provide advanced planning tools.
+Provide advanced planning tools: Gantt timeline, richer task filtering, and task comments/attachments.
 
 ## Gantt Chart
 
@@ -506,15 +506,37 @@ Support:
 - Projects
 - Status
 
+## Task comments and attachments
+
+Support:
+
+- Task comments (create / edit own / delete own or moderate)
+- Task file attachments via Supabase Storage (`task-files` bucket)
+
+## Implementation status
+
+| Area | Status | Notes |
+|---|---|---|
+| Project Gantt `/projects/[id]/gantt` | **Completed** | RTL-aware custom timeline; dependency lines; overdue bars |
+| Gantt API | **Completed** | `GET /api/projects/[id]/gantt` + filters |
+| Advanced filters on `/tasks` | **Completed** | Department, assignee, priority, due range (+ existing status/project/mine) |
+| `departmentId` list filter | **Completed** | Server-side via projects in department |
+| Task comments | **Completed** | Tabs on task detail; CRUD APIs |
+| Task attachments | **Completed** | Upload/list/delete/download signed URL |
+| `progress_percentage` writable | **Completed** | Shown on Gantt bars |
+| Charts drag-reschedule / global Gantt | **Out of scope** | View-only; project-scoped |
+
+## Migrations
+
+- `20260725200000_milestone9_advanced_views.sql`
+
+## Differences / notes
+
+- Goal originally listed comments/attachments on a stray line; included in M9 along with Gantt/filters.
+- No new permission codes; access via `project.view` + `can_access_task`.
+- Announcement attachments and Web Push remain deferred.
+
 ---
-
-# Milestone 10 — Future Enhancements
-
-**Status: Out of scope** (not part of MVP)
-
-Possible additions:
-
-- Task comments and attachments
 
 ---
 
@@ -527,8 +549,8 @@ Possible additions:
 | Announcement file attachments | Milestone 7 roadmap | Later / Storage |
 | Web Push delivery + service worker | Milestone 7 roadmap | Later PWA milestone |
 | Dashboard content | Shell in M0 | **Completed in Milestone 8** |
-| Task comments / attachments | DB design (not M3/M4 scope) | Future |
-| `progress_percentage` UI | Schema present | Future / unused |
+| Task comments / attachments | DB design (not M3/M4 scope) | **Completed in Milestone 9** |
+| `progress_percentage` UI | Schema present | **Completed in Milestone 9** (writable + Gantt display) |
 | Playwright E2E | After workflows exist | After M5+ workflows |
 | Locale switcher (`en`) | Localization future | Future |
 
@@ -559,4 +581,4 @@ Possible additions:
 8. Leave — **Completed (Milestone 6)**
 9. Communication — **Completed (Milestone 7; push/attachments deferred)**
 10. Reports — **Completed (Milestone 8)**
-11. Gantt — **Remaining (Milestone 9)**
+11. Gantt — **Completed (Milestone 9; comments/attachments included)**

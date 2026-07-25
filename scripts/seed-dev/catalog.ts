@@ -172,6 +172,10 @@ export const IDS = {
   notifSaraAssigned: "a100000e-0000-4000-8000-000000000001",
   notifAhmedApproval: "a100000e-0000-4000-8000-000000000002",
   notifSaraAnnouncement: "a100000e-0000-4000-8000-000000000003",
+
+  commentSara1: "a100000f-0000-4000-8000-000000000001",
+  commentAhmed1: "a100000f-0000-4000-8000-000000000002",
+  commentKhalid1: "a100000f-0000-4000-8000-000000000003",
 } as const;
 
 /** All seed-owned row IDs deleted on --reset (never includes users / auth). */
@@ -181,6 +185,7 @@ export const RESET_ID_SETS = {
     IDS.notifAhmedApproval,
     IDS.notifSaraAnnouncement,
   ],
+  task_comments: [IDS.commentSara1, IDS.commentAhmed1, IDS.commentKhalid1],
   announcement_reads: [] as string[],
   announcements: [
     IDS.announcementCompany,

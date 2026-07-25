@@ -554,7 +554,7 @@ export async function updateTask(
   const { data: existing, error: existingError } = await admin
     .from("tasks")
     .select(
-      "parent_task_id, status, assigned_to, title, description, priority, start_date, due_date, estimated_hours",
+      "parent_task_id, status, assigned_to, title, description, priority, start_date, due_date, estimated_hours, progress_percentage",
     )
     .eq("id", taskId)
     .maybeSingle();
@@ -596,6 +596,9 @@ export async function updateTask(
     }
 
     patch.estimated_hours = input.estimatedHours;
+  }
+  if (input.progressPercentage !== undefined) {
+    patch.progress_percentage = input.progressPercentage;
   }
   if (input.status !== undefined) {
     if (statusLocked) {
@@ -702,7 +705,10 @@ export async function updateTask(
         (existing.estimated_hours === null ||
         existing.estimated_hours === undefined
           ? null
-          : Number(existing.estimated_hours)));
+          : Number(existing.estimated_hours))) ||
+    (input.progressPercentage !== undefined &&
+      input.progressPercentage !==
+        Number(existing.progress_percentage ?? 0));
 
   if (otherChanged) {
     await logTaskActivity(viewer.id, taskId, "task.updated", {
@@ -756,6 +762,29 @@ export async function listTasksForViewer(
     await assertCanAccessProject(viewer, query.projectId);
   }
 
+  let departmentProjectIds: string[] | null = null;
+  if (query.departmentId) {
+    if (viewer.role === "department_manager") {
+      const managedId = await getManagedDepartmentId(viewer.id);
+      if (!managedId || managedId !== query.departmentId) {
+        return emptyResult(query);
+      }
+    } else if (viewer.role === "employee") {
+      // Employees may narrow by department only within already-visible projects.
+    } else if (viewer.role !== "admin") {
+      return emptyResult(query);
+    }
+
+    const { data: deptProjects } = await admin
+      .from("projects")
+      .select("id")
+      .eq("department_id", query.departmentId);
+    departmentProjectIds = (deptProjects ?? []).map((p) => p.id as string);
+    if (departmentProjectIds.length === 0) {
+      return emptyResult(query);
+    }
+  }
+
   let builder = admin.from("tasks").select(TASK_SELECT, { count: "exact" });
 
   if (viewer.role === "employee") {
@@ -764,9 +793,19 @@ export async function listTasksForViewer(
       .from("project_members")
       .select("project_id")
       .eq("user_id", viewer.id);
-    const projectIds = (memberships ?? []).map((m) => m.project_id as string);
+    let projectIds = (memberships ?? []).map((m) => m.project_id as string);
+    if (departmentProjectIds) {
+      const allowed = new Set(departmentProjectIds);
+      projectIds = projectIds.filter((id) => allowed.has(id));
+    }
 
     if (query.projectId) {
+      if (
+        departmentProjectIds &&
+        !departmentProjectIds.includes(query.projectId)
+      ) {
+        return emptyResult(query);
+      }
       if (!projectIds.includes(query.projectId) && query.assignee !== viewer.id) {
         // Still allow if they have assigned tasks in this project
         builder = builder
@@ -777,12 +816,21 @@ export async function listTasksForViewer(
       }
     } else if (query.assignee === viewer.id) {
       builder = builder.eq("assigned_to", viewer.id);
+      if (departmentProjectIds) {
+        builder = builder.in("project_id", departmentProjectIds);
+      }
     } else if (projectIds.length > 0) {
       builder = builder.or(
         `assigned_to.eq.${viewer.id},project_id.in.(${projectIds.join(",")})`,
       );
+      if (departmentProjectIds) {
+        builder = builder.in("project_id", departmentProjectIds);
+      }
     } else {
       builder = builder.eq("assigned_to", viewer.id);
+      if (departmentProjectIds) {
+        builder = builder.in("project_id", departmentProjectIds);
+      }
     }
   } else if (viewer.role === "department_manager") {
     const managedId = await getManagedDepartmentId(viewer.id);
@@ -794,7 +842,11 @@ export async function listTasksForViewer(
       .from("projects")
       .select("id")
       .eq("department_id", managedId);
-    const projectIds = (projects ?? []).map((p) => p.id as string);
+    let projectIds = (projects ?? []).map((p) => p.id as string);
+    if (departmentProjectIds) {
+      const allowed = new Set(departmentProjectIds);
+      projectIds = projectIds.filter((id) => allowed.has(id));
+    }
 
     if (projectIds.length === 0) {
       return emptyResult(query);
@@ -809,7 +861,15 @@ export async function listTasksForViewer(
       builder = builder.in("project_id", projectIds);
     }
   } else if (query.projectId) {
+    if (
+      departmentProjectIds &&
+      !departmentProjectIds.includes(query.projectId)
+    ) {
+      return emptyResult(query);
+    }
     builder = builder.eq("project_id", query.projectId);
+  } else if (departmentProjectIds) {
+    builder = builder.in("project_id", departmentProjectIds);
   }
 
   if (query.status) {

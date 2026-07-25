@@ -16,6 +16,8 @@ import {
 import type { Task } from "@/features/tasks/types/task.types";
 import { AssigneeSelect } from "@/features/tasks/components/assignee-select";
 import { TaskActivityPanel } from "@/features/tasks/components/task-activity-panel";
+import { TaskAttachmentsPanel } from "@/features/tasks/components/task-attachments-panel";
+import { TaskCommentsPanel } from "@/features/tasks/components/task-comments-panel";
 import { TaskDependenciesPanel } from "@/features/tasks/components/task-dependencies-panel";
 import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
@@ -316,6 +318,7 @@ export function TaskDetailClient({
           startDate: taskQuery.data.startDate ?? "",
           dueDate: taskQuery.data.dueDate ?? "",
           estimatedHours: taskQuery.data.estimatedHours,
+          progressPercentage: taskQuery.data.progressPercentage,
         }
       : undefined,
   });
@@ -551,6 +554,8 @@ export function TaskDetailClient({
         items={[
           { id: "overview", label: t("tabOverview") },
           { id: "dependencies", label: t("tabDependencies") },
+          { id: "comments", label: t("tabComments") },
+          { id: "attachments", label: t("tabAttachments") },
           { id: "activity", label: t("tabActivity") },
         ]}
         value={activeTab}
@@ -688,6 +693,24 @@ export function TaskDetailClient({
                         />
                       )}
                     </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-progress">
+                        {t("progressPercentage")}
+                      </Label>
+                      <Input
+                        id="edit-progress"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        {...editForm.register("progressPercentage", {
+                          setValueAs: (value) =>
+                            value === "" || value == null
+                              ? undefined
+                              : Number(value),
+                        })}
+                      />
+                    </div>
                   </div>
                   {patchMutation.isError ? (
                     <Alert variant="destructive">
@@ -782,6 +805,14 @@ export function TaskDetailClient({
                         {t("hoursFromSubtasks")}
                       </p>
                     ) : null}
+                  </div>
+                  <div className="rounded-lg border p-4">
+                    <p className="text-muted-foreground text-sm">
+                      {t("progressPercentage")}
+                    </p>
+                    <p className="mt-2 font-medium">
+                      {task.progressPercentage ?? 0}%
+                    </p>
                   </div>
                 </div>
                 {task.description ? (
@@ -886,6 +917,22 @@ export function TaskDetailClient({
             projectId={task.projectId}
             parentTaskId={task.parentTaskId}
             canManage={canEditFull}
+          />
+        </TabPanel>
+
+        <TabPanel when="comments" active={activeTab}>
+          <TaskCommentsPanel
+            taskId={taskId}
+            viewerId={viewerId}
+            canModerate={canEditFull}
+          />
+        </TabPanel>
+
+        <TabPanel when="attachments" active={activeTab}>
+          <TaskAttachmentsPanel
+            taskId={taskId}
+            viewerId={viewerId}
+            canModerate={canEditFull}
           />
         </TabPanel>
 
