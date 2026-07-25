@@ -208,6 +208,24 @@ All UI must support:
 Do not build LTR first and translate later.
 
 
+# Table Rules
+
+List/table pages must support:
+
+- Server-side pagination with page sizes **25 / 50 / 100** (default 25)
+- Single-column sorting (`sortBy` + `sortDir`)
+- Visible result counts (total and “showing X–Y of Z”)
+- Server-side filters relevant to the resource
+
+Reuse shared helpers:
+
+- `TablePagination`
+- `SortableTableHead`
+- `lib/table/constants`
+
+Do not load unlimited rows into table pages.
+
+
 # API Rules
 
 API mutations follow:

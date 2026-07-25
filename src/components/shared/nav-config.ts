@@ -12,6 +12,8 @@ import {
   Users,
 } from "lucide-react";
 
+import type { Role } from "@/lib/permissions";
+
 export type NavItem = {
   key: string;
   href: string;
@@ -19,12 +21,36 @@ export type NavItem = {
   enabled: boolean;
   /** When set, item is shown only if the user has this permission code. */
   permission?: string;
+  /** When set, item is shown if the user has any of these permission codes. */
+  anyOfPermissions?: string[];
+  /** When set, item is hidden from these roles (e.g. employees). */
+  hideForRoles?: Role[];
 };
 
 export type NavSection = {
   key: string;
   items: NavItem[];
 };
+
+export function navItemIsVisible(
+  item: NavItem,
+  permissions: readonly string[],
+  role?: Role | null,
+): boolean {
+  if (role && item.hideForRoles?.includes(role)) {
+    return false;
+  }
+  if (!item.enabled) {
+    return true;
+  }
+  if (item.anyOfPermissions && item.anyOfPermissions.length > 0) {
+    return item.anyOfPermissions.some((code) => permissions.includes(code));
+  }
+  if (item.permission) {
+    return permissions.includes(item.permission);
+  }
+  return true;
+}
 
 export const navSections: NavSection[] = [
   {
@@ -55,16 +81,17 @@ export const navSections: NavSection[] = [
     items: [
       {
         key: "departments",
-        href: "#",
+        href: "/departments",
         icon: Building2,
-        enabled: false,
+        enabled: true,
+        permission: "department.view",
       },
       {
         key: "employees",
         href: "/employees",
         icon: Users,
         enabled: true,
-        permission: "user.manage",
+        anyOfPermissions: ["user.manage", "user.reset_password"],
       },
     ],
   },
@@ -104,6 +131,7 @@ export const navSections: NavSection[] = [
         href: "#",
         icon: FileText,
         enabled: false,
+        hideForRoles: ["employee"],
       },
     ],
   },
@@ -115,6 +143,7 @@ export const navSections: NavSection[] = [
         href: "#",
         icon: Settings,
         enabled: false,
+        hideForRoles: ["employee"],
       },
     ],
   },

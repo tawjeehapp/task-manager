@@ -23,9 +23,22 @@ export default async function EmployeesPage() {
   }
 
   const permissions = await getPermissionsForRole(user.role);
-  if (!hasPermission(user.role, PERMISSIONS.USER_MANAGE, permissions)) {
+  const canManage = hasPermission(
+    user.role,
+    PERMISSIONS.USER_MANAGE,
+    permissions,
+  );
+  const canReset = hasPermission(
+    user.role,
+    PERMISSIONS.USER_RESET_PASSWORD,
+    permissions,
+  );
+
+  if (!canManage && !canReset) {
     redirect("/");
   }
 
-  return <EmployeesPageClient />;
+  return (
+    <EmployeesPageClient canManage={canManage} currentUserId={user.id} />
+  );
 }

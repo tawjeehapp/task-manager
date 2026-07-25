@@ -4,6 +4,7 @@ export const PERMISSIONS = {
   ATTENDANCE_APPROVE: "attendance.approve",
   LEAVE_APPROVE: "leave.approve",
   DEPARTMENT_MANAGE: "department.manage",
+  DEPARTMENT_VIEW: "department.view",
   USER_MANAGE: "user.manage",
   USER_RESET_PASSWORD: "user.reset_password",
 } as const;

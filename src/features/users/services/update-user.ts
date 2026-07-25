@@ -54,6 +54,39 @@ export async function updateUser(
     throw new ApiError("لا يمكنك تعطيل حسابك.", 400, "CANNOT_DEACTIVATE_SELF");
   }
 
+  if (actor.id === id && input.role !== undefined && input.role !== current.role) {
+    throw new ApiError(
+      "لا يمكنك تغيير دور حسابك.",
+      400,
+      "CANNOT_CHANGE_OWN_ROLE",
+    );
+  }
+
+  // Cannot demote a department manager while they still manage a department.
+  if (
+    input.role !== undefined &&
+    current.role === "department_manager" &&
+    input.role !== "department_manager"
+  ) {
+    const { data: managedDept, error: managedError } = await admin
+      .from("departments")
+      .select("id")
+      .eq("manager_id", id)
+      .maybeSingle();
+
+    if (managedError) {
+      throw new ApiError("تعذر التحقق من إدارة القسم.", 500, "GET_DEPARTMENT_FAILED");
+    }
+
+    if (managedDept) {
+      throw new ApiError(
+        "لا يمكن تغيير دور مدير القسم قبل إزالة تعيينه كمدير للقسم.",
+        409,
+        "USER_MANAGES_DEPARTMENT",
+      );
+    }
+  }
+
   const { data, error } = await admin
     .from("users")
     .update({

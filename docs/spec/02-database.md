@@ -248,6 +248,14 @@ active
 archived
 ```
 
+Constraints (Milestone 2):
+
+- At most one manager per department (`manager_id` on the row).
+- At most one managed department per manager (unique partial index on `manager_id WHERE manager_id IS NOT NULL`).
+- Assigning `manager_id` does **not** change `users.role`. The user must already have role `department_manager`.
+- Replacing an existing manager requires an explicit replace flag in the API (no silent overwrite).
+- Clearing `manager_id` does not change the user’s role.
+
 ---
 
 # Department Memberships
@@ -277,7 +285,19 @@ created_at
 Rules:
 
 - A user can have multiple historical memberships.
-- Only one active membership at a time.
+- Only one active membership at a time (unique partial index on `user_id WHERE is_current = true`).
+- A user may temporarily have no department.
+- Removing a membership ends the row (`is_current = false`, `end_date` set) and never deletes the user account.
+- Moving between departments closes the current membership and inserts a new current row.
+- Membership mutations do not change `users.role`.
+
+RLS helpers (SECURITY DEFINER):
+
+- `is_department_manager()`
+- `manages_department(dept_id)`
+- `is_current_member_of(dept_id)`
+- `current_department_id()`
+- `shares_managed_department_with(target_user_id)`
 
 ---
 

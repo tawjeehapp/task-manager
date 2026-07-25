@@ -617,9 +617,18 @@ Consider performance for:
 
 Use:
 
-- Pagination
+- Pagination with page sizes **25 / 50 / 100** (default 25)
+- Single-column sorting
 - Server-side filtering
 - Proper indexes
+
+Shared table UI:
+
+- `components/shared/table-pagination.tsx`
+- `components/shared/sortable-table-head.tsx`
+- `lib/table/constants.ts`
+
+List API responses should include `items`, `total`, `page`, `pageSize`, and `totalPages`.
 
 ---
 

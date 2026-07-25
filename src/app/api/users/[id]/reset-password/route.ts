@@ -2,6 +2,7 @@ import { apiError, apiSuccess } from "@/lib/api/response";
 import { requireUser } from "@/lib/auth/require-user";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { PERMISSIONS } from "@/lib/permissions";
+import { assertCanResetPassword } from "@/features/users/services/assert-can-reset-password";
 import { resetUserPassword } from "@/features/users/services/reset-password";
 
 type RouteContext = {
@@ -16,6 +17,7 @@ export async function POST(_request: Request, context: RouteContext) {
     await requirePermission(user, PERMISSIONS.USER_RESET_PASSWORD);
 
     const { id } = await context.params;
+    await assertCanResetPassword(user, id);
     await resetUserPassword(id);
     return apiSuccess({ ok: true });
   } catch (error) {

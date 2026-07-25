@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
@@ -11,12 +13,14 @@ import {
   createUserSchema,
   type CreateUserInput,
 } from "@/features/users/schemas/user.schema";
-import type { PublicUser } from "@/features/auth/types/auth.types";
+import type { Department } from "@/features/departments/types/department.types";
 import type { UsersListResult } from "@/features/users/types/user.types";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
+import { SortableTableHead } from "@/components/shared/sortable-table-head";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,13 +43,67 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  DEFAULT_TABLE_PAGE_SIZE,
+  type SortDirection,
+  type TablePageSize,
+} from "@/lib/table/constants";
+import { cn } from "@/lib/utils";
 
-async function fetchUsers(search: string): Promise<UsersListResult> {
-  const params = new URLSearchParams();
-  if (search) {
-    params.set("search", search);
+type EmployeesPageClientProps = {
+  canManage: boolean;
+  currentUserId: string;
+};
+
+type BulkAction =
+  | "activate"
+  | "deactivate"
+  | "reset"
+  | "delete"
+  | "assignDepartment";
+
+type RoleFilter = "" | "admin" | "department_manager" | "employee";
+type StatusFilter = "" | "active" | "inactive";
+type SortByColumn =
+  | "fullName"
+  | "employeeNumber"
+  | "role"
+  | "status"
+  | "createdAt";
+
+type UsersFetchParams = {
+  page: number;
+  pageSize: TablePageSize;
+  search: string;
+  role: RoleFilter;
+  status: StatusFilter;
+  departmentId: string;
+  sortBy: SortByColumn;
+  sortDir: SortDirection;
+};
+
+async function fetchUsers(params: UsersFetchParams): Promise<UsersListResult> {
+  const query = new URLSearchParams();
+  query.set("page", String(params.page));
+  query.set("pageSize", String(params.pageSize));
+  if (params.search) {
+    query.set("search", params.search);
   }
-  const response = await fetch(`/api/users?${params.toString()}`);
+  if (params.role) {
+    query.set("role", params.role);
+  }
+  if (params.status === "active") {
+    query.set("isActive", "true");
+  } else if (params.status === "inactive") {
+    query.set("isActive", "false");
+  }
+  if (params.departmentId) {
+    query.set("departmentId", params.departmentId);
+  }
+  query.set("sortBy", params.sortBy);
+  query.set("sortDir", params.sortDir);
+
+  const response = await fetch(`/api/users?${query.toString()}`);
   const payload = (await response.json()) as {
     data?: UsersListResult;
     error?: { message: string };
@@ -56,27 +114,94 @@ async function fetchUsers(search: string): Promise<UsersListResult> {
   return payload.data!;
 }
 
-export function EmployeesPageClient() {
+async function fetchDepartments(): Promise<Department[]> {
+  const response = await fetch("/api/departments?pageSize=100");
+  const payload = (await response.json()) as {
+    data?: { items: Department[] };
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data!.items;
+}
+
+export function EmployeesPageClient({
+  canManage,
+  currentUserId,
+}: EmployeesPageClientProps) {
   const t = useTranslations("employees");
   const tRoles = useTranslations("roles");
   const tCommon = useTranslations("common");
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<TablePageSize>(
+    DEFAULT_TABLE_PAGE_SIZE,
+  );
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [sortBy, setSortBy] = useState<SortByColumn>("createdAt");
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
   const [createOpen, setCreateOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<BulkAction | null>(null);
+  const [bulkDepartmentId, setBulkDepartmentId] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{
-    type: "delete" | "reset" | "deactivate" | "activate";
-    user: PublicUser;
-  } | null>(null);
+  const [bulkRunning, setBulkRunning] = useState(false);
 
   const usersQuery = useQuery({
-    queryKey: ["users", search],
-    queryFn: () => fetchUsers(search),
+    queryKey: [
+      "users",
+      page,
+      pageSize,
+      search,
+      roleFilter,
+      departmentFilter,
+      statusFilter,
+      sortBy,
+      sortDir,
+    ],
+    queryFn: () =>
+      fetchUsers({
+        page,
+        pageSize,
+        search,
+        role: roleFilter,
+        status: statusFilter,
+        departmentId: departmentFilter,
+        sortBy,
+        sortDir,
+      }),
   });
 
+  const departmentsQuery = useQuery({
+    queryKey: ["departments", "filter"],
+    queryFn: fetchDepartments,
+    enabled: canManage,
+  });
+
+  const items = usersQuery.data?.items ?? [];
+  const total = usersQuery.data?.total ?? 0;
+  const selectableItems = useMemo(
+    () => items.filter((user) => user.id !== currentUserId),
+    [items, currentUserId],
+  );
+
+  const allSelectableSelected =
+    selectableItems.length > 0 &&
+    selectableItems.every((user) => selectedIds.has(user.id));
+
+  const selectedUsers = useMemo(
+    () => items.filter((user) => selectedIds.has(user.id)),
+    [items, selectedIds],
+  );
+
   const createForm = useForm<CreateUserInput>({
-    resolver: zodResolver(createUserSchema),
+    resolver: zodResolver(createUserSchema) as never,
     defaultValues: {
       employeeNumber: "",
       fullName: "",
@@ -107,217 +232,315 @@ export function EmployeesPageClient() {
     },
   });
 
-  const patchMutation = useMutation({
-    mutationFn: async ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: Record<string, unknown>;
-    }) => {
-      const response = await fetch(`/api/users/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const payload = (await response.json()) as {
-        error?: { message: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? t("updateFailed"));
-      }
-    },
-    onSuccess: async () => {
-      setConfirmAction(null);
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-    },
-  });
+  function resetToFirstPage() {
+    setPage(1);
+  }
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/users/${id}`, { method: "DELETE" });
-      const payload = (await response.json()) as {
-        error?: { message: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? t("deleteFailed"));
-      }
-    },
-    onSuccess: async () => {
-      setConfirmAction(null);
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-    },
-  });
+  function handleSearchChange(value: string) {
+    setSearch(value);
+    resetToFirstPage();
+  }
 
-  const resetMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/users/${id}/reset-password`, {
-        method: "POST",
-      });
-      const payload = (await response.json()) as {
-        error?: { message: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? t("resetFailed"));
-      }
-    },
-    onSuccess: async () => {
-      setConfirmAction(null);
-      await queryClient.invalidateQueries({ queryKey: ["users"] });
-    },
-  });
+  function handlePageSizeChange(nextSize: TablePageSize) {
+    setPageSize(nextSize);
+    resetToFirstPage();
+  }
 
-  async function runConfirmAction() {
-    if (!confirmAction) {
+  function handleRoleFilterChange(value: RoleFilter) {
+    setRoleFilter(value);
+    resetToFirstPage();
+  }
+
+  function handleDepartmentFilterChange(value: string) {
+    setDepartmentFilter(value);
+    resetToFirstPage();
+  }
+
+  function handleStatusFilterChange(value: StatusFilter) {
+    setStatusFilter(value);
+    resetToFirstPage();
+  }
+
+  function handleSort(column: string) {
+    const nextColumn = column as SortByColumn;
+    if (sortBy === nextColumn) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(nextColumn);
+      setSortDir("asc");
+    }
+    resetToFirstPage();
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (allSelectableSelected) {
+      setSelectedIds(new Set());
       return;
     }
+    setSelectedIds(new Set(selectableItems.map((user) => user.id)));
+  }
+
+  async function runBulkAction() {
+    if (!bulkAction || selectedUsers.length === 0) {
+      return;
+    }
+
+    setBulkRunning(true);
     setActionError(null);
     setSuccessMessage(null);
-    const actionUser = confirmAction.user;
-    const actionType = confirmAction.type;
+
+    const results: { ok: boolean; name: string; message?: string }[] = [];
+
     try {
-      if (actionType === "delete") {
-        await deleteMutation.mutateAsync(actionUser.id);
+      for (const user of selectedUsers) {
+        try {
+          if (bulkAction === "activate" || bulkAction === "deactivate") {
+            const response = await fetch(`/api/users/${user.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                isActive: bulkAction === "activate",
+              }),
+            });
+            const payload = (await response.json()) as {
+              error?: { message: string };
+            };
+            if (!response.ok) {
+              throw new Error(payload.error?.message ?? t("updateFailed"));
+            }
+          } else if (bulkAction === "reset") {
+            const response = await fetch(
+              `/api/users/${user.id}/reset-password`,
+              { method: "POST" },
+            );
+            const payload = (await response.json()) as {
+              error?: { message: string };
+            };
+            if (!response.ok) {
+              throw new Error(payload.error?.message ?? t("resetFailed"));
+            }
+          } else if (bulkAction === "delete") {
+            const response = await fetch(`/api/users/${user.id}`, {
+              method: "DELETE",
+            });
+            const payload = (await response.json()) as {
+              error?: { message: string };
+            };
+            if (!response.ok) {
+              throw new Error(payload.error?.message ?? t("deleteFailed"));
+            }
+          } else if (bulkAction === "assignDepartment") {
+            if (!bulkDepartmentId) {
+              throw new Error(t("selectDepartment"));
+            }
+            if (user.currentDepartment?.id === bulkDepartmentId) {
+              results.push({ ok: true, name: user.fullName });
+              continue;
+            }
+            if (user.currentDepartment) {
+              const response = await fetch("/api/departments/members/move", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId: user.id,
+                  toDepartmentId: bulkDepartmentId,
+                }),
+              });
+              const payload = (await response.json()) as {
+                error?: { message: string };
+              };
+              if (!response.ok) {
+                throw new Error(
+                  payload.error?.message ?? t("membershipFailed"),
+                );
+              }
+            } else {
+              const response = await fetch(
+                `/api/departments/${bulkDepartmentId}/members`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ userId: user.id }),
+                },
+              );
+              const payload = (await response.json()) as {
+                error?: { message: string };
+              };
+              if (!response.ok) {
+                throw new Error(
+                  payload.error?.message ?? t("membershipFailed"),
+                );
+              }
+            }
+          }
+          results.push({ ok: true, name: user.fullName });
+        } catch (error) {
+          results.push({
+            ok: false,
+            name: user.fullName,
+            message:
+              error instanceof Error
+                ? error.message
+                : tCommon("unexpectedError"),
+          });
+        }
+      }
+
+      const failed = results.filter((result) => !result.ok);
+      const succeeded = results.filter((result) => result.ok).length;
+
+      if (failed.length === 0) {
         setSuccessMessage(
-          t("deleteSuccess", { name: actionUser.fullName }),
-        );
-      } else if (actionType === "reset") {
-        await resetMutation.mutateAsync(actionUser.id);
-        setSuccessMessage(
-          t("resetSuccess", {
-            name: actionUser.fullName,
-            employeeNumber: actionUser.employeeNumber,
+          t("bulkSuccess", {
+            count: succeeded,
+            action: t(`bulkAction_${bulkAction}`),
           }),
         );
-      } else if (actionType === "deactivate") {
-        await patchMutation.mutateAsync({
-          id: actionUser.id,
-          body: { isActive: false },
-        });
-        setSuccessMessage(
-          t("deactivateSuccess", { name: actionUser.fullName }),
-        );
       } else {
-        await patchMutation.mutateAsync({
-          id: actionUser.id,
-          body: { isActive: true },
-        });
-        setSuccessMessage(
-          t("activateSuccess", { name: actionUser.fullName }),
+        setActionError(
+          t("bulkPartialFailure", {
+            succeeded,
+            failed: failed.length,
+            details: failed
+              .map((item) => `${item.name}: ${item.message}`)
+              .join(" · "),
+          }),
         );
+        if (succeeded > 0) {
+          setSuccessMessage(
+            t("bulkSuccess", {
+              count: succeeded,
+              action: t(`bulkAction_${bulkAction}`),
+            }),
+          );
+        }
       }
-    } catch (error) {
-      setActionError(
-        error instanceof Error ? error.message : tCommon("unexpectedError"),
-      );
+
+      setBulkAction(null);
+      setBulkDepartmentId("");
+      setSelectedIds(new Set());
+      await queryClient.invalidateQueries({ queryKey: ["users"] });
+      await queryClient.invalidateQueries({ queryKey: ["departments"] });
+    } finally {
+      setBulkRunning(false);
     }
   }
+
+  const selectClassName =
+    "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm";
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={t("title")}
-        description={t("description")}
+        description={canManage ? t("description") : t("managerDescription")}
         actions={
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-            <DialogTrigger
-              render={<Button type="button" className="gap-2" />}
-            >
-              <Plus className="size-4" />
-              {t("create")}
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("createTitle")}</DialogTitle>
-                <DialogDescription>{t("createDescription")}</DialogDescription>
-              </DialogHeader>
-              <form
-                className="space-y-4"
-                onSubmit={createForm.handleSubmit(async (values) => {
-                  try {
-                    setSuccessMessage(null);
-                    await createMutation.mutateAsync(values);
-                  } catch (error) {
-                    createForm.setError("root", {
-                      message:
-                        error instanceof Error
-                          ? error.message
-                          : t("createFailed"),
-                    });
-                  }
-                })}
+          canManage ? (
+            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <DialogTrigger
+                render={<Button type="button" className="gap-2" />}
               >
-                <div className="space-y-2">
-                  <Label htmlFor="employeeNumber">{t("employeeNumber")}</Label>
-                  <Input
-                    id="employeeNumber"
-                    maxLength={4}
-                    inputMode="numeric"
-                    {...createForm.register("employeeNumber")}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">{t("fullName")}</Label>
-                  <Input id="fullName" {...createForm.register("fullName")} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">{t("phone")}</Label>
-                  <Input
-                    id="phone"
-                    inputMode="numeric"
-                    maxLength={10}
-                    placeholder="09xxxxxxxx"
-                    aria-invalid={Boolean(createForm.formState.errors.phone)}
-                    {...createForm.register("phone")}
-                  />
-                  {createForm.formState.errors.phone ? (
-                    <p className="text-sm text-destructive">
-                      {createForm.formState.errors.phone.message}
-                    </p>
-                  ) : (
+                <Plus className="size-4" />
+                {t("create")}
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{t("createTitle")}</DialogTitle>
+                  <DialogDescription>{t("createDescription")}</DialogDescription>
+                </DialogHeader>
+                <form
+                  className="space-y-4"
+                  onSubmit={createForm.handleSubmit(async (values) => {
+                    try {
+                      setSuccessMessage(null);
+                      await createMutation.mutateAsync(values);
+                    } catch (error) {
+                      createForm.setError("root", {
+                        message:
+                          error instanceof Error
+                            ? error.message
+                            : t("createFailed"),
+                      });
+                    }
+                  })}
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="employeeNumber">{t("employeeNumber")}</Label>
+                    <Input
+                      id="employeeNumber"
+                      maxLength={4}
+                      inputMode="numeric"
+                      {...createForm.register("employeeNumber")}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">{t("fullName")}</Label>
+                    <Input id="fullName" {...createForm.register("fullName")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">{t("phone")}</Label>
+                    <Input
+                      id="phone"
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="09xxxxxxxx"
+                      {...createForm.register("phone")}
+                    />
                     <p className="text-xs text-muted-foreground">
                       {t("phoneHint")}
                     </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">{t("role")}</Label>
-                  <select
-                    id="role"
-                    className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-                    {...createForm.register("role")}
-                  >
-                    <option value="employee">{tRoles("employee")}</option>
-                    <option value="department_manager">
-                      {tRoles("department_manager")}
-                    </option>
-                    <option value="admin">{tRoles("admin")}</option>
-                  </select>
-                </div>
-                {createForm.formState.errors.root ? (
-                  <Alert variant="destructive">
-                    <AlertDescription>
-                      {createForm.formState.errors.root.message}
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setCreateOpen(false)}
-                  >
-                    {tCommon("cancel")}
-                  </Button>
-                  <Button type="submit" disabled={createMutation.isPending}>
-                    {createMutation.isPending
-                      ? tCommon("saving")
-                      : tCommon("save")}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="role">{t("role")}</Label>
+                    <select
+                      id="role"
+                      className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                      {...createForm.register("role")}
+                    >
+                      <option value="employee">{tRoles("employee")}</option>
+                      <option value="department_manager">
+                        {tRoles("department_manager")}
+                      </option>
+                      <option value="admin">{tRoles("admin")}</option>
+                    </select>
+                  </div>
+                  {createForm.formState.errors.root ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {createForm.formState.errors.root.message}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setCreateOpen(false)}
+                    >
+                      {tCommon("cancel")}
+                    </Button>
+                    <Button type="submit" disabled={createMutation.isPending}>
+                      {createMutation.isPending
+                        ? tCommon("saving")
+                        : tCommon("save")}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          ) : null
         }
       />
 
@@ -327,14 +550,142 @@ export function EmployeesPageClient() {
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={t("searchPlaceholder")}
-          className="sm:max-w-xs"
-        />
+      {actionError && !bulkAction ? (
+        <Alert variant="destructive">
+          <AlertDescription>{actionError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <Input
+            value={search}
+            onChange={(event) => handleSearchChange(event.target.value)}
+            placeholder={t("searchPlaceholder")}
+            className="sm:max-w-xs"
+          />
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="whitespace-nowrap">{t("filterRole")}</span>
+            <select
+              className={selectClassName}
+              value={roleFilter}
+              onChange={(event) =>
+                handleRoleFilterChange(event.target.value as RoleFilter)
+              }
+            >
+              <option value="">{t("filterAll")}</option>
+              <option value="admin">{tRoles("admin")}</option>
+              <option value="department_manager">
+                {tRoles("department_manager")}
+              </option>
+              <option value="employee">{tRoles("employee")}</option>
+            </select>
+          </label>
+          {canManage ? (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="whitespace-nowrap">{t("filterDepartment")}</span>
+              <select
+                className={selectClassName}
+                value={departmentFilter}
+                onChange={(event) =>
+                  handleDepartmentFilterChange(event.target.value)
+                }
+              >
+                <option value="">{t("filterAll")}</option>
+                <option value="none">{t("filterNoDepartment")}</option>
+                {(departmentsQuery.data ?? []).map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="whitespace-nowrap">{t("filterStatus")}</span>
+            <select
+              className={selectClassName}
+              value={statusFilter}
+              onChange={(event) =>
+                handleStatusFilterChange(event.target.value as StatusFilter)
+              }
+            >
+              <option value="">{t("filterAll")}</option>
+              <option value="active">{t("filterActive")}</option>
+              <option value="inactive">{t("filterInactive")}</option>
+            </select>
+          </label>
+        </div>
+        {usersQuery.data ? (
+          <p className="text-sm text-muted-foreground">
+            {t("totalCount", { count: total })}
+          </p>
+        ) : null}
       </div>
+
+      {selectedIds.size > 0 ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <p className="text-sm font-medium">
+            {t("selectedCount", { count: selectedIds.size })}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {canManage ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBulkAction("activate")}
+                >
+                  {t("activate")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBulkAction("deactivate")}
+                >
+                  {t("deactivate")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBulkAction("assignDepartment")}
+                >
+                  {t("assignDepartment")}
+                </Button>
+              </>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setBulkAction("reset")}
+            >
+              {t("resetPassword")}
+            </Button>
+            {canManage ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={() => setBulkAction("delete")}
+              >
+                {t("delete")}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              {t("clearSelection")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {usersQuery.isLoading ? <LoadingState /> : null}
       {usersQuery.isError ? (
@@ -350,7 +701,12 @@ export function EmployeesPageClient() {
       ) : null}
 
       {usersQuery.data && usersQuery.data.items.length === 0 ? (
-        <EmptyState title={t("emptyTitle")} description={t("emptyDescription")} />
+        <EmptyState
+          title={t("emptyTitle")}
+          description={
+            canManage ? t("emptyDescription") : t("emptyManagerDescription")
+          }
+        />
       ) : null}
 
       {usersQuery.data && usersQuery.data.items.length > 0 ? (
@@ -358,77 +714,116 @@ export function EmployeesPageClient() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t("employeeNumber")}</TableHead>
-                <TableHead>{t("fullName")}</TableHead>
-                <TableHead>{t("role")}</TableHead>
-                <TableHead>{t("phone")}</TableHead>
-                <TableHead>{t("status")}</TableHead>
-                <TableHead className="text-start">{t("actions")}</TableHead>
+                <TableHead className="w-10">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    checked={allSelectableSelected}
+                    onChange={toggleSelectAll}
+                    aria-label={t("selectAll")}
+                  />
+                </TableHead>
+                <SortableTableHead
+                  label={t("employeeNumber")}
+                  column="employeeNumber"
+                  sortBy={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTableHead
+                  label={t("fullName")}
+                  column="fullName"
+                  sortBy={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <SortableTableHead
+                  label={t("role")}
+                  column="role"
+                  sortBy={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
+                <TableHead>{t("department")}</TableHead>
+                <SortableTableHead
+                  label={t("status")}
+                  column="status"
+                  sortBy={sortBy}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usersQuery.data.items.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    {user.employeeNumber}
-                  </TableCell>
-                  <TableCell>{user.fullName}</TableCell>
-                  <TableCell>{tRoles(user.role)}</TableCell>
-                  <TableCell>{user.phone ?? "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={user.isActive ? "default" : "secondary"}>
-                      {user.isActive ? t("active") : t("inactive")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          setConfirmAction({
-                            type: user.isActive ? "deactivate" : "activate",
-                            user,
-                          })
-                        }
+              {usersQuery.data.items.map((user) => {
+                const isSelf = user.id === currentUserId;
+                const checked = selectedIds.has(user.id);
+                return (
+                  <TableRow
+                    key={user.id}
+                    className={cn(
+                      "cursor-pointer",
+                      checked && "bg-muted/40",
+                    )}
+                    onClick={() => router.push(`/employees/${user.id}`)}
+                  >
+                    <TableCell
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                    >
+                      {!isSelf ? (
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={checked}
+                          onChange={() => toggleSelect(user.id)}
+                          aria-label={t("selectUser", { name: user.fullName })}
+                        />
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {user.employeeNumber}
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/employees/${user.id}`}
+                        className="font-medium hover:underline"
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        {user.isActive ? t("deactivate") : t("activate")}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          setConfirmAction({ type: "reset", user })
-                        }
-                      >
-                        {t("resetPassword")}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="destructive"
-                        onClick={() =>
-                          setConfirmAction({ type: "delete", user })
-                        }
-                      >
-                        {t("delete")}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        {user.fullName}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{tRoles(user.role)}</TableCell>
+                    <TableCell>
+                      {user.currentDepartment?.name ?? t("noDepartment")}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={user.isActive ? "default" : "secondary"}>
+                        {user.isActive ? t("active") : t("inactive")}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
+          />
         </div>
       ) : null}
 
       <Dialog
-        open={Boolean(confirmAction)}
+        open={Boolean(bulkAction)}
         onOpenChange={(open) => {
           if (!open) {
-            setConfirmAction(null);
+            setBulkAction(null);
+            setBulkDepartmentId("");
             setActionError(null);
           }
         }}
@@ -436,32 +831,34 @@ export function EmployeesPageClient() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {confirmAction?.type === "delete"
-                ? t("confirmDeleteTitle")
-                : confirmAction?.type === "reset"
-                  ? t("confirmResetTitle")
-                  : confirmAction?.type === "deactivate"
-                    ? t("confirmDeactivateTitle")
-                    : t("confirmActivateTitle")}
+              {bulkAction ? t(`bulkConfirmTitle_${bulkAction}`) : ""}
             </DialogTitle>
             <DialogDescription>
-              {confirmAction?.type === "delete"
-                ? t("confirmDeleteDescription", {
-                    name: confirmAction.user.fullName,
+              {bulkAction
+                ? t(`bulkConfirmDescription_${bulkAction}`, {
+                    count: selectedUsers.length,
                   })
-                : confirmAction?.type === "reset"
-                  ? t("confirmResetDescription", {
-                      name: confirmAction?.user.fullName ?? "",
-                    })
-                  : confirmAction?.type === "deactivate"
-                    ? t("confirmDeactivateDescription", {
-                        name: confirmAction?.user.fullName ?? "",
-                      })
-                    : t("confirmActivateDescription", {
-                        name: confirmAction?.user.fullName ?? "",
-                      })}
+                : ""}
             </DialogDescription>
           </DialogHeader>
+          {bulkAction === "assignDepartment" ? (
+            <div className="space-y-2">
+              <Label htmlFor="bulk-department">{t("selectDepartment")}</Label>
+              <select
+                id="bulk-department"
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                value={bulkDepartmentId}
+                onChange={(event) => setBulkDepartmentId(event.target.value)}
+              >
+                <option value="">{t("selectDepartment")}</option>
+                {(departmentsQuery.data ?? []).map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {actionError ? (
             <Alert variant="destructive">
               <AlertDescription>{actionError}</AlertDescription>
@@ -471,23 +868,20 @@ export function EmployeesPageClient() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setConfirmAction(null)}
+              onClick={() => setBulkAction(null)}
             >
               {tCommon("cancel")}
             </Button>
             <Button
               type="button"
-              variant={
-                confirmAction?.type === "delete" ? "destructive" : "default"
-              }
-              onClick={() => void runConfirmAction()}
+              variant={bulkAction === "delete" ? "destructive" : "default"}
               disabled={
-                deleteMutation.isPending ||
-                resetMutation.isPending ||
-                patchMutation.isPending
+                bulkRunning ||
+                (bulkAction === "assignDepartment" && !bulkDepartmentId)
               }
+              onClick={() => void runBulkAction()}
             >
-              {tCommon("confirm")}
+              {bulkRunning ? tCommon("saving") : tCommon("confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

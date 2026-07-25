@@ -26,9 +26,12 @@ Milestone 1:
 - Test authentication, users, permissions, and organization rules
 
 Milestone 2:
-- Expand testing to projects, tasks, dependencies, and workload calculations
+- Expand testing for departments, memberships, manager constraints, and scoped password reset
 
 Milestone 3:
+- Expand testing to projects, tasks, dependencies, and workload calculations
+
+Milestone 4:
 - Test attendance calculations and approval workflows
 
 End-to-end testing with Playwright will be introduced when complete business workflows exist.
@@ -189,6 +192,7 @@ Admin can:
 - Edit departments
 - Assign managers
 - Archive departments
+- Delete departments (only when they have no current members)
 
 ---
 

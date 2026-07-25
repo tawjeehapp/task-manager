@@ -1,8 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
+vi.mock("@/features/departments/services/membership-helpers", () => ({
+  sharesManagedDepartmentWith: vi.fn(),
+}));
 
 import { assertCanViewUser } from "@/features/users/services/assert-can-view-user";
 import type { AppUser } from "@/lib/auth/types";
 import { ApiError } from "@/lib/api/errors";
+import { sharesManagedDepartmentWith } from "@/features/departments/services/membership-helpers";
+
+const sharesManagedDepartmentWithMock = vi.mocked(sharesManagedDepartmentWith);
 
 function makeUser(overrides: Partial<AppUser>): AppUser {
   return {
@@ -23,30 +32,45 @@ function makeUser(overrides: Partial<AppUser>): AppUser {
 }
 
 describe("assertCanViewUser", () => {
-  it("allows admin to view any user", () => {
-    expect(() =>
+  beforeEach(() => {
+    sharesManagedDepartmentWithMock.mockReset();
+  });
+
+  it("allows admin to view any user", async () => {
+    await expect(
       assertCanViewUser(makeUser({ role: "admin" }), "other-id"),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
-  it("allows employee to view own profile", () => {
-    expect(() =>
+  it("allows employee to view own profile", async () => {
+    await expect(
       assertCanViewUser(makeUser({ id: "self", role: "employee" }), "self"),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
   });
 
-  it("blocks employee from viewing others", () => {
-    expect(() =>
+  it("blocks employee from viewing others", async () => {
+    await expect(
       assertCanViewUser(makeUser({ id: "self", role: "employee" }), "other"),
-    ).toThrow(ApiError);
+    ).rejects.toBeInstanceOf(ApiError);
   });
 
-  it("blocks department_manager from viewing others in M1", () => {
-    expect(() =>
+  it("allows department_manager to view subordinates", async () => {
+    sharesManagedDepartmentWithMock.mockResolvedValue(true);
+    await expect(
       assertCanViewUser(
         makeUser({ id: "mgr", role: "department_manager" }),
         "other",
       ),
-    ).toThrow(ApiError);
+    ).resolves.toBeUndefined();
+  });
+
+  it("blocks department_manager from viewing outsiders", async () => {
+    sharesManagedDepartmentWithMock.mockResolvedValue(false);
+    await expect(
+      assertCanViewUser(
+        makeUser({ id: "mgr", role: "department_manager" }),
+        "other",
+      ),
+    ).rejects.toBeInstanceOf(ApiError);
   });
 });

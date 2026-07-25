@@ -198,24 +198,22 @@ Service workers, offline caching, and `next-pwa` runtime integration are deferre
 
 # Current Milestone
 
-**Milestone 1 — Authentication and User Management**
+**Milestone 2 — Organization Structure**
 
 Includes:
 
-- Employee-number login (synthetic Supabase email)
-- Session management and logout
-- Forced password change
-- Admin user CRUD, activate/deactivate, delete
-- Admin password reset (manager subordinate reset deferred to Milestone 2)
-- Permissions tables + `hasPermission()`
-- Basic RLS with non-recursive `SECURITY DEFINER` helpers
-- Vitest coverage for auth/permissions/user rules
+- Departments create / edit / assign manager / archive
+- Department memberships (add / remove / move) with history
+- Organization views: department list, department details, employee directory
+- Manager-scoped password reset for department members
+- Employee view of own department
+- RLS helpers for department scope + `department.view` permission
 
 Does **not** include:
 
-- Departments / memberships
-- Manager password reset for subordinates
-- Projects, tasks, attendance
+- Projects, tasks, subtasks
+- Dependencies / workload
+- Attendance, leave, announcements
 
 See [06-roadmap.md](./06-roadmap.md) for the full roadmap.
 

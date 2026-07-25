@@ -565,14 +565,40 @@ Avoid optimistic updates for:
 
 Large lists must support pagination.
 
+Page size options:
+
+```
+25
+50
+100
+```
+
+Default page size: `25`.
+
+Responses for list endpoints should include:
+
+```
+items
+total
+page
+pageSize
+totalPages
+```
+
 Examples:
 
 - Tasks
 - Employees
+- Departments
 - Notifications
 - Reports
 
 Do not load unlimited records.
+
+List APIs should also support:
+
+- Single-column sorting (`sortBy`, `sortDir`)
+- Server-side filters relevant to the resource
 
 ---
 
@@ -649,6 +675,35 @@ Examples:
 - Approval decision
 - Delete action
 - Permission changes
+
+---
+
+# Departments API (Milestone 2)
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET | `/api/departments` | `department.view` |
+| POST | `/api/departments` | `department.manage` |
+| GET | `/api/departments/[id]` | `department.view` (scoped) |
+| PATCH | `/api/departments/[id]` | `department.manage` |
+| DELETE | `/api/departments/[id]` | `department.manage` |
+| GET | `/api/departments/[id]/members` | `department.view` (scoped) |
+| POST | `/api/departments/[id]/members` | `department.manage` |
+| DELETE | `/api/departments/[id]/members/[userId]` | `department.manage` |
+| POST | `/api/departments/members/move` | `department.manage` |
+
+Manager assignment on PATCH uses `managerId` and optional `replaceExistingManager`.
+
+Notable error codes:
+
+- `MANAGER_ALREADY_ASSIGNED` (409) — department already has a manager; replace not confirmed
+- `INVALID_MANAGER_ROLE` (409) — candidate is not `department_manager`
+- `MANAGER_ALREADY_HAS_DEPARTMENT` (409) — candidate already manages another department
+- `HAS_CURRENT_MEMBERSHIP` (409) — user already belongs to a department
+- `DEPARTMENT_ARCHIVED` (409) — mutation not allowed on archived department
+- `DEPARTMENT_HAS_MEMBERS` (409) — cannot delete a department with current members
+
+Password reset (`POST /api/users/[id]/reset-password`) requires `user.reset_password` and is scoped: admin any (except self); department manager only current members of their managed department.
 
 ---
 

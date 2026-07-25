@@ -5,7 +5,10 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
-import { navSections } from "@/components/shared/nav-config";
+import {
+  navItemIsVisible,
+  navSections,
+} from "@/components/shared/nav-config";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +18,7 @@ type AppSidebarProps = {
 };
 
 type MeResponse = {
-  user: { fullName: string };
+  user: { fullName: string; role: string };
   permissions: string[];
 };
 
@@ -38,6 +41,11 @@ export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
   });
 
   const permissions = meQuery.data?.permissions ?? [];
+  const role = (meQuery.data?.user.role ?? null) as
+    | "admin"
+    | "department_manager"
+    | "employee"
+    | null;
 
   return (
     <aside
@@ -49,15 +57,9 @@ export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
       <ScrollArea className="flex-1 px-3 py-5">
         <nav className="space-y-7">
           {navSections.map((section) => {
-            const visibleItems = section.items.filter((item) => {
-              if (!item.enabled) {
-                return true;
-              }
-              if (!item.permission) {
-                return true;
-              }
-              return permissions.includes(item.permission);
-            });
+            const visibleItems = section.items.filter((item) =>
+              navItemIsVisible(item, permissions, role),
+            );
 
             if (visibleItems.length === 0) {
               return null;
