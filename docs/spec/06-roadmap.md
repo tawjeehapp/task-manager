@@ -18,7 +18,7 @@ The application is built incrementally. Each milestone should produce a usable w
 
 ### Current project status
 
-**Milestones 0–6 core product scope is implemented** (M0 PWA/notifications still deferred). **Next up: Milestone 7 — Communication.**
+**Milestones 0–7 core product scope is implemented** (M0 PWA offline + Web Push still deferred). **Next up: Milestone 8 — Dashboards and Reporting.**
 
 ---
 
@@ -33,7 +33,7 @@ Testing infrastructure was introduced in Milestone 1 (Vitest + React Testing Lib
 | **3** | Projects, tasks, access rules | **Completed** — schemas, access asserts, create-task (incl. subtask depth) |
 | **4** | Dependencies, workload, activity | **Partially completed** — dependency service tests present; dedicated workload/activity tests thin |
 | **5** | Attendance calculations, approval, work-log authz | **Completed** |
-| **6+** | Leave, approvals, and later workflows | **Completed for M6** — leave working-day math, approve asserts; M7+ remaining |
+| **6+** | Leave, approvals, and later workflows | **Completed for M6–M7** — leave + communication schema/permission tests |
 
 End-to-end testing with Playwright remains **deferred** until complete business workflows exist (attendance / leave / approvals).
 
@@ -83,8 +83,8 @@ Create the application foundation and development environment.
 | Loading / error / empty states | **Completed** | Shared components |
 | Web manifest + icons + install metadata | **Completed** | `public/manifest.webmanifest`, layout metadata |
 | Service worker / offline PWA runtime | **Deferred** | Manifest + icons only; unused `next-pwa` dependency **removed** — revisit when PWA milestone arrives |
-| Notifications DB + API + real center | **Deferred** | Types + bell placeholder + stub service only; no `notifications` table |
-| Push (VAPID env + subscribe stub) | **Deferred** | Env keys documented; runtime throws / unused |
+| Notifications DB + API + real center | **Completed (M7)** | In-app persistence + bell + `/notifications`; Web Push still deferred |
+| Push (VAPID env + subscribe stub) | **Deferred** | Env keys documented; delivery deferred past M7 |
 | Dashboard home (`/`) | **Partially completed** | Placeholder empty state until Milestone 8 |
 
 ## Differences from original plan
@@ -352,7 +352,7 @@ Employee requests removal from a task; manager approves or rejects.
 
 # Milestone 7 — Communication
 
-**Status: Remaining** (also absorbs deferred M0 notification product)
+**Status: Completed** (in-app; attachments + Web Push deferred)
 
 ## Goal
 
@@ -365,7 +365,7 @@ Support:
 - Company announcements
 - Department announcements
 - Priority levels
-- Attachments
+- Attachments — **Deferred** (no Storage upload in M7)
 - Read tracking
 
 ## Notifications
@@ -382,10 +382,33 @@ Events:
 
 Channels:
 
-- In-app notifications
-- Push notifications
+- In-app notifications — **Completed**
+- Push notifications — **Deferred** (VAPID stubs retained)
 
-**Note:** M0 left notification stubs and VAPID env placeholders. Milestone 7 should replace stubs with real DB persistence, APIs, notification center UI, and push delivery.
+## Implementation status
+
+| Area | Status | Notes |
+|---|---|---|
+| Announcements CRUD + soft unpublish | **Completed** | Admin company/any dept; manager own dept |
+| Read tracking | **Completed** | `announcement_reads` |
+| Priority `low \| medium \| high` | **Completed** | |
+| In-app notifications table + APIs | **Completed** | + `entity_type` / `entity_id` deep links |
+| Header bell + `/notifications` | **Completed** | Unread badge; mark read / read-all |
+| Event hooks | **Completed** | Tasks, leave, employee requests, attendance, announcements |
+| Seed-dev M7 scenarios | **Completed** | Company/dept/expired announcements + sample notifications |
+| Vitest | **Completed** | Schemas, permission codes, href helper |
+| Announcement attachments | **Deferred** | Roadmap asked for files; Storage table deferred |
+| Web Push delivery | **Deferred** | Keep VAPID env; no SW / `web-push` |
+
+## Migrations
+
+- `20260725180000_milestone7_announcements_notifications.sql`
+
+## Differences / notes
+
+- File attachments for announcements deferred (document + roadmap).
+- Web Push deferred; in-app channel fulfills M7 notification product for now.
+- Notification failures never roll back the primary business action.
 
 ---
 
@@ -482,7 +505,9 @@ Possible additions:
 | Item | Originally in | Deferred to |
 |---|---|---|
 | Service worker / offline caching | M0 PWA | Later PWA milestone (`next-pwa` removed until then) |
-| Notifications table, APIs, real center, push | M0 foundation | Milestone 7 |
+| Notifications table, APIs, real center, push | M0 foundation | Milestone 7 (in-app **Completed**; Web Push still deferred) |
+| Announcement file attachments | Milestone 7 roadmap | Later / Storage |
+| Web Push delivery + service worker | Milestone 7 roadmap | Later PWA milestone |
 | Dashboard content | Shell in M0 | Milestone 8 |
 | Task comments / attachments | DB design (not M3/M4 scope) | Future |
 | `progress_percentage` UI | Schema present | Future / unused |
@@ -514,6 +539,6 @@ Possible additions:
 6. Dependencies and workload — **Completed**
 7. Attendance — **Completed (Milestone 5)**
 8. Leave — **Completed (Milestone 6)**
-9. Communication — **Remaining (Milestone 7)**
+9. Communication — **Completed (Milestone 7; push/attachments deferred)**
 10. Reports — **Remaining (Milestone 8)**
 11. Gantt — **Remaining (Milestone 9)**

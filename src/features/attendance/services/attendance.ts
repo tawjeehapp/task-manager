@@ -22,6 +22,8 @@ import {
 import {
   getManagedDepartmentId,
 } from "@/features/departments/services/membership-helpers";
+import { notifySafe } from "@/features/notifications/services/notifications";
+import { listApproverUserIdsForRequester } from "@/features/notifications/services/recipients";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -222,7 +224,17 @@ export async function clockOut(
     throw new ApiError("تعذر تسجيل الخروج.", 500, "CLOCK_OUT_FAILED");
   }
 
-  return mapRow(data);
+  const record = mapRow(data);
+  const approvers = await listApproverUserIdsForRequester(viewer.id);
+  await notifySafe(approvers, {
+    type: "approval_request",
+    title: "حضور بانتظار الاعتماد",
+    message: `${viewer.fullName} · ${record.date}`,
+    entityType: "attendance_record",
+    entityId: record.id,
+  });
+
+  return record;
 }
 
 /**
@@ -321,7 +333,19 @@ export async function updateAttendance(
     throw new ApiError("تعذر تحديث سجل الحضور.", 500, "UPDATE_ATTENDANCE_FAILED");
   }
 
-  return mapRow(data);
+  const record = mapRow(data);
+  if (resubmitRejected) {
+    const approvers = await listApproverUserIdsForRequester(actor.id);
+    await notifySafe(approvers, {
+      type: "approval_request",
+      title: "حضور بانتظار الاعتماد",
+      message: `${actor.fullName} · ${record.date}`,
+      entityType: "attendance_record",
+      entityId: record.id,
+    });
+  }
+
+  return record;
 }
 
 export async function approveAttendance(
@@ -364,6 +388,14 @@ export async function approveAttendance(
   if (error) {
     throw new ApiError("تعذر اعتماد الحضور.", 500, "APPROVE_ATTENDANCE_FAILED");
   }
+
+  await notifySafe(existing.user_id, {
+    type: "approval_result",
+    title: "تم اعتماد الحضور",
+    message: existing.date,
+    entityType: "attendance_record",
+    entityId: id,
+  });
 
   return mapRow(data);
 }
@@ -409,6 +441,14 @@ export async function rejectAttendance(
   if (error) {
     throw new ApiError("تعذر رفض الحضور.", 500, "REJECT_ATTENDANCE_FAILED");
   }
+
+  await notifySafe(existing.user_id, {
+    type: "approval_result",
+    title: "تم رفض الحضور",
+    message: input.reason,
+    entityType: "attendance_record",
+    entityId: id,
+  });
 
   return mapRow(data);
 }

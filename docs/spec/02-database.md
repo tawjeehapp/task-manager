@@ -772,6 +772,10 @@ company
 department
 ```
 
+Priority: `low | medium | high`.
+
+Unpublish: set `expires_at` to now (soft expire). File attachments deferred (no `announcement_attachments` in MVP M7).
+
 ---
 
 # Announcement Reads
@@ -793,9 +797,13 @@ user_id
 read_at
 ```
 
+Unique `(announcement_id, user_id)`.
+
 ---
 
 # Notifications
+
+In-app notifications (Web Push deferred).
 
 Table:
 
@@ -811,6 +819,8 @@ user_id
 type
 title
 message
+entity_type
+entity_id
 read_at
 created_at
 ```
@@ -824,6 +834,8 @@ approval_request
 approval_result
 announcement
 ```
+
+`entity_type` / `entity_id` support deep links (`task`, `leave_request`, `employee_request`, `attendance_record`, `announcement`).
 
 ---
 

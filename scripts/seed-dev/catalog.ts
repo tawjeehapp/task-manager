@@ -164,10 +164,29 @@ export const IDS = {
   empReqPendingExtension: "a100000c-0000-4000-8000-000000000001",
   empReqPendingExcusal: "a100000c-0000-4000-8000-000000000002",
   empReqApprovedExtension: "a100000c-0000-4000-8000-000000000003",
+
+  announcementCompany: "a100000d-0000-4000-8000-000000000001",
+  announcementDeptIt: "a100000d-0000-4000-8000-000000000002",
+  announcementExpired: "a100000d-0000-4000-8000-000000000003",
+
+  notifSaraAssigned: "a100000e-0000-4000-8000-000000000001",
+  notifAhmedApproval: "a100000e-0000-4000-8000-000000000002",
+  notifSaraAnnouncement: "a100000e-0000-4000-8000-000000000003",
 } as const;
 
 /** All seed-owned row IDs deleted on --reset (never includes users / auth). */
 export const RESET_ID_SETS = {
+  notifications: [
+    IDS.notifSaraAssigned,
+    IDS.notifAhmedApproval,
+    IDS.notifSaraAnnouncement,
+  ],
+  announcement_reads: [] as string[],
+  announcements: [
+    IDS.announcementCompany,
+    IDS.announcementDeptIt,
+    IDS.announcementExpired,
+  ],
   employee_requests: [
     IDS.empReqPendingExtension,
     IDS.empReqPendingExcusal,

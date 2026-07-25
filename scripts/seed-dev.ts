@@ -1,5 +1,5 @@
 /**
- * Idempotent development dataset seed (M1–M6).
+ * Idempotent development dataset seed (M1–M7).
  *
  * Usage:
  *   npm run seed:dev
@@ -73,6 +73,8 @@ async function main() {
   if (reset) {
     console.log("Deleting seed-owned rows by fixed IDs…");
     // FK-safe order
+    await deleteByIds(admin, "notifications", RESET_ID_SETS.notifications);
+    await deleteByIds(admin, "announcements", RESET_ID_SETS.announcements);
     await deleteByIds(admin, "employee_requests", RESET_ID_SETS.employee_requests);
     await deleteByIds(admin, "leave_requests", RESET_ID_SETS.leave_requests);
     await deleteByIds(admin, "leave_balances", RESET_ID_SETS.leave_balances);
@@ -919,6 +921,84 @@ async function main() {
       reviewed_at: now,
       rejection_reason: null,
       updated_at: now,
+    },
+  ]);
+
+  // --- Milestone 7: Announcements + notifications ---
+  const publishPast = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const expirePast = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const expireFuture = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  await upsertRows(admin, "announcements", [
+    {
+      id: IDS.announcementCompany,
+      title: "تحديث سياسة العمل عن بُعد",
+      content:
+        "يرجى مراجعة سياسة العمل عن بُعد المحدّثة في بوابة الموارد البشرية.",
+      audience_type: "company",
+      department_id: null,
+      priority: "high",
+      publish_at: publishPast,
+      expires_at: expireFuture,
+      created_by: users["0000"],
+      updated_at: now,
+    },
+    {
+      id: IDS.announcementDeptIt,
+      title: "صيانة خوادم التطوير",
+      content: "ستتم صيانة بيئة التطوير يوم الخميس من 10 إلى 12.",
+      audience_type: "department",
+      department_id: IDS.deptIt,
+      priority: "medium",
+      publish_at: publishPast,
+      expires_at: null,
+      created_by: users["1001"],
+      updated_at: now,
+    },
+    {
+      id: IDS.announcementExpired,
+      title: "إعلان منتهٍ — اجتماع الربع السابق",
+      content: "هذا الإعلان منتهٍ ويظهر في تبويب المنتهية فقط.",
+      audience_type: "company",
+      department_id: null,
+      priority: "low",
+      publish_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+      expires_at: expirePast,
+      created_by: users["0000"],
+      updated_at: now,
+    },
+  ]);
+
+  await upsertRows(admin, "notifications", [
+    {
+      id: IDS.notifSaraAssigned,
+      user_id: users["1003"],
+      type: "task_assigned",
+      title: "تم تعيين مهمة إليك",
+      message: "واجهة الحضور",
+      entity_type: "task",
+      entity_id: IDS.taskAttendanceUi,
+      read_at: null,
+    },
+    {
+      id: IDS.notifAhmedApproval,
+      user_id: users["1001"],
+      type: "approval_request",
+      title: "طلب إجازة بانتظار الاعتماد",
+      message: "سارة المطورة",
+      entity_type: "leave_request",
+      entity_id: IDS.leavePendingSara,
+      read_at: null,
+    },
+    {
+      id: IDS.notifSaraAnnouncement,
+      user_id: users["1003"],
+      type: "announcement",
+      title: "إعلان جديد",
+      message: "تحديث سياسة العمل عن بُعد",
+      entity_type: "announcement",
+      entity_id: IDS.announcementCompany,
+      read_at: now,
     },
   ]);
 

@@ -18,6 +18,8 @@ import {
 import {
   getManagedDepartmentId,
 } from "@/features/departments/services/membership-helpers";
+import { notifySafe } from "@/features/notifications/services/notifications";
+import { listApproverUserIdsForRequester } from "@/features/notifications/services/recipients";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -232,6 +234,16 @@ export async function createLeaveRequest(
   }
 
   const inserted = data as LeaveRequestRow;
+
+  const approvers = await listApproverUserIdsForRequester(actor.id);
+  await notifySafe(approvers, {
+    type: "approval_request",
+    title: "طلب إجازة بانتظار الاعتماد",
+    message: `${actor.fullName} · ${input.startDate} → ${input.endDate}`,
+    entityType: "leave_request",
+    entityId: inserted.id,
+  });
+
   return getLeaveRequestById(actor, inserted.id);
 }
 
@@ -259,6 +271,14 @@ export async function approveLeaveRequest(
   if (error) {
     throw mapRpcError(error.message);
   }
+
+  await notifySafe(existing.user_id, {
+    type: "approval_result",
+    title: "تم اعتماد طلب الإجازة",
+    message: `${existing.start_date} → ${existing.end_date}`,
+    entityType: "leave_request",
+    entityId: id,
+  });
 
   return getLeaveRequestById(actor, id);
 }
@@ -303,6 +323,14 @@ export async function rejectLeaveRequest(
       "LEAVE_NOT_PENDING",
     );
   }
+
+  await notifySafe(existing.user_id, {
+    type: "approval_result",
+    title: "تم رفض طلب الإجازة",
+    message: input.reason,
+    entityType: "leave_request",
+    entityId: id,
+  });
 
   return mapLeaveRequestRow(data as unknown as LeaveRequestRow);
 }

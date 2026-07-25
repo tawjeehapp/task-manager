@@ -18,6 +18,8 @@ import { calendarDateInOrgTimezone } from "@/features/leave/services/compute-wor
 import {
   getManagedDepartmentId,
 } from "@/features/departments/services/membership-helpers";
+import { notifySafe } from "@/features/notifications/services/notifications";
+import { listApproverUserIdsForRequester } from "@/features/notifications/services/recipients";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -259,7 +261,18 @@ export async function createEmployeeRequest(
     );
   }
 
-  return mapEmployeeRequestRow(data as unknown as EmployeeRequestRow);
+  const created = mapEmployeeRequestRow(data as unknown as EmployeeRequestRow);
+  const typeLabel = input.type === "extension" ? "تمديد مهمة" : "إعفاء من مهمة";
+  const approvers = await listApproverUserIdsForRequester(actor.id);
+  await notifySafe(approvers, {
+    type: "approval_request",
+    title: `طلب ${typeLabel} بانتظار الاعتماد`,
+    message: actor.fullName,
+    entityType: "employee_request",
+    entityId: created.id,
+  });
+
+  return created;
 }
 
 export async function approveEmployeeRequest(
@@ -286,6 +299,16 @@ export async function approveEmployeeRequest(
   if (error) {
     throw mapRpcError(error.message);
   }
+
+  const typeLabel =
+    existing.type === "extension" ? "تمديد المهمة" : "الإعفاء من المهمة";
+  await notifySafe(existing.user_id, {
+    type: "approval_result",
+    title: `تم اعتماد طلب ${typeLabel}`,
+    message: "تمت الموافقة على طلبك",
+    entityType: "employee_request",
+    entityId: id,
+  });
 
   return getEmployeeRequestById(actor, id);
 }
@@ -334,6 +357,16 @@ export async function rejectEmployeeRequest(
       "EMPLOYEE_REQUEST_NOT_PENDING",
     );
   }
+
+  const typeLabel =
+    existing.type === "extension" ? "تمديد المهمة" : "الإعفاء من المهمة";
+  await notifySafe(existing.user_id, {
+    type: "approval_result",
+    title: `تم رفض طلب ${typeLabel}`,
+    message: input.reason,
+    entityType: "employee_request",
+    entityId: id,
+  });
 
   return mapEmployeeRequestRow(data as unknown as EmployeeRequestRow);
 }

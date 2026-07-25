@@ -21,6 +21,7 @@ import {
   taskHasIncompleteDependencies,
 } from "@/features/tasks/services/dependencies";
 import { logTaskActivity } from "@/features/tasks/services/activity-logs";
+import { notifySafe } from "@/features/notifications/services/notifications";
 import type {
   CreateTaskInput,
   ListTasksQuery,
@@ -482,6 +483,15 @@ export async function createTask(
       from: null,
       to: created.assigned_to,
     });
+    if (created.assigned_to !== viewer.id) {
+      await notifySafe(created.assigned_to, {
+        type: "task_assigned",
+        title: "تم تعيين مهمة إليك",
+        message: created.title,
+        entityType: "task",
+        entityId: created.id,
+      });
+    }
   }
 
   for (const dependsOnTaskId of dependsOnTaskIds) {
@@ -625,6 +635,15 @@ export async function updateTask(
       from: existing.assigned_to,
       to: input.assignedTo,
     });
+    if (input.assignedTo && input.assignedTo !== viewer.id) {
+      await notifySafe(input.assignedTo, {
+        type: "task_assigned",
+        title: "تم تعيين مهمة إليك",
+        message: (existing.title as string) ?? "مهمة",
+        entityType: "task",
+        entityId: taskId,
+      });
+    }
   }
 
   if (
@@ -637,6 +656,35 @@ export async function updateTask(
       from: existing.status,
       to: input.status,
     });
+
+    if (input.status === "completed") {
+      const { data: taskMeta } = await admin
+        .from("tasks")
+        .select("title, created_by, assigned_to")
+        .eq("id", taskId)
+        .maybeSingle();
+
+      const recipients = new Set<string>();
+      if (taskMeta?.created_by && taskMeta.created_by !== viewer.id) {
+        recipients.add(taskMeta.created_by as string);
+      }
+      if (
+        taskMeta?.assigned_to &&
+        taskMeta.assigned_to !== viewer.id &&
+        taskMeta.assigned_to !== taskMeta.created_by
+      ) {
+        // Creator is primary; assignee completing already knows — skip assignee
+      }
+      if (recipients.size > 0) {
+        await notifySafe([...recipients], {
+          type: "task_completed",
+          title: "اكتملت مهمة",
+          message: (taskMeta?.title as string) ?? "مهمة",
+          entityType: "task",
+          entityId: taskId,
+        });
+      }
+    }
 
     await syncDependentsAfterPrerequisiteChange(taskId, viewer.id);
   }

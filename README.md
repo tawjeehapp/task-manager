@@ -4,18 +4,18 @@ Arabic-first, RTL work management platform for organizations. Built with Next.js
 
 ## Current status
 
-**Milestones 0–6** are implemented for core product scope. **Next: Milestone 7 — Communication (announcements + notifications).**
+**Milestones 0–7** are implemented for core product scope (in-app communication). **Next: Milestone 8 — Dashboards and Reporting.**
 
 | Milestone | Status |
 |---|---|
-| 0 — Foundation | Partial (core done; full PWA offline + notifications deferred to M7) |
+| 0 — Foundation | Partial (core done; full PWA offline + Web Push still deferred) |
 | 1 — Auth & users | Completed |
 | 2 — Departments | Completed |
 | 3 — Projects & tasks | Completed |
 | 4 — Dependencies, workload, activity | Completed |
 | 5 — Attendance & work logs | Completed |
 | 6 — Leave & employee requests | Completed |
-| 7 — Communication | Remaining |
+| 7 — Communication | Completed (attachments + Web Push deferred) |
 | 8 — Dashboards & reports | Remaining |
 
 ---
@@ -98,9 +98,26 @@ This section explains the live business rules as implemented — useful when wal
 | Task detail | Create extension/excusal when you are the assignee |
 | `/attendance` | Attendance clocking + attendance-specific approvals (unchanged) |
 
+### Communication (M7)
+
+- **Announcements** at `/announcements`:
+  - Audience: **company** (all active users) or **department** (current members of that department).
+  - Priority: `low | medium | high` (high is visually distinct).
+  - **Admins** publish company-wide or for any department; **department managers** publish only for the department they manage.
+  - Employees can view announcements in their audience and **mark as read** (`announcement_reads`).
+  - **Unpublish** sets `expires_at` to now (soft expire); history remains listable under expired/all filters.
+  - **No file attachments** in M7 (deferred).
+- **In-app notifications** at `/notifications` and the header **bell** (unread badge):
+  - Types: `task_assigned`, `task_completed`, `approval_request`, `approval_result`, `announcement`.
+  - Fired (best-effort) when: a task is assigned or completed; leave / task extension-excusal / attendance is submitted for approval or decided; an announcement is published.
+  - Recipients: assignee (assign); task creator (complete); department manager + admins (approval requests); requester (approval results); announcement audience (publish). Actor is excluded where applicable.
+  - Deep links via `entity_type` / `entity_id` → task, leave, approvals, attendance, or announcements pages.
+  - Users can mark one or all as read. Notification insert failures **never** roll back the primary business action.
+- **Web Push** is **not** delivered in M7 (VAPID env keys remain unused stubs).
+
 ### What is intentionally not built yet
 
-- In-app / push **notifications** and announcements → Milestone 7
+- Announcement **file attachments** and **Web Push** → deferred past M7
 - Rich **dashboards & reports** → Milestone 8
 - Gantt / advanced filters → Milestone 9
 - Task comments & attachments → future
@@ -117,7 +134,7 @@ This section explains the live business rules as implemented — useful when wal
 5. Link the project: `npm run supabase:link` (same project as `.env.local`)
 6. Push migrations: `npm run supabase:db:push`
 7. Seed admin: `npm run seed:admin` (employee `0000` / password `0000`)
-8. Optional QA dataset: `npm run seed:dev` (deterministic M1–M6 users and scenarios)
+8. Optional QA dataset: `npm run seed:dev` (deterministic M1–M7 users and scenarios)
 9. Run: `npm run dev`
 
 See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for full setup details.
@@ -148,5 +165,5 @@ npm run supabase:login   # Log in to Supabase CLI
 npm run supabase:link    # Link repo to remote project
 npm run supabase:db:push # Apply migrations to linked project
 npm run seed:admin       # Seed initial admin 0000
-npm run seed:dev         # Deterministic M1–M6 QA dataset (idempotent)
+npm run seed:dev         # Deterministic M1–M7 QA dataset (idempotent)
 ```

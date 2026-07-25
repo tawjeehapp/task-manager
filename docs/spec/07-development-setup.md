@@ -58,8 +58,8 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only; never expose to the browser |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Push placeholder (unused until Milestone 7) |
-| `VAPID_PRIVATE_KEY` | No | Server-only push placeholder |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Push placeholder (unused; Web Push deferred past M7) |
+| `VAPID_PRIVATE_KEY` | No | Server-only push placeholder (unused) |
 
 Never commit `.env.local` or real secrets.
 
@@ -250,11 +250,11 @@ Service workers and offline caching are deferred until a dedicated PWA milestone
 
 # Current Milestone
 
-**Milestone 7 — Communication** is next.
+**Milestone 8 — Dashboards and Reporting** is next.
 
-Milestones 0–6 core scope is implemented. See [06-roadmap.md](./06-roadmap.md) for accurate status (completed / partial / deferred).
+Milestones 0–7 core scope is implemented (M7 in-app announcements/notifications; attachments + Web Push deferred). See [06-roadmap.md](./06-roadmap.md) for accurate status (completed / partial / deferred).
 
-### Already applied (M1–M6)
+### Already applied (M1–M7)
 
 | Milestone | Migrations (under `supabase/migrations/`) |
 |---|---|
@@ -264,19 +264,21 @@ Milestones 0–6 core scope is implemented. See [06-roadmap.md](./06-roadmap.md)
 | 4 Dependencies & activity | `20260725150000_milestone4_dependencies_activity.sql`, `20260725151000_milestone4_simplify_task_statuses.sql` |
 | 5 Attendance & work logs | `20260725160000_milestone5_attendance_work_logs.sql` |
 | 6 Leave & employee requests | `20260725170000_milestone6_leave_employee_requests.sql` |
+| 7 Announcements & notifications | `20260725180000_milestone7_announcements_notifications.sql` |
 
-### Shipped through M6 (summary)
+### Shipped through M7 (summary)
 
 - Auth, users, permissions, departments, memberships
 - Projects, members, tasks, one-level subtasks, Kanban
 - Finish-to-start dependencies, assignee workload hints, task activity history
 - Attendance clock in/out, approval/rejection, daily hour totals, task work logs
 - Leave types/balances/requests, task extension/excusal, centralized `/approvals`
+- Announcements (company/department), read tracking, in-app notifications + header bell
 - Task statuses: `todo | in_progress | blocked | completed`
 
 ### Explicitly not included yet
 
-- Announcements / real notifications / push (Milestone 7; M0 stubs only)
+- Announcement file attachments / Web Push delivery (deferred from M7)
 - Dashboards / reports (Milestone 8)
 - Gantt (Milestone 9)
 - Task comments / attachments

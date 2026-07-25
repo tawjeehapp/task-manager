@@ -130,15 +130,17 @@ export const navSections: NavSection[] = [
     items: [
       {
         key: "announcements",
-        href: "#",
+        href: "/announcements",
         icon: Megaphone,
-        enabled: false,
+        enabled: true,
+        permission: "announcement.view",
       },
       {
         key: "notifications",
-        href: "#",
+        href: "/notifications",
         icon: Bell,
-        enabled: false,
+        enabled: true,
+        permission: "notification.view",
       },
     ],
   },
@@ -191,8 +193,9 @@ export const mobileNavItems: NavItem[] = [
   },
   {
     key: "notifications",
-    href: "#",
+    href: "/notifications",
     icon: Bell,
-    enabled: false,
+    enabled: true,
+    permission: "notification.view",
   },
 ];

@@ -871,6 +871,28 @@ Submit/approve leave and approve employee requests use Postgres RPCs for atomici
 
 ---
 
+# Announcements and Notifications (Milestone 7)
+
+Permissions: `announcement.view`, `announcement.manage`, `notification.view`.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET/POST | `/api/announcements` | List (paginated; `status`, `audienceType`, `priority`) / create |
+| GET/PATCH/DELETE | `/api/announcements/[id]` | Detail / update / soft-unpublish (`expires_at = now`) |
+| POST | `/api/announcements/[id]/read` | Mark announcement read |
+| GET | `/api/notifications` | Own notifications; `unreadOnly` |
+| GET | `/api/notifications/unread-count` | Badge count |
+| POST | `/api/notifications/[id]/read` | Mark one read |
+| POST | `/api/notifications/read-all` | Mark all read |
+
+Publish rules: admin may create company or any department announcement; department managers create for their managed department only.
+
+Event producers insert in-app notifications (best-effort) for task assign/complete, approval request/result (leave, employee request, attendance), and announcement publish.
+
+Deferred: announcement file attachments, Web Push delivery (VAPID env remains unused).
+
+---
+
 # API Design Principles
 
 The API should be:
