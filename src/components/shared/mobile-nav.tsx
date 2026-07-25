@@ -42,10 +42,12 @@ export function MobileNav() {
                 href={item.href}
                 className={cn(
                   "flex flex-col items-center gap-1 px-2 py-2 text-[11px] text-muted-foreground transition-colors",
-                  isActive && "text-foreground",
+                  isActive && "font-medium text-primary",
                 )}
               >
-                <Icon className="size-5" />
+                <Icon
+                  className={cn("size-5", isActive && "text-primary")}
+                />
                 <span className="truncate">{label}</span>
               </Link>
             </li>

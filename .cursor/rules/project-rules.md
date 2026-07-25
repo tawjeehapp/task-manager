@@ -300,8 +300,28 @@ When implementing a feature:
 4. Implement service layer.
 5. Implement API.
 6. Implement UI.
-7. Add loading/error states.
+7. Add loading, error, and success feedback.
 8. Verify RTL.
+
+
+# User Feedback Rules
+
+Every user-submitted action that succeeds must show clear success feedback.
+
+This includes create, update, delete, activate/deactivate, password reset, approvals, and similar mutations.
+
+Use whatever pattern fits the context:
+
+- Inline alert / banner on the page
+- Snackbar / toast
+- Dialog confirmation result
+- Inline form success message
+
+Do not rely only on a dialog closing or a list refreshing with no message.
+
+Failures must also show a clear error message.
+
+All feedback text must come from translation files.
 
 
 # AI Development Rules
@@ -313,3 +333,21 @@ When generating code:
 - Explain major decisions.
 - Do not add libraries without justification.
 - Do not skip documentation updates.
+
+## Specification Authority
+
+Before implementing any feature or milestone, read the relevant files under `docs/spec/`.
+
+The specification files are the source of truth for product requirements, architecture, UI, API conventions, database design, and development standards.
+
+In particular:
+
+- `03-ui.md` is the source of truth for visual design, colors, typography, RTL behavior, and UI patterns.
+- `02-database.md` is the source of truth for database conventions and schema design.
+- `04-api.md` is the source of truth for API conventions.
+- `05-coding-standards.md` is the source of truth for implementation conventions.
+- `06-roadmap.md` defines milestone scope and boundaries.
+
+Do not rely on previous chat instructions when they conflict with the current specification files.
+
+If a specification appears inconsistent with another specification, stop and ask for clarification before implementing the conflicting part.

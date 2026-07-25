@@ -1,12 +1,21 @@
 "use client";
 
-import { Menu, User } from "lucide-react";
+import { LogOut, Menu, User } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { AppSidebar } from "@/components/shared/app-sidebar";
+import { BrandLockup } from "@/components/shared/brand-lockup";
 import { NotificationBell } from "@/features/notifications/components/notification-bell";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -15,14 +24,52 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
+type MeResponse = {
+  user: { fullName: string; employeeNumber: string };
+  permissions: string[];
+};
+
+async function fetchMe(): Promise<MeResponse | null> {
+  const response = await fetch("/api/auth/me");
+  if (!response.ok) {
+    return null;
+  }
+  const payload = (await response.json()) as { data?: MeResponse };
+  return payload.data ?? null;
+}
+
 export function AppHeader() {
   const t = useTranslations("nav");
   const tApp = useTranslations("app");
   const tHeader = useTranslations("header");
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const meQuery = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: fetchMe,
+    staleTime: 60_000,
+  });
+
+  const displayName =
+    meQuery.data?.user.fullName ?? tHeader("userPlaceholder");
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      await queryClient.clear();
+      router.replace("/login");
+      router.refresh();
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-backdrop-filter:bg-background/80">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-card px-4">
       <div className="flex items-center gap-2 lg:hidden">
         <Sheet open={open} onOpenChange={setOpen}>
           <SheetTrigger
@@ -50,25 +97,38 @@ export function AppHeader() {
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold lg:hidden">{tApp("name")}</p>
-        <p className="hidden truncate text-sm text-muted-foreground lg:block">
-          {tApp("name")}
-        </p>
+        <BrandLockup size="sm" tone="onLight" />
       </div>
 
       <div className="flex items-center gap-1">
         <NotificationBell />
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="gap-2"
-          disabled
-          aria-label={tHeader("userPlaceholder")}
-        >
-          <User className="size-4" />
-          <span className="hidden sm:inline">{tHeader("userPlaceholder")}</span>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-2"
+                aria-label={displayName}
+              />
+            }
+          >
+            <User className="size-4" />
+            <span className="hidden max-w-40 truncate sm:inline">
+              {displayName}
+            </span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            <DropdownMenuItem
+              disabled={loggingOut}
+              onClick={() => void handleLogout()}
+            >
+              <LogOut className="size-4" />
+              {tHeader("logout")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

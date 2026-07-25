@@ -1,7 +1,8 @@
 {
   "app": {
     "name": "منصة إدارة العمل",
-    "shortName": "إدارة العمل"
+    "shortName": "منصة إدارة العمل",
+    "companyName": "التخطيط والمناهج"
   },
   "nav": {
     "dashboard": "الرئيسية",
@@ -28,13 +29,14 @@
   },
   "header": {
     "userPlaceholder": "المستخدم",
-    "notifications": "الإشعارات"
+    "notifications": "الإشعارات",
+    "logout": "تسجيل الخروج"
   },
   "dashboard": {
     "title": "الرئيسية",
-    "description": "مرحباً بك في منصة إدارة العمل. سيتم تفعيل الوحدات في المراحل القادمة.",
+    "description": "مرحباً بك في منصة إدارة العمل.",
     "emptyTitle": "لا توجد بيانات بعد",
-    "emptyDescription": "ابدأ بإعداد المستخدمين والمصادقة في المرحلة التالية."
+    "emptyDescription": "ابدأ بإدارة المستخدمين من قائمة الموظفين."
   },
   "states": {
     "loading": "جارٍ التحميل...",
@@ -48,5 +50,75 @@
     "title": "الإشعارات",
     "empty": "لا توجد إشعارات حالياً",
     "comingSoon": "سيتم تفعيل مركز الإشعارات بعد إعداد المصادقة."
+  },
+  "common": {
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "saving": "جارٍ الحفظ...",
+    "confirm": "تأكيد",
+    "errorTitle": "حدث خطأ",
+    "unexpectedError": "حدث خطأ غير متوقع"
+  },
+  "roles": {
+    "admin": "مسؤول",
+    "department_manager": "مدير قسم",
+    "employee": "موظف"
+  },
+  "auth": {
+    "loginTitle": "تسجيل الدخول",
+    "loginDescription": "أدخل رقم الموظف وكلمة المرور للمتابعة.",
+    "employeeNumber": "رقم الموظف",
+    "password": "كلمة المرور",
+    "login": "دخول",
+    "loggingIn": "جارٍ تسجيل الدخول...",
+    "loginFailed": "تعذر تسجيل الدخول",
+    "changePasswordTitle": "تغيير كلمة المرور",
+    "changePasswordDescription": "يجب تعيين كلمة مرور جديدة قبل استخدام النظام.",
+    "currentPassword": "كلمة المرور الحالية",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmPassword": "تأكيد كلمة المرور",
+    "changePassword": "تغيير كلمة المرور",
+    "changingPassword": "جارٍ التغيير...",
+    "changePasswordFailed": "تعذر تغيير كلمة المرور"
+  },
+  "employees": {
+    "title": "الموظفون",
+    "description": "إدارة حسابات المستخدمين والأدوار وحالة الحساب.",
+    "create": "إضافة موظف",
+    "createTitle": "إضافة موظف جديد",
+    "createDescription": "كلمة المرور المؤقتة هي رقم الموظف، وسيُطلب تغييرها عند أول دخول.",
+    "employeeNumber": "رقم الموظف",
+    "fullName": "الاسم الكامل",
+    "phone": "الهاتف",
+    "phoneHint": "يجب أن يبدأ بـ 09 ويتبعه 8 أرقام، مثل 0912345678",
+    "role": "الدور",
+    "status": "الحالة",
+    "actions": "إجراءات",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "activate": "تفعيل",
+    "deactivate": "تعطيل",
+    "resetPassword": "إعادة تعيين كلمة المرور",
+    "delete": "حذف",
+    "searchPlaceholder": "بحث بالاسم أو الرقم...",
+    "emptyTitle": "لا يوجد موظفون",
+    "emptyDescription": "أضف أول موظف للبدء.",
+    "createFailed": "تعذر إنشاء الموظف",
+    "updateFailed": "تعذر تحديث الموظف",
+    "deleteFailed": "تعذر حذف الموظف",
+    "resetFailed": "تعذر إعادة تعيين كلمة المرور",
+    "createSuccess": "تم إضافة الموظف بنجاح. كلمة المرور المؤقتة هي رقم الموظف.",
+    "resetSuccess": "تمت إعادة تعيين كلمة مرور {name}. كلمة المرور المؤقتة هي {employeeNumber}، وسيُطلب تغييرها عند الدخول.",
+    "deleteSuccess": "تم حذف {name} بنجاح.",
+    "activateSuccess": "تم تفعيل حساب {name}.",
+    "deactivateSuccess": "تم تعطيل حساب {name}.",
+    "confirmDeleteTitle": "حذف الموظف",
+    "confirmDeleteDescription": "هل أنت متأكد من حذف {name}؟ لا يمكن التراجع عن هذا الإجراء.",
+    "confirmResetTitle": "إعادة تعيين كلمة المرور",
+    "confirmResetDescription": "سيتم تعيين كلمة مرور {name} إلى رقم الموظف وسيُطلب تغييرها عند الدخول.",
+    "confirmDeactivateTitle": "تعطيل الحساب",
+    "confirmDeactivateDescription": "تعطيل حساب {name} سيمنعه من تسجيل الدخول.",
+    "confirmActivateTitle": "تفعيل الحساب",
+    "confirmActivateDescription": "تفعيل حساب {name} سيسمح له بتسجيل الدخول مجدداً."
   }
 }

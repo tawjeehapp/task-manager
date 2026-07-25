@@ -454,13 +454,47 @@ Every async operation requires:
 
 - Loading state
 - Error state
-- Success state
+- Success feedback
 
 Examples:
 
 - Buttons
 - Tables
 - Pages
+
+---
+
+# Success Feedback
+
+Every successful user-submitted action must provide visible success feedback.
+
+Required for mutations such as:
+
+- Create
+- Update
+- Delete
+- Activate / deactivate
+- Password reset
+- Approvals and similar workflows
+
+Acceptable patterns:
+
+- Page alert / banner
+- Snackbar / toast
+- Inline form success message
+- Explicit confirmation in a dialog result
+
+Not acceptable:
+
+- Dialog closes with no message
+- List refreshes with no indication of what succeeded
+- Silent success
+
+Success and error messages must be:
+
+- Clear
+- Translated
+- Shown close to the user’s action context when practical
 
 ---
 

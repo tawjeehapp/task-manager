@@ -13,6 +13,7 @@ Stack:
 - Supabase
 - next-intl
 - TanStack Query
+- Vitest + React Testing Library
 
 ---
 
@@ -52,17 +53,81 @@ cp .env.example .env.local
 
 2. Fill in values from your Supabase project:
 
-| Variable | Required for Milestone 0 | Notes |
+| Variable | Required for Milestone 1 | Notes |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Recommended | Public Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Recommended | Public anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | No | Server-only; never expose to the browser |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only; never expose to the browser |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Push foundation (unused until later) |
 | `VAPID_PRIVATE_KEY` | No | Server-only push foundation |
 
 Never commit `.env.local` or real secrets.
 
-Milestone 0 does **not** create database migrations. You only need a Supabase project if you want client setup to resolve; the Arabic app shell runs without a live database.
+The URL/keys in `.env.local` must belong to the **same** Supabase project you link with the CLI below.
+
+---
+
+# Database (Milestone 1)
+
+Apply schema **before** seeding. Order matters.
+
+## 1. Log in to Supabase CLI
+
+```bash
+npm run supabase:login
+```
+
+This opens the browser. Use the account that owns your task-manager project.
+
+Confirm access:
+
+```bash
+npm run supabase:status
+```
+
+You should see your projects listed (not `Forbidden`).
+
+## 2. Link this repository to the remote project
+
+```bash
+npm run supabase:link
+```
+
+Select the project whose URL matches `NEXT_PUBLIC_SUPABASE_URL` in `.env.local`.
+
+## 3. Push migrations
+
+```bash
+npm run supabase:db:push
+```
+
+This creates `public.users`, `permissions`, `role_permissions`, and RLS helpers.
+
+## 4. Seed the initial admin
+
+```bash
+npm run seed:admin
+```
+
+Initial admin:
+
+- Employee number: `0000`
+- Temporary password: `0000`
+- Must change password on first login
+
+Auth emails use the synthetic domain `@task-manager.com`. Users enter only the 4-digit employee number.
+
+If seed fails with `Could not find the table 'public.users'`, migrations were not applied to that project yet — go back to step 3.
+
+### Auth password settings (required for employee-number temps)
+
+Temporary passwords are the 4-digit employee number. In the Supabase Dashboard → **Authentication → Providers → Email** (password settings):
+
+- Set **minimum password length** to `4` (or leave defaults; admin reset recreates the Auth user when strength checks block short temps)
+- Avoid requiring letters/symbols if you want users to keep using numeric temps at first login
+- If **leaked password protection** blocks common numbers, disable it for this internal app or keep the recreate-based admin reset
+
+Forced password change still encourages stronger passwords after first login.
 
 ---
 
@@ -79,8 +144,13 @@ Other commands:
 ```bash
 npm run lint
 npm run typecheck
+npm run test
 npm run build
 npm run start
+npm run supabase:login
+npm run supabase:link
+npm run supabase:db:push
+npm run seed:admin
 ```
 
 ---
@@ -93,12 +163,13 @@ Feature-based layout under `src/`:
 src/
   app/           # App Router pages and API routes
   components/    # UI and shared components
-  features/      # Feature modules (e.g. notifications stubs)
-  lib/           # Supabase, auth stubs, API helpers, push stubs
+  features/      # Feature modules (auth, users, notifications)
+  lib/           # Supabase, auth, permissions, API helpers
   providers/     # React providers (TanStack Query, etc.)
   i18n/          # next-intl configuration
   config/        # Env validation
 messages/        # Translation files (Arabic-first)
+supabase/migrations/
 ```
 
 ---
@@ -127,24 +198,24 @@ Service workers, offline caching, and `next-pwa` runtime integration are deferre
 
 # Current Milestone
 
-**Milestone 0 — Project Foundation**
+**Milestone 1 — Authentication and User Management**
 
 Includes:
 
-- RTL / Arabic localization foundation
-- Application shell
-- Tailwind / shadcn foundation
-- Supabase client setup
-- TanStack Query setup
-- PWA manifest foundation
-- Notification infrastructure stubs
+- Employee-number login (synthetic Supabase email)
+- Session management and logout
+- Forced password change
+- Admin user CRUD, activate/deactivate, delete
+- Admin password reset (manager subordinate reset deferred to Milestone 2)
+- Permissions tables + `hasPermission()`
+- Basic RLS with non-recursive `SECURITY DEFINER` helpers
+- Vitest coverage for auth/permissions/user rules
 
 Does **not** include:
 
-- Database migrations or tables
-- Authentication UI
-- Users, departments, projects, tasks
-- Notification persistence
+- Departments / memberships
+- Manager password reset for subordinates
+- Projects, tasks, attendance
 
 See [06-roadmap.md](./06-roadmap.md) for the full roadmap.
 

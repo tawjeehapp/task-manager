@@ -17,6 +17,8 @@ export type NavItem = {
   href: string;
   icon: LucideIcon;
   enabled: boolean;
+  /** When set, item is shown only if the user has this permission code. */
+  permission?: string;
 };
 
 export type NavSection = {
@@ -59,9 +61,10 @@ export const navSections: NavSection[] = [
       },
       {
         key: "employees",
-        href: "#",
+        href: "/employees",
         icon: Users,
-        enabled: false,
+        enabled: true,
+        permission: "user.manage",
       },
     ],
   },

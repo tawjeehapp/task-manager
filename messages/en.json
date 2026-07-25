@@ -1,7 +1,8 @@
 {
   "app": {
     "name": "Work Management Platform",
-    "shortName": "Work Mgmt"
+    "shortName": "Work Mgmt",
+    "companyName": "Curriculum & Planning Administration"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -28,13 +29,14 @@
   },
   "header": {
     "userPlaceholder": "User",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "logout": "Log out"
   },
   "dashboard": {
     "title": "Dashboard",
-    "description": "Welcome to the Work Management Platform. Modules will be enabled in later milestones.",
+    "description": "Welcome to the Work Management Platform.",
     "emptyTitle": "No data yet",
-    "emptyDescription": "Authentication and users will be set up in the next milestone."
+    "emptyDescription": "Start by managing users from the employees list."
   },
   "states": {
     "loading": "Loading...",
@@ -48,5 +50,75 @@
     "title": "Notifications",
     "empty": "No notifications yet",
     "comingSoon": "The notification center will be enabled after authentication is set up."
+  },
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving...",
+    "confirm": "Confirm",
+    "errorTitle": "Something went wrong",
+    "unexpectedError": "An unexpected error occurred"
+  },
+  "roles": {
+    "admin": "Administrator",
+    "department_manager": "Department Manager",
+    "employee": "Employee"
+  },
+  "auth": {
+    "loginTitle": "Sign in",
+    "loginDescription": "Enter your employee number and password to continue.",
+    "employeeNumber": "Employee number",
+    "password": "Password",
+    "login": "Sign in",
+    "loggingIn": "Signing in...",
+    "loginFailed": "Sign in failed",
+    "changePasswordTitle": "Change password",
+    "changePasswordDescription": "You must set a new password before using the system.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "changePassword": "Change password",
+    "changingPassword": "Updating...",
+    "changePasswordFailed": "Could not change password"
+  },
+  "employees": {
+    "title": "Employees",
+    "description": "Manage user accounts, roles, and account status.",
+    "create": "Add employee",
+    "createTitle": "Add new employee",
+    "createDescription": "The temporary password is the employee number; they must change it on first login.",
+    "employeeNumber": "Employee number",
+    "fullName": "Full name",
+    "phone": "Phone",
+    "phoneHint": "Must start with 09 followed by 8 digits, e.g. 0912345678",
+    "role": "Role",
+    "status": "Status",
+    "actions": "Actions",
+    "active": "Active",
+    "inactive": "Inactive",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "resetPassword": "Reset password",
+    "delete": "Delete",
+    "searchPlaceholder": "Search by name or number...",
+    "emptyTitle": "No employees",
+    "emptyDescription": "Add the first employee to get started.",
+    "createFailed": "Could not create employee",
+    "updateFailed": "Could not update employee",
+    "deleteFailed": "Could not delete employee",
+    "resetFailed": "Could not reset password",
+    "createSuccess": "Employee added. The temporary password is their employee number.",
+    "resetSuccess": "Password for {name} was reset. Temporary password is {employeeNumber}; they must change it on next login.",
+    "deleteSuccess": "{name} was deleted.",
+    "activateSuccess": "{name}'s account was activated.",
+    "deactivateSuccess": "{name}'s account was deactivated.",
+    "confirmDeleteTitle": "Delete employee",
+    "confirmDeleteDescription": "Are you sure you want to delete {name}? This cannot be undone.",
+    "confirmResetTitle": "Reset password",
+    "confirmResetDescription": "{name}'s password will be set to their employee number and they must change it on next login.",
+    "confirmDeactivateTitle": "Deactivate account",
+    "confirmDeactivateDescription": "Deactivating {name} will prevent them from signing in.",
+    "confirmActivateTitle": "Activate account",
+    "confirmActivateDescription": "Activating {name} will allow them to sign in again."
   }
 }

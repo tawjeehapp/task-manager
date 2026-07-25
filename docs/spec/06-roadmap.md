@@ -16,6 +16,23 @@ The roadmap prioritizes:
 - User workflows
 - Operational visibility
 
+## Testing Strategy
+
+Testing infrastructure will be introduced in Milestone 1.
+
+Milestone 1:
+- Add Vitest
+- Add React Testing Library
+- Test authentication, users, permissions, and organization rules
+
+Milestone 2:
+- Expand testing to projects, tasks, dependencies, and workload calculations
+
+Milestone 3:
+- Test attendance calculations and approval workflows
+
+End-to-end testing with Playwright will be introduced when complete business workflows exist.
+
 ---
 
 # Milestone 0 — Project Foundation
@@ -93,7 +110,18 @@ Implement:
 
 ## Goal
 
-Enable users to access the system securely.
+Enable users to access the system securely. Access should be based on employee number not email (4 digits). To simplify things you can use supabase email provider but use a hardcoded domain without email validation.
+For example @task-manager.com
+
+Users shouldn't need to enter this @domain.com 
+
+Forgot password will be managed by admins and department managers to reset password of their below employees.
+
+**Milestone 1 scope:** Admin-only password reset. Manager → subordinate reset is implemented in Milestone 2 once department membership exists.
+
+You can create an initial admin account 0000 with a temporary password.
+
+When employees are added, their password is the same as their employee number and they get prompted/forced to change it.
 
 ## Features
 
@@ -112,6 +140,7 @@ Admin can:
 
 - Create users
 - Activate/deactivate users
+- Delete users
 - Assign roles
 
 Roles:
@@ -138,9 +167,7 @@ Implement:
 Support:
 
 - Name
-- Email
 - Phone
-- Avatar
 - Role
 - Status
 

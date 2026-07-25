@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { navSections } from "@/components/shared/nav-config";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
@@ -14,10 +14,30 @@ type AppSidebarProps = {
   onNavigate?: () => void;
 };
 
+type MeResponse = {
+  user: { fullName: string };
+  permissions: string[];
+};
+
+async function fetchMe(): Promise<MeResponse | null> {
+  const response = await fetch("/api/auth/me");
+  if (!response.ok) {
+    return null;
+  }
+  const payload = (await response.json()) as { data?: MeResponse };
+  return payload.data ?? null;
+}
+
 export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
   const t = useTranslations("nav");
-  const tApp = useTranslations("app");
   const pathname = usePathname();
+  const meQuery = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: fetchMe,
+    staleTime: 60_000,
+  });
+
+  const permissions = meQuery.data?.permissions ?? [];
 
   return (
     <aside
@@ -26,63 +46,76 @@ export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
         className,
       )}
     >
-      <div className="flex h-14 items-center px-4">
-        <Link
-          href="/"
-          className="truncate text-sm font-semibold tracking-tight"
-          onClick={onNavigate}
-        >
-          {tApp("name")}
-        </Link>
-      </div>
-      <Separator />
-      <ScrollArea className="flex-1 px-3 py-4">
-        <nav className="space-y-6">
-          {navSections.map((section) => (
-            <div key={section.key} className="space-y-2">
-              <p className="px-2 text-xs font-medium text-muted-foreground">
-                {t(section.key)}
-              </p>
-              <ul className="space-y-1">
-                {section.items.map((item) => {
-                  const Icon = item.icon;
-                  const label = t(item.key);
-                  const isActive = item.enabled && pathname === item.href;
+      <ScrollArea className="flex-1 px-3 py-5">
+        <nav className="space-y-7">
+          {navSections.map((section) => {
+            const visibleItems = section.items.filter((item) => {
+              if (!item.enabled) {
+                return true;
+              }
+              if (!item.permission) {
+                return true;
+              }
+              return permissions.includes(item.permission);
+            });
 
-                  if (!item.enabled) {
+            if (visibleItems.length === 0) {
+              return null;
+            }
+
+            return (
+              <div key={section.key} className="space-y-2">
+                <p className="px-3 text-sm font-semibold text-sidebar-primary">
+                  {t(section.key)}
+                </p>
+                <ul className="space-y-1.5">
+                  {visibleItems.map((item) => {
+                    const Icon = item.icon;
+                    const label = t(item.key);
+                    const isActive = item.enabled && pathname === item.href;
+
+                    if (!item.enabled) {
+                      return (
+                        <li key={item.key}>
+                          <span
+                            className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-base text-sidebar-foreground/45"
+                            aria-disabled="true"
+                          >
+                            <Icon className="size-5 shrink-0" />
+                            <span className="truncate">{label}</span>
+                          </span>
+                        </li>
+                      );
+                    }
+
                     return (
                       <li key={item.key}>
-                        <span
-                          className="flex cursor-not-allowed items-center gap-2 rounded-lg px-2 py-2 text-sm text-muted-foreground/70"
-                          aria-disabled="true"
+                        <Link
+                          href={item.href}
+                          onClick={onNavigate}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                            isActive &&
+                              "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm ring-1 ring-sidebar-primary/50",
+                          )}
                         >
-                          <Icon className="size-4 shrink-0" />
+                          <Icon
+                            className={cn(
+                              "size-5 shrink-0",
+                              isActive
+                                ? "text-sidebar-primary"
+                                : "text-sidebar-foreground",
+                            )}
+                          />
                           <span className="truncate">{label}</span>
-                        </span>
+                        </Link>
                       </li>
                     );
-                  }
-
-                  return (
-                    <li key={item.key}>
-                      <Link
-                        href={item.href}
-                        onClick={onNavigate}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                          isActive &&
-                            "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
-                        )}
-                      >
-                        <Icon className="size-4 shrink-0" />
-                        <span className="truncate">{label}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
+                  })}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
       </ScrollArea>
     </aside>

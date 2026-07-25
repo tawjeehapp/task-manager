@@ -4,14 +4,24 @@ Arabic-first, RTL work management platform for organizations. Built with Next.js
 
 ## Current status
 
-**Milestone 0 — Project Foundation** is in progress: app shell, RTL localization, Supabase/TanStack Query wiring, PWA manifest, and notification infrastructure stubs. No business features or database migrations yet.
+**Milestone 1 — Authentication and User Management** is implemented:
+
+- Employee-number login (`NNNN` → `NNNN@task-manager.com`)
+- Session management, logout, forced password change
+- Admin user CRUD, activate/deactivate, delete, password reset
+- DB-backed permissions + RLS (`SECURITY DEFINER` helpers)
+- Vitest coverage for auth, permissions, and user rules
 
 ## Quick start
 
 1. Install [Node.js 22+](https://nodejs.org/)
 2. Install dependencies: `npm install`
-3. Copy env: `cp .env.example .env.local` and fill Supabase values as needed
-4. Run: `npm run dev`
+3. Copy env: `cp .env.example .env.local` and fill Supabase values for **your** project
+4. Log in to Supabase CLI: `npm run supabase:login`
+5. Link the project: `npm run supabase:link` (same project as `.env.local`)
+6. Push migrations: `npm run supabase:db:push`
+7. Seed admin: `npm run seed:admin` (employee `0000` / password `0000`)
+8. Run: `npm run dev`
 
 See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for full setup details.
 
@@ -31,9 +41,14 @@ See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for f
 ## Scripts
 
 ```bash
-npm run dev        # Development server
-npm run build      # Production build
-npm run start      # Start production server
-npm run lint       # ESLint
-npm run typecheck  # TypeScript check
+npm run dev              # Development server
+npm run build            # Production build
+npm run start            # Start production server
+npm run lint             # ESLint
+npm run typecheck        # TypeScript check
+npm run test             # Vitest
+npm run supabase:login   # Log in to Supabase CLI
+npm run supabase:link    # Link repo to remote project
+npm run supabase:db:push # Apply migrations to linked project
+npm run seed:admin       # Seed initial admin 0000
 ```

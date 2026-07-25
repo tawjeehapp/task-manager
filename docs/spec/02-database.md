@@ -174,12 +174,14 @@ Fields:
 ```
 id
 auth_user_id
+employee_number
 full_name
 email
 phone
 avatar_url
 role
 is_active
+must_change_password
 created_at
 updated_at
 ```
@@ -188,6 +190,20 @@ Notes:
 
 - Authentication is handled by Supabase Auth.
 - Application user profile data is stored separately.
+- Login uses a 4-digit `employee_number`, mapped to a synthetic Auth email `{employee_number}@task-manager.com`.
+- `must_change_password` forces a password change after first login or admin reset.
+- Temporary initial password equals the employee number and must never be returned by APIs.
+- Auth user + profile creation is a compensating transaction (create Auth → create profile → delete Auth if profile fails).
+
+### RLS helpers (users)
+
+Policies on `users` must not query `users` under RLS to resolve the caller's role (recursion risk).
+
+Use `SECURITY DEFINER` helpers:
+
+- `current_user_id()`
+- `current_user_role()`
+- `is_admin()`
 
 ---
 
