@@ -1,5 +1,5 @@
 /**
- * Idempotent development dataset seed (M1–M5).
+ * Idempotent development dataset seed (M1–M6).
  *
  * Usage:
  *   npm run seed:dev
@@ -18,8 +18,10 @@ import { IDS, RESET_ID_SETS, SEED_USERS } from "./seed-dev/catalog";
 import {
   calendarDateInOrgTimezone,
   computeTotalHours,
+  countWorkingDays,
   deleteByIds,
   ensureSeedUser,
+  nextWorkingDayOnOrAfter,
   orgLocalDateTimeIso,
   shiftOrgDate,
   upsertRows,
@@ -71,6 +73,10 @@ async function main() {
   if (reset) {
     console.log("Deleting seed-owned rows by fixed IDs…");
     // FK-safe order
+    await deleteByIds(admin, "employee_requests", RESET_ID_SETS.employee_requests);
+    await deleteByIds(admin, "leave_requests", RESET_ID_SETS.leave_requests);
+    await deleteByIds(admin, "leave_balances", RESET_ID_SETS.leave_balances);
+    await deleteByIds(admin, "leave_types", RESET_ID_SETS.leave_types);
     await deleteByIds(admin, "work_logs", RESET_ID_SETS.work_logs);
     await deleteByIds(
       admin,
@@ -307,6 +313,7 @@ async function main() {
       priority: "high",
       assigned_to: users["1003"],
       created_by: users["1001"],
+      due_date: shiftOrgDate(today, 7),
       estimated_hours: 12,
       progress_percentage: 0,
       completed_at: null,
@@ -322,6 +329,7 @@ async function main() {
       priority: "medium",
       assigned_to: users["1004"],
       created_by: users["1001"],
+      due_date: shiftOrgDate(today, 5),
       estimated_hours: 3,
       progress_percentage: 0,
       completed_at: null,
@@ -337,6 +345,7 @@ async function main() {
       priority: "low",
       assigned_to: users["1005"],
       created_by: users["1001"],
+      due_date: shiftOrgDate(today, 14),
       estimated_hours: 2,
       progress_percentage: 0,
       completed_at: null,
@@ -674,6 +683,245 @@ async function main() {
     },
   ]);
 
+  // --- Leave types / balances / requests (M6) ---
+  const leaveYear = Number(today.slice(0, 4));
+  const leaveStartPending = nextWorkingDayOnOrAfter(shiftOrgDate(today, 3));
+  const leaveEndPending = nextWorkingDayOnOrAfter(shiftOrgDate(leaveStartPending, 2));
+  const leavePendingDays = countWorkingDays(leaveStartPending, leaveEndPending);
+
+  const leaveStartApproved = nextWorkingDayOnOrAfter(shiftOrgDate(today, -10));
+  const leaveEndApproved = nextWorkingDayOnOrAfter(shiftOrgDate(leaveStartApproved, 1));
+  const leaveApprovedDays = countWorkingDays(leaveStartApproved, leaveEndApproved);
+
+  const leaveStartRejected = nextWorkingDayOnOrAfter(shiftOrgDate(today, -20));
+  const leaveEndRejected = leaveStartRejected;
+
+  const leaveStartKhalid = nextWorkingDayOnOrAfter(shiftOrgDate(today, 10));
+  const leaveEndKhalid = leaveStartKhalid;
+
+  await upsertRows(admin, "leave_types", [
+    {
+      id: IDS.leaveTypeAnnual,
+      name: "إجازة سنوية",
+      description: "رصيد الإجازة السنوية",
+      is_active: true,
+      updated_at: now,
+    },
+    {
+      id: IDS.leaveTypeSick,
+      name: "إجازة مرضية",
+      description: "إجازة مرضية",
+      is_active: true,
+      updated_at: now,
+    },
+    {
+      id: IDS.leaveTypeEmergency,
+      name: "إجازة طارئة",
+      description: "إجازة طارئة قصيرة",
+      is_active: true,
+      updated_at: now,
+    },
+  ]);
+
+  await upsertRows(admin, "leave_balances", [
+    {
+      id: IDS.balSaraAnnual,
+      user_id: users["1003"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      allocated_days: 21,
+      used_days: 0,
+      year: leaveYear,
+      updated_at: now,
+    },
+    {
+      id: IDS.balKhalidAnnual,
+      user_id: users["1004"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      allocated_days: 21,
+      used_days: 0,
+      year: leaveYear,
+      updated_at: now,
+    },
+    {
+      id: IDS.balNoorAnnual,
+      user_id: users["1005"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      allocated_days: 21,
+      used_days: leaveApprovedDays,
+      year: leaveYear,
+      updated_at: now,
+    },
+    {
+      id: IDS.balYousefAnnual,
+      user_id: users["1006"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      allocated_days: 21,
+      used_days: 0,
+      year: leaveYear,
+      updated_at: now,
+    },
+    {
+      id: IDS.balLaylaAnnual,
+      user_id: users["1007"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      allocated_days: 21,
+      used_days: 0,
+      year: leaveYear,
+      updated_at: now,
+    },
+    {
+      id: IDS.balOmarAnnual,
+      user_id: users["1008"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      allocated_days: 21,
+      used_days: 0,
+      year: leaveYear,
+      updated_at: now,
+    },
+    {
+      id: IDS.balSaraSick,
+      user_id: users["1003"],
+      leave_type_id: IDS.leaveTypeSick,
+      allocated_days: 10,
+      used_days: 0,
+      year: leaveYear,
+      updated_at: now,
+    },
+    {
+      id: IDS.balKhalidSick,
+      user_id: users["1004"],
+      leave_type_id: IDS.leaveTypeSick,
+      allocated_days: 10,
+      used_days: 0,
+      year: leaveYear,
+      updated_at: now,
+    },
+  ]);
+
+  await upsertRows(admin, "leave_requests", [
+    {
+      id: IDS.leavePendingSara,
+      user_id: users["1003"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      start_date: leaveStartPending,
+      end_date: leaveEndPending,
+      days: leavePendingDays,
+      reason: "إجازة شخصية",
+      status: "pending",
+      approved_by: null,
+      approved_at: null,
+      rejection_reason: null,
+      updated_at: now,
+    },
+    {
+      id: IDS.leaveApprovedNoor,
+      user_id: users["1005"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      start_date: leaveStartApproved,
+      end_date: leaveEndApproved,
+      days: leaveApprovedDays,
+      reason: "إجازة معتمدة",
+      status: "approved",
+      approved_by: users["1001"],
+      approved_at: now,
+      rejection_reason: null,
+      updated_at: now,
+    },
+    {
+      id: IDS.leaveRejectedYousef,
+      user_id: users["1006"],
+      leave_type_id: IDS.leaveTypeAnnual,
+      start_date: leaveStartRejected,
+      end_date: leaveEndRejected,
+      days: 1,
+      reason: "طلب مرفوض سابقاً",
+      status: "rejected",
+      approved_by: users["1002"],
+      approved_at: now,
+      rejection_reason: "تعارض مع مواعيد المشروع",
+      updated_at: now,
+    },
+    {
+      id: IDS.leavePendingKhalid,
+      user_id: users["1004"],
+      leave_type_id: IDS.leaveTypeSick,
+      start_date: leaveStartKhalid,
+      end_date: leaveEndKhalid,
+      days: 1,
+      reason: "موعد طبي",
+      status: "pending",
+      approved_by: null,
+      approved_at: null,
+      rejection_reason: null,
+      updated_at: now,
+    },
+  ]);
+
+  const extensionRequested = nextWorkingDayOnOrAfter(shiftOrgDate(today, 21));
+  const approvedExtensionDate = nextWorkingDayOnOrAfter(shiftOrgDate(today, 30));
+
+  // Apply approved extension side effect on task due_date (Noor's docs task).
+  await upsertRows(admin, "tasks", [
+    {
+      id: IDS.taskDocsDeploy,
+      project_id: IDS.projectPlatform,
+      parent_task_id: null,
+      title: "توثيق النشر",
+      description: "محجوبة حتى اكتمال مراجعة الصلاحيات",
+      status: "blocked",
+      priority: "low",
+      assigned_to: users["1005"],
+      created_by: users["1001"],
+      due_date: approvedExtensionDate,
+      estimated_hours: 2,
+      progress_percentage: 0,
+      completed_at: null,
+      updated_at: now,
+    },
+  ]);
+
+  await upsertRows(admin, "employee_requests", [
+    {
+      id: IDS.empReqPendingExtension,
+      user_id: users["1003"],
+      task_id: IDS.taskAttendanceUi,
+      type: "extension",
+      reason: "حاجة لمزيد من الوقت للواجهة",
+      requested_date: extensionRequested,
+      status: "pending",
+      reviewed_by: null,
+      reviewed_at: null,
+      rejection_reason: null,
+      updated_at: now,
+    },
+    {
+      id: IDS.empReqPendingExcusal,
+      user_id: users["1004"],
+      task_id: IDS.taskReviewPerms,
+      type: "excusal",
+      reason: "تعارض مع مهام أخرى",
+      requested_date: null,
+      status: "pending",
+      reviewed_by: null,
+      reviewed_at: null,
+      rejection_reason: null,
+      updated_at: now,
+    },
+    {
+      id: IDS.empReqApprovedExtension,
+      user_id: users["1005"],
+      task_id: IDS.taskDocsDeploy,
+      type: "extension",
+      reason: "تم تمديد الموعد سابقاً",
+      requested_date: approvedExtensionDate,
+      status: "approved",
+      reviewed_by: users["1001"],
+      reviewed_at: now,
+      rejection_reason: null,
+      updated_at: now,
+    },
+  ]);
+
   // --- Summary ---
   console.log("\n=== Development seed complete ===\n");
   console.log("Credentials (password = employee number for newly created Auth users).");
@@ -730,6 +978,21 @@ async function main() {
   );
   console.log(
     `  • Work logs on parent + subtask + multiple days (سارة / خالد / يوسف / ليلى)`,
+  );
+  console.log(
+    `  • Leave pending (approve as أحمد 1001): سارة / خالد — /approvals → Leave`,
+  );
+  console.log(
+    `  • Leave approved history: نور · rejected: يوسف (فاطمة)`,
+  );
+  console.log(
+    `  • Task extension pending: سارة على إعداد واجهة الحضور — /approvals → Extensions`,
+  );
+  console.log(
+    `  • Task excusal pending: خالد على مراجعة الصلاحيات — /approvals → Excusals`,
+  );
+  console.log(
+    `  • Leave balances / manage types: admin 0000 on /leave → Manage`,
   );
   console.log("\nRe-run: npm run seed:dev");
   console.log("Reset seed-owned rows then reseed: npm run seed:dev -- --reset");

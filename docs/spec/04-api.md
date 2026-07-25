@@ -844,6 +844,33 @@ Notable error codes:
 
 ---
 
+# Leave and Employee Requests API (Milestone 6)
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET/POST | `/api/leave-types` | `leave.view` / `leave.manage` |
+| PATCH/DELETE | `/api/leave-types/[id]` | `leave.manage` (DELETE soft-deactivates) |
+| GET/PUT | `/api/leave-balances` | `leave.view` (scoped) / `leave.manage` |
+| GET/POST | `/api/leave-requests` | `leave.view` |
+| GET | `/api/leave-requests/[id]` | `leave.view` + scope |
+| POST | `/api/leave-requests/[id]/approve` | `leave.approve` + scope; not self |
+| POST | `/api/leave-requests/[id]/reject` | `leave.approve` + `{ reason }` |
+| GET/POST | `/api/employee-requests` | `employee_request.view` / `create` |
+| GET | `/api/employee-requests/[id]` | `employee_request.view` + scope |
+| POST | `/api/employee-requests/[id]/approve` | `employee_request.approve` + scope |
+| POST | `/api/employee-requests/[id]/reject` | `employee_request.approve` + `{ reason }` |
+
+Notable error codes:
+
+- `INSUFFICIENT_LEAVE_BALANCE` (409) — submit or approve; approve leaves request pending
+- `LEAVE_OVERLAP` / `LEAVE_YEAR_MISMATCH` / `LEAVE_TYPE_INACTIVE` / `LEAVE_BALANCE_MISSING`
+- `CANNOT_APPROVE_OWN` / `NOT_TASK_ASSIGNEE` / `PENDING_REQUEST_EXISTS`
+- `EXTENSION_DATE_INVALID`
+
+Submit/approve leave and approve employee requests use Postgres RPCs for atomicity.
+
+---
+
 # API Design Principles
 
 The API should be:

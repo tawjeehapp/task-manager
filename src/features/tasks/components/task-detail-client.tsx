@@ -169,11 +169,17 @@ export function TaskDetailClient({
   viewerId,
 }: TaskDetailClientProps) {
   const t = useTranslations("tasks");
+  const tReq = useTranslations("employeeRequests");
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [subtaskOpen, setSubtaskOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [extensionOpen, setExtensionOpen] = useState(false);
+  const [excusalOpen, setExcusalOpen] = useState(false);
+  const [requestedDate, setRequestedDate] = useState("");
+  const [requestReason, setRequestReason] = useState("");
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   const canEditFull = canAssign || canCreate;
   const taskQuery = useQuery({
@@ -206,6 +212,97 @@ export function TaskDetailClient({
   const statusLockedByDeps =
     (taskQuery.data?.incompleteDependencyCount ?? 0) > 0;
   const canChangeStatus = canEditStatus && !statusLockedByDeps;
+
+  const pendingRequestsQuery = useQuery({
+    queryKey: ["employee-requests", "mine", taskId],
+    enabled: isAssignee,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        taskId,
+        status: "pending",
+        page: "1",
+        pageSize: "25",
+      });
+      const response = await fetch(`/api/employee-requests?${params}`);
+      const payload = (await response.json()) as {
+        data?: { items: { type: string }[] };
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Failed");
+      }
+      return payload.data?.items ?? [];
+    },
+  });
+
+  const hasPendingExtension = (pendingRequestsQuery.data ?? []).some(
+    (r) => r.type === "extension",
+  );
+  const hasPendingExcusal = (pendingRequestsQuery.data ?? []).some(
+    (r) => r.type === "excusal",
+  );
+
+  const extensionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/employee-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId,
+          type: "extension",
+          requestedDate,
+          reason: requestReason || null,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? tReq("extensionTitle"));
+      }
+    },
+    onSuccess: async () => {
+      setSuccessMessage(tReq("extensionSuccess"));
+      setRequestError(null);
+      setExtensionOpen(false);
+      setRequestedDate("");
+      setRequestReason("");
+      await queryClient.invalidateQueries({
+        queryKey: ["employee-requests", "mine", taskId],
+      });
+    },
+    onError: (error: Error) => setRequestError(error.message),
+  });
+
+  const excusalMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/employee-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId,
+          type: "excusal",
+          reason: requestReason || null,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? tReq("excusalTitle"));
+      }
+    },
+    onSuccess: async () => {
+      setSuccessMessage(tReq("excusalSuccess"));
+      setRequestError(null);
+      setExcusalOpen(false);
+      setRequestReason("");
+      await queryClient.invalidateQueries({
+        queryKey: ["employee-requests", "mine", taskId],
+      });
+    },
+    onError: (error: Error) => setRequestError(error.message),
+  });
 
   const editForm = useForm<UpdateTaskInput>({
     resolver: zodResolver(updateTaskSchema) as never,
@@ -374,6 +471,39 @@ export function TaskDetailClient({
                 >
                   {t("viewProject")}
                 </Link>
+              ) : null}
+              {isAssignee && !hasPendingExtension ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setRequestError(null);
+                    setRequestedDate("");
+                    setRequestReason("");
+                    setExtensionOpen(true);
+                  }}
+                >
+                  {tReq("requestExtension")}
+                </Button>
+              ) : null}
+              {isAssignee && hasPendingExtension ? (
+                <Badge variant="secondary">{tReq("pendingExtension")}</Badge>
+              ) : null}
+              {isAssignee && !hasPendingExcusal ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setRequestError(null);
+                    setRequestReason("");
+                    setExcusalOpen(true);
+                  }}
+                >
+                  {tReq("requestExcusal")}
+                </Button>
+              ) : null}
+              {isAssignee && hasPendingExcusal ? (
+                <Badge variant="secondary">{tReq("pendingExcusal")}</Badge>
               ) : null}
               {canCreate && isRoot ? (
                 <Button
@@ -883,6 +1013,93 @@ export function TaskDetailClient({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={extensionOpen} onOpenChange={setExtensionOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tReq("extensionTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="extension-date">{tReq("requestedDate")}</Label>
+              <Input
+                id="extension-date"
+                type="date"
+                value={requestedDate}
+                onChange={(e) => setRequestedDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="extension-reason">{tReq("reason")}</Label>
+              <Input
+                id="extension-reason"
+                value={requestReason}
+                onChange={(e) => setRequestReason(e.target.value)}
+              />
+            </div>
+            {requestError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{requestError}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExtensionOpen(false)}
+            >
+              {tCommon("cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={!requestedDate || extensionMutation.isPending}
+              onClick={() => extensionMutation.mutate()}
+            >
+              {tReq("submit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={excusalOpen} onOpenChange={setExcusalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tReq("excusalTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="excusal-reason">{tReq("reason")}</Label>
+              <Input
+                id="excusal-reason"
+                value={requestReason}
+                onChange={(e) => setRequestReason(e.target.value)}
+              />
+            </div>
+            {requestError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{requestError}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExcusalOpen(false)}
+            >
+              {tCommon("cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={excusalMutation.isPending}
+              onClick={() => excusalMutation.mutate()}
+            >
+              {tReq("submit")}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

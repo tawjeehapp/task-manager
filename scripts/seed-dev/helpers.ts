@@ -48,6 +48,35 @@ export function shiftOrgDate(baseDate: string, dayOffset: number): string {
   return calendarDateInOrgTimezone(utc);
 }
 
+/** Next calendar date on or after base that is Sun–Thu (working day). */
+export function nextWorkingDayOnOrAfter(baseDate: string): string {
+  let cursor = baseDate;
+  for (let i = 0; i < 14; i += 1) {
+    const [y, m, d] = cursor.split("-").map(Number);
+    const utc = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    const day = utc.getUTCDay(); // 5 Fri, 6 Sat
+    if (day !== 5 && day !== 6) {
+      return cursor;
+    }
+    cursor = shiftOrgDate(cursor, 1);
+  }
+  return baseDate;
+}
+
+/** Count inclusive working days (Fri/Sat excluded). */
+export function countWorkingDays(startDate: string, endDate: string): number {
+  let count = 0;
+  let cursor = startDate;
+  while (cursor <= endDate) {
+    const [y, m, d] = cursor.split("-").map(Number);
+    const utc = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    const day = utc.getUTCDay();
+    if (day !== 5 && day !== 6) count += 1;
+    cursor = shiftOrgDate(cursor, 1);
+  }
+  return count;
+}
+
 /** Build timestamptz for an org-local wall time on a YYYY-MM-DD date. */
 export function orgLocalDateTimeIso(
   date: string,

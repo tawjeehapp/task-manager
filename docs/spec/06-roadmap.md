@@ -18,7 +18,7 @@ The application is built incrementally. Each milestone should produce a usable w
 
 ### Current project status
 
-**Milestones 0–5 core product scope is implemented** (M0 PWA/notifications still deferred). **Next up: Milestone 6 — Leave and Employee Requests.**
+**Milestones 0–6 core product scope is implemented** (M0 PWA/notifications still deferred). **Next up: Milestone 7 — Communication.**
 
 ---
 
@@ -33,7 +33,7 @@ Testing infrastructure was introduced in Milestone 1 (Vitest + React Testing Lib
 | **3** | Projects, tasks, access rules | **Completed** — schemas, access asserts, create-task (incl. subtask depth) |
 | **4** | Dependencies, workload, activity | **Partially completed** — dependency service tests present; dedicated workload/activity tests thin |
 | **5** | Attendance calculations, approval, work-log authz | **Completed** |
-| **6+** | Leave, approvals, and later workflows | **Remaining** |
+| **6+** | Leave, approvals, and later workflows | **Completed for M6** — leave working-day math, approve asserts; M7+ remaining |
 
 End-to-end testing with Playwright remains **deferred** until complete business workflows exist (attendance / leave / approvals).
 
@@ -299,7 +299,7 @@ Track employee time and effort.
 
 # Milestone 6 — Leave and Employee Requests
 
-**Status: Remaining**
+**Status: Completed**
 
 ## Goal
 
@@ -323,6 +323,30 @@ Employee requests a new deadline; manager approves or rejects.
 ### Task Excusal Request
 
 Employee requests removal from a task; manager approves or rejects.
+
+## Implementation status
+
+| Area | Status | Notes |
+|---|---|---|
+| Leave types (soft deactivate) | **Completed** | Admin manage; DELETE → `is_active = false` |
+| Yearly balances | **Completed** | Admin allocate; remaining shown with pending |
+| Working-day leave math | **Completed** | Inclusive; Fri–Sat off; Asia/Riyadh; same calendar year |
+| Submit / approve balance gates | **Completed** | Atomic RPCs; approve uses `allocated − used` only |
+| Extension / excusal | **Completed** | Task detail create; atomic approve + activity |
+| `/leave` + `/approvals` RTL UI | **Completed** | Central approvals tabs for leave / extensions / excusals |
+| Seed-dev M6 scenarios | **Completed** | Types, balances, pending/approved/rejected, requests |
+| Vitest | **Completed** | Working days, schemas, permissions, approve asserts |
+
+## Migrations
+
+- `20260725170000_milestone6_leave_employee_requests.sql`
+
+## Differences / notes
+
+- No cancel of leave (pending or approved) in M6.
+- No public holidays; no half-days.
+- Notifications for approvals deferred to Milestone 7.
+- Attendance approvals remain on `/attendance`.
 
 ---
 
@@ -450,8 +474,6 @@ Support:
 Possible additions:
 
 - Task comments and attachments
-- Calendar integration
-- Resource planning
 
 ---
 
@@ -491,7 +513,7 @@ Possible additions:
 5. Tasks — **Completed**
 6. Dependencies and workload — **Completed**
 7. Attendance — **Completed (Milestone 5)**
-8. Leave — **Remaining (Milestone 6)**
+8. Leave — **Completed (Milestone 6)**
 9. Communication — **Remaining (Milestone 7)**
 10. Reports — **Remaining (Milestone 8)**
 11. Gantt — **Remaining (Milestone 9)**

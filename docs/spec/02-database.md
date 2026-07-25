@@ -614,7 +614,9 @@ Fields:
 id
 name
 description
+is_active
 created_at
+updated_at
 ```
 
 Examples:
@@ -623,7 +625,7 @@ Examples:
 - Sick
 - Emergency
 
----
+Types are **soft-deactivated** (`is_active = false`) rather than physically deleted so historical requests remain valid.
 
 ## Leave Balances
 
@@ -646,7 +648,7 @@ created_at
 updated_at
 ```
 
----
+Unique on `(user_id, leave_type_id, year)`.
 
 ## Leave Requests
 
@@ -669,6 +671,7 @@ reason
 status
 approved_by
 approved_at
+rejection_reason
 created_at
 updated_at
 ```
@@ -679,8 +682,17 @@ Status:
 pending
 approved
 rejected
-cancelled
 ```
+
+Rules (M6):
+
+- `start_date` and `end_date` must be the same calendar year.
+- `days` = inclusive working days (Friday/Saturday excluded; Asia/Riyadh).
+- Submit balance check: `allocated − used − pending`.
+- Approve balance check: `allocated − used ≥ days` (atomic RPC; request stays pending on failure).
+- No cancellation flow in M6.
+
+Atomic RPCs: `submit_leave_request`, `approve_leave_request`.
 
 ---
 
@@ -709,6 +721,7 @@ requested_date
 status
 reviewed_by
 reviewed_at
+rejection_reason
 created_at
 updated_at
 ```
@@ -719,6 +732,10 @@ Types:
 extension
 excusal
 ```
+
+Status: `pending | approved | rejected`.
+
+Atomic RPC: `approve_employee_request` (request + task side effect + activity log).
 
 ---
 

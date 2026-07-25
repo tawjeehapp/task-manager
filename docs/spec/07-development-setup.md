@@ -133,7 +133,7 @@ Forced password change still encourages stronger passwords after first login.
 
 # Development dataset seed (`seed:dev`)
 
-For manual QA of M1–M5 features, use the deterministic development seed. It is **separate** from `seed:admin` and does not replace it.
+For manual QA of M1–M6 features, use the deterministic development seed. It is **separate** from `seed:admin` and does not replace it.
 
 Prerequisites: migrations applied, and `.env.local` has `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
 
@@ -250,11 +250,11 @@ Service workers and offline caching are deferred until a dedicated PWA milestone
 
 # Current Milestone
 
-**Milestone 6 — Leave and Employee Requests** is next.
+**Milestone 7 — Communication** is next.
 
-Milestones 0–5 core scope is implemented. See [06-roadmap.md](./06-roadmap.md) for accurate status (completed / partial / deferred).
+Milestones 0–6 core scope is implemented. See [06-roadmap.md](./06-roadmap.md) for accurate status (completed / partial / deferred).
 
-### Already applied (M1–M5)
+### Already applied (M1–M6)
 
 | Milestone | Migrations (under `supabase/migrations/`) |
 |---|---|
@@ -263,18 +263,19 @@ Milestones 0–5 core scope is implemented. See [06-roadmap.md](./06-roadmap.md)
 | 3 Projects & tasks | `20260725140000_milestone3_projects_tasks.sql`, `20260725141000_milestone3_project_manage_admin_only.sql` |
 | 4 Dependencies & activity | `20260725150000_milestone4_dependencies_activity.sql`, `20260725151000_milestone4_simplify_task_statuses.sql` |
 | 5 Attendance & work logs | `20260725160000_milestone5_attendance_work_logs.sql` |
+| 6 Leave & employee requests | `20260725170000_milestone6_leave_employee_requests.sql` |
 
-### Shipped through M5 (summary)
+### Shipped through M6 (summary)
 
 - Auth, users, permissions, departments, memberships
 - Projects, members, tasks, one-level subtasks, Kanban
 - Finish-to-start dependencies, assignee workload hints, task activity history
 - Attendance clock in/out, approval/rejection, daily hour totals, task work logs
+- Leave types/balances/requests, task extension/excusal, centralized `/approvals`
 - Task statuses: `todo | in_progress | blocked | completed`
 
 ### Explicitly not included yet
 
-- Leave / employee requests (Milestone 6)
 - Announcements / real notifications / push (Milestone 7; M0 stubs only)
 - Dashboards / reports (Milestone 8)
 - Gantt (Milestone 9)

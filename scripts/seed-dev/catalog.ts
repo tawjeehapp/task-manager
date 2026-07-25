@@ -142,10 +142,58 @@ export const IDS = {
   wlKhalid1: "a1000008-0000-4000-8000-000000000004",
   wlYousef1: "a1000008-0000-4000-8000-000000000005",
   wlLayla1: "a1000008-0000-4000-8000-000000000006",
+
+  leaveTypeAnnual: "a1000009-0000-4000-8000-000000000001",
+  leaveTypeSick: "a1000009-0000-4000-8000-000000000002",
+  leaveTypeEmergency: "a1000009-0000-4000-8000-000000000003",
+
+  balSaraAnnual: "a100000a-0000-4000-8000-000000000001",
+  balKhalidAnnual: "a100000a-0000-4000-8000-000000000002",
+  balNoorAnnual: "a100000a-0000-4000-8000-000000000003",
+  balYousefAnnual: "a100000a-0000-4000-8000-000000000004",
+  balLaylaAnnual: "a100000a-0000-4000-8000-000000000005",
+  balOmarAnnual: "a100000a-0000-4000-8000-000000000006",
+  balSaraSick: "a100000a-0000-4000-8000-000000000007",
+  balKhalidSick: "a100000a-0000-4000-8000-000000000008",
+
+  leavePendingSara: "a100000b-0000-4000-8000-000000000001",
+  leaveApprovedNoor: "a100000b-0000-4000-8000-000000000002",
+  leaveRejectedYousef: "a100000b-0000-4000-8000-000000000003",
+  leavePendingKhalid: "a100000b-0000-4000-8000-000000000004",
+
+  empReqPendingExtension: "a100000c-0000-4000-8000-000000000001",
+  empReqPendingExcusal: "a100000c-0000-4000-8000-000000000002",
+  empReqApprovedExtension: "a100000c-0000-4000-8000-000000000003",
 } as const;
 
 /** All seed-owned row IDs deleted on --reset (never includes users / auth). */
 export const RESET_ID_SETS = {
+  employee_requests: [
+    IDS.empReqPendingExtension,
+    IDS.empReqPendingExcusal,
+    IDS.empReqApprovedExtension,
+  ],
+  leave_requests: [
+    IDS.leavePendingSara,
+    IDS.leaveApprovedNoor,
+    IDS.leaveRejectedYousef,
+    IDS.leavePendingKhalid,
+  ],
+  leave_balances: [
+    IDS.balSaraAnnual,
+    IDS.balKhalidAnnual,
+    IDS.balNoorAnnual,
+    IDS.balYousefAnnual,
+    IDS.balLaylaAnnual,
+    IDS.balOmarAnnual,
+    IDS.balSaraSick,
+    IDS.balKhalidSick,
+  ],
+  leave_types: [
+    IDS.leaveTypeAnnual,
+    IDS.leaveTypeSick,
+    IDS.leaveTypeEmergency,
+  ],
   work_logs: [
     IDS.wlSaraParent1,
     IDS.wlSaraSubtask1,
