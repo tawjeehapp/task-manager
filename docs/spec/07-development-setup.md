@@ -53,13 +53,13 @@ cp .env.example .env.local
 
 2. Fill in values from your Supabase project:
 
-| Variable | Required for Milestone 1 | Notes |
+| Variable | Required | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only; never expose to the browser |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Push foundation (unused until later) |
-| `VAPID_PRIVATE_KEY` | No | Server-only push foundation |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Push placeholder (unused until Milestone 7) |
+| `VAPID_PRIVATE_KEY` | No | Server-only push placeholder |
 
 Never commit `.env.local` or real secrets.
 
@@ -67,9 +67,9 @@ The URL/keys in `.env.local` must belong to the **same** Supabase project you li
 
 ---
 
-# Database (Milestone 1)
+# Database
 
-Apply schema **before** seeding. Order matters.
+Apply all migrations **before** seeding. Order matters. Migrations cover auth/users (M1), departments (M2), projects/tasks (M3), and dependencies/activity (M4).
 
 ## 1. Log in to Supabase CLI
 
@@ -101,7 +101,7 @@ Select the project whose URL matches `NEXT_PUBLIC_SUPABASE_URL` in `.env.local`.
 npm run supabase:db:push
 ```
 
-This creates `public.users`, `permissions`, `role_permissions`, and RLS helpers.
+This applies every file under `supabase/migrations/` (users, departments, projects, tasks, dependencies, activity logs, permissions, and RLS helpers).
 
 ## 4. Seed the initial admin
 
@@ -131,6 +131,57 @@ Forced password change still encourages stronger passwords after first login.
 
 ---
 
+# Development dataset seed (`seed:dev`)
+
+For manual QA of M1–M5 features, use the deterministic development seed. It is **separate** from `seed:admin` and does not replace it.
+
+Prerequisites: migrations applied, and `.env.local` has `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`.
+
+```bash
+npm run seed:dev
+```
+
+Idempotent re-run (safe to repeat):
+
+```bash
+npm run seed:dev
+```
+
+Reset **only seed-owned rows** (fixed UUIDs in the catalog), then recreate them. Never deletes manually created users/projects/tasks/attendance/work logs, and never deletes Auth users:
+
+```bash
+npm run seed:dev -- --reset
+```
+
+### What it creates
+
+- Users `0000`–`1008` (Arabic names; roles: admin, 2 managers, employees)
+- Departments: تقنية المعلومات، المناهج والتخطيط (current memberships only)
+- Projects, tasks/subtasks, dependencies, uneven workload
+- Attendance scenarios (open, awaiting approval, approved, rejected, resubmitted pending, break minutes, empty today)
+- Work logs on parent tasks and subtasks across multiple days
+
+### Credential rules
+
+| Case | Behavior |
+|---|---|
+| New Auth user | Password = employee number; profile `must_change_password = false` |
+| Existing Auth user | **Password never overwritten** |
+| Existing profile | Updates deterministic fields only (name, phone, role, active); **does not** reset `must_change_password` |
+
+Login with employee number only (e.g. `1003` / `1003` when Auth was created by this seed).
+
+### Minimal vs full seed
+
+| Command | Use when |
+|---|---|
+| `npm run seed:admin` | Bootstrap only admin `0000` (production-safe minimal) |
+| `npm run seed:dev` | Full local QA dataset (also ensures admin `0000` exists) |
+
+Refuses to run when `NODE_ENV=production` unless `ALLOW_DEV_SEED=true`.
+
+---
+
 # Development Commands
 
 ```bash
@@ -151,6 +202,7 @@ npm run supabase:login
 npm run supabase:link
 npm run supabase:db:push
 npm run seed:admin
+npm run seed:dev
 ```
 
 ---
@@ -163,12 +215,12 @@ Feature-based layout under `src/`:
 src/
   app/           # App Router pages and API routes
   components/    # UI and shared components
-  features/      # Feature modules (auth, users, notifications)
+  features/      # Feature modules (auth, users, departments, projects, tasks, notifications stubs)
   lib/           # Supabase, auth, permissions, API helpers
   providers/     # React providers (TanStack Query, etc.)
   i18n/          # next-intl configuration
   config/        # Env validation
-messages/        # Translation files (Arabic-first)
+messages/        # Translation files (Arabic-first; en present for future)
 supabase/migrations/
 ```
 
@@ -192,53 +244,42 @@ Milestone 0 includes PWA foundation only:
 - App icons
 - Install metadata in the root layout
 
-Service workers, offline caching, and `next-pwa` runtime integration are deferred until the Next.js 16 approach is validated.
+Service workers and offline caching are deferred until a dedicated PWA milestone. The unused `next-pwa` dependency was removed; revisit packaging then.
 
 ---
 
 # Current Milestone
 
-**Milestone 3 — Projects and Tasks**
+**Milestone 6 — Leave and Employee Requests** is next.
 
-Includes:
+Milestones 0–5 core scope is implemented. See [06-roadmap.md](./06-roadmap.md) for accurate status (completed / partial / deferred).
 
-- Projects (create, dates, priority, archive) scoped to departments
-- Project members (add / remove; must be department members)
-- Tasks (create, assign, dates, priority, estimated hours, status)
-- One-level subtasks
-- Task list, task detail, project Kanban board
-- Permissions: `project.view` (all roles scoped); `project.manage` (admin only); managers get `task.create` / `task.assign` for in-project work
-- Department managers manage members/tasks inside department projects, not the project entity itself
-- RLS helpers: `can_access_project`, `can_access_task`, `is_project_member`
+### Already applied (M1–M5)
 
-Does **not** include:
+| Milestone | Migrations (under `supabase/migrations/`) |
+|---|---|
+| 1 Auth & users | `20260725120000_milestone1_auth_users.sql` |
+| 2 Departments | `20260725130000_milestone2_departments.sql` |
+| 3 Projects & tasks | `20260725140000_milestone3_projects_tasks.sql`, `20260725141000_milestone3_project_manage_admin_only.sql` |
+| 4 Dependencies & activity | `20260725150000_milestone4_dependencies_activity.sql`, `20260725151000_milestone4_simplify_task_statuses.sql` |
+| 5 Attendance & work logs | `20260725160000_milestone5_attendance_work_logs.sql` |
 
-- Task dependencies / workload views (Milestone 4)
-- Activity history UI / logging product (Milestone 4)
-- Comments, attachments
-- Attendance, leave, announcements
+### Shipped through M5 (summary)
 
-Apply migration: `supabase/migrations/20260725140000_milestone3_projects_tasks.sql`
+- Auth, users, permissions, departments, memberships
+- Projects, members, tasks, one-level subtasks, Kanban
+- Finish-to-start dependencies, assignee workload hints, task activity history
+- Attendance clock in/out, approval/rejection, daily hour totals, task work logs
+- Task statuses: `todo | in_progress | blocked | completed`
 
-See [06-roadmap.md](./06-roadmap.md) for the full roadmap.
+### Explicitly not included yet
 
----
-
-## Milestone 4 — Task Management Intelligence
-
-Includes:
-
-- Finish-to-start task dependencies with start/complete guards
-- Employee workload view before assignment (active task count + estimated hours)
-- Task activity history (assignment, status, updates)
-
-Apply migration: `supabase/migrations/20260725150000_milestone4_dependencies_activity.sql`
-
-Does **not** include:
-
-- Comments, attachments
-- Notifications product
-- Attendance, leave, dashboards, Gantt
+- Leave / employee requests (Milestone 6)
+- Announcements / real notifications / push (Milestone 7; M0 stubs only)
+- Dashboards / reports (Milestone 8)
+- Gantt (Milestone 9)
+- Task comments / attachments
+- Service worker / offline PWA runtime
 
 ---
 

@@ -2,389 +2,308 @@
 
 ## Overview
 
-This roadmap defines the recommended development order for the Work Management Platform.
+This roadmap defines the development order for the Work Management Platform.
 
-The application is built incrementally.
+The application is built incrementally. Each milestone should produce a usable working system before moving to the next.
 
-Each milestone should produce a usable working system before moving to the next milestone.
+**Status legend (Milestones 0–4):** For completed work, the **implementation is the source of truth**. This document records what was planned, what shipped, and what remains deferred.
 
-The roadmap prioritizes:
+| Status | Meaning |
+|---|---|
+| **Completed** | Implemented and in use |
+| **Partially completed** | Some planned items shipped; gaps remain |
+| **Remaining** | Still to do within that milestone’s original intent |
+| **Deferred** | Intentionally postponed to a later milestone |
+| **Out of scope** | Not part of MVP / not planned for that milestone |
 
-- Core architecture
-- Security
-- Data integrity
-- User workflows
-- Operational visibility
+### Current project status
+
+**Milestones 0–5 core product scope is implemented** (M0 PWA/notifications still deferred). **Next up: Milestone 6 — Leave and Employee Requests.**
+
+---
 
 ## Testing Strategy
 
-Testing infrastructure will be introduced in Milestone 1.
+Testing infrastructure was introduced in Milestone 1 (Vitest + React Testing Library).
 
-Milestone 1:
-- Add Vitest
-- Add React Testing Library
-- Test authentication, users, permissions, and organization rules
+| Milestone | Planned testing focus | Actual status |
+|---|---|---|
+| **1** | Auth, users, permissions, organization rules | **Completed** — unit/schema/service tests present |
+| **2** | Departments, memberships, manager constraints, scoped password reset | **Completed** |
+| **3** | Projects, tasks, access rules | **Completed** — schemas, access asserts, create-task (incl. subtask depth) |
+| **4** | Dependencies, workload, activity | **Partially completed** — dependency service tests present; dedicated workload/activity tests thin |
+| **5** | Attendance calculations, approval, work-log authz | **Completed** |
+| **6+** | Leave, approvals, and later workflows | **Remaining** |
 
-Milestone 2:
-- Expand testing for departments, memberships, manager constraints, and scoped password reset
-
-Milestone 3:
-- Expand testing to projects, tasks, dependencies, and workload calculations
-
-Milestone 4:
-- Test attendance calculations and approval workflows
-
-End-to-end testing with Playwright will be introduced when complete business workflows exist.
+End-to-end testing with Playwright remains **deferred** until complete business workflows exist (attendance / leave / approvals).
 
 ---
 
 # Milestone 0 — Project Foundation
 
+**Status: Partially completed** (core foundation **Completed**; PWA offline + notifications product **Deferred**)
+
 ## Goal
 
 Create the application foundation and development environment.
 
-## Features
+## Planned features
 
 ### Project Setup
 
-- Next.js App Router setup
-- TypeScript configuration
-- Tailwind CSS setup
-- shadcn/ui installation
-- RTL configuration
-- Arabic localization setup
-- Environment configuration
-
----
+- Next.js App Router, TypeScript, Tailwind CSS, shadcn/ui
+- RTL configuration, Arabic localization, environment configuration
 
 ### Architecture Setup
 
-Implement:
-
-- Feature-based folders
-- Supabase client setup
-- Authentication helpers
-- API route structure
-- Service layer structure
-- Validation setup
-
----
+- Feature-based folders, Supabase clients, auth helpers
+- API route structure, service layer, validation (Zod)
 
 ### UI Foundation
 
-Create:
-
-- Application layout
-- Sidebar
-- Header
-- Mobile navigation
-- Theme foundation
-- Loading states
-- Error states
-- Empty states
-
----
+- Application layout, sidebar, header, mobile navigation
+- Theme foundation, loading / error / empty states
 
 ### PWA Foundation
 
-Implement:
-
-- Installable application
-- Web manifest
-- Service worker
-- App icons
-- Basic offline support
-
----
+- Installable application, web manifest, service worker, app icons, basic offline support
 
 ### Notifications Foundation
 
-Implement:
+- Notification database structure, service, notification center UI, push infrastructure
 
-- Notification database structure
-- Notification service
-- Notification center UI foundation
-- Push notification infrastructure
+## Implementation status
+
+| Area | Status | Notes |
+|---|---|---|
+| Next.js / TS / Tailwind / shadcn | **Completed** | Next.js 16, React 19, Tailwind v4 |
+| RTL + Arabic (`next-intl`) | **Completed** | Default locale `ar`; `en` messages file exists but UI always uses default locale |
+| Feature folders + services + API pattern | **Completed** | Matches architecture spec |
+| App shell (sidebar, header, mobile nav) | **Completed** | Future nav items present but disabled |
+| Loading / error / empty states | **Completed** | Shared components |
+| Web manifest + icons + install metadata | **Completed** | `public/manifest.webmanifest`, layout metadata |
+| Service worker / offline PWA runtime | **Deferred** | Manifest + icons only; unused `next-pwa` dependency **removed** — revisit when PWA milestone arrives |
+| Notifications DB + API + real center | **Deferred** | Types + bell placeholder + stub service only; no `notifications` table |
+| Push (VAPID env + subscribe stub) | **Deferred** | Env keys documented; runtime throws / unused |
+| Dashboard home (`/`) | **Partially completed** | Placeholder empty state until Milestone 8 |
+
+## Differences from original plan
+
+- Full PWA runtime (service worker, offline caching) was deferred rather than completed in M0.
+- Notification “foundation” is stubs only; persistence was deferred until auth (and remains deferred to Milestone 7).
+- English locale files exist for future use; the app does not switch locales yet.
 
 ---
 
 # Milestone 1 — Authentication and User Management
 
+**Status: Completed**
+
 ## Goal
 
-Enable users to access the system securely. Access should be based on employee number not email (4 digits). To simplify things you can use supabase email provider but use a hardcoded domain without email validation.
-For example @task-manager.com
+Enable users to access the system securely. Access is based on employee number (4 digits), mapped to a synthetic Supabase Auth email (`NNNN@task-manager.com`). Users never enter the domain.
 
-Users shouldn't need to enter this @domain.com 
+Forgot / reset password is admin-managed in this milestone. Manager → subordinate reset arrives in Milestone 2.
 
-Forgot password will be managed by admins and department managers to reset password of their below employees.
+Initial admin: employee `0000` with temporary password `0000`. New users get password = employee number and are forced to change it.
 
-**Milestone 1 scope:** Admin-only password reset. Manager → subordinate reset is implemented in Milestone 2 once department membership exists.
+## Planned features
 
-You can create an initial admin account 0000 with a temporary password.
+- Login, logout, session management, password reset (admin)
+- Admin user CRUD, activate/deactivate, delete, assign roles (`admin`, `department_manager`, `employee`)
+- Permission model, role permissions, API checks, basic RLS
+- Employee profiles: name, phone, role, status
 
-When employees are added, their password is the same as their employee number and they get prompted/forced to change it.
+## Implementation status
 
-## Features
+| Area | Status | Notes |
+|---|---|---|
+| Employee-number login / logout / session | **Completed** | Middleware + cookie sessions |
+| Forced password change | **Completed** | `must_change_password` + allowlisted API routes |
+| Admin user CRUD + activate/deactivate + delete | **Completed** | |
+| Admin password reset | **Completed** | Resets to employee number; forces change |
+| Roles + DB permissions + RLS helpers | **Completed** | `SECURITY DEFINER` helpers avoid RLS recursion |
+| Employee directory / profile UI | **Completed** | `/employees`, `/employees/[id]` |
+| Vitest coverage for auth/users/permissions | **Completed** | |
 
-### Authentication
+## Differences / additions vs original plan
 
-- Login
-- Logout
-- Session management
-- Password reset
+- Compensating Auth ↔ profile transaction on create/reset (documented in DB spec).
+- Password-change API allowlist while `must_change_password` is true.
+- Employees UI is the user-management surface (not a separate “users admin” module name).
 
----
+## Not implemented in M1 (by design)
 
-### User Management
-
-Admin can:
-
-- Create users
-- Activate/deactivate users
-- Delete users
-- Assign roles
-
-Roles:
-
-- Admin
-- Department Manager
-- Employee
-
----
-
-### Permissions
-
-Implement:
-
-- Permission model
-- Role permissions
-- API permission checks
-- Basic RLS policies
-
----
-
-### Employee Profiles
-
-Support:
-
-- Name
-- Phone
-- Role
-- Status
+- Manager password reset → **Completed in Milestone 2**
+- Self-service forgot-password email flow → **Out of scope** (admin/manager reset only)
 
 ---
 
 # Milestone 2 — Organization Structure
 
+**Status: Completed**
+
 ## Goal
 
 Create the company hierarchy.
 
-## Features
+## Planned features
 
-### Departments
+- Departments: create, edit, assign managers, archive, delete (only when no current members)
+- Memberships: add, remove, move, membership history
+- Views: department list, employee directory, department details
 
-Admin can:
+## Implementation status
 
-- Create departments
-- Edit departments
-- Assign managers
-- Archive departments
-- Delete departments (only when they have no current members)
+| Area | Status | Notes |
+|---|---|---|
+| Department CRUD + archive + delete guard | **Completed** | `DEPARTMENT_HAS_MEMBERS` when current members exist |
+| Manager assignment rules | **Completed** | One manager per dept; one managed dept per manager; role must already be `department_manager`; explicit replace flag |
+| Memberships add / remove / move | **Completed** | History preserved via `is_current` / `end_date` |
+| Membership history UI | **Completed** | History tab; API `includeHistory` is **admin-only** |
+| Department list + detail views | **Completed** | |
+| Manager scoped password reset | **Completed** | Current members of managed department |
+| M2 permissions + RLS helpers | **Completed** | |
 
----
+## Differences / additions vs original plan
 
-### Department Membership
-
-Support:
-
-- Adding employees
-- Removing employees
-- Moving employees between departments
-- Membership history
-
----
-
-### Organization Views
-
-Create:
-
-- Department list
-- Employee directory
-- Department details
+- Manager assignment does **not** auto-promote role; candidate must already be `department_manager`.
+- Membership history listing via API is restricted to admins (managers see current members).
+- Employee directory is shared with M1 users UI and permission-gated.
 
 ---
 
 # Milestone 3 — Projects and Tasks
 
+**Status: Completed**
+
 ## Goal
 
-Introduce the core work management functionality.
+Introduce core work management functionality.
 
-## Features
+## Planned features
 
-### Projects
-
-Admins can:
-
-- Create projects
-- Edit project details and dates/priority
-- Archive projects
-- Assign members
-
-Department managers can:
-
-- View department projects
-- Manage project members
-- Manage tasks within those projects (create, assign, status)
-
-Managers cannot create, edit, or archive the project entity itself.
-
----
-
-### Tasks
-
-Support:
-
-- Creating tasks
-- Assigning employees
-- Due dates
-- Start dates
-- Priority
-- Estimated hours
-- Status changes
-
----
-
-### Subtasks
-
-Support:
-
+- Projects: admin create/edit/dates/priority/archive; assign members
+- Department managers: view department projects; manage members and tasks (not project entity create/edit/archive)
+- Tasks: create, assign, dates, priority, estimated hours, status
 - One level of subtasks
+- Views: task list, task details, Kanban board
 
----
+## Implementation status
 
-### Task Views
+| Area | Status | Notes |
+|---|---|---|
+| Projects CRUD-ish (archive via status) | **Completed** | No permanent project delete API |
+| Project members (dept members only) | **Completed** | |
+| Tasks + one-level subtasks | **Completed** | Parent estimated hours = sum of subtasks |
+| Task list / detail / project Kanban | **Completed** | Kanban at `/projects/[id]/board` |
+| Permissions | **Completed** | `project.view` all roles (scoped); `project.manage` **admin only**; managers get `task.create` / `task.assign` |
+| RLS helpers | **Completed** | `can_access_project`, `can_access_task`, `is_project_member` |
+| Inline list editing, expandable subtasks, breadcrumbs, tabs | **Completed** | Product/UX additions beyond original M3 bullet list (see project rules) |
 
-Create:
+## Differences / additions vs original plan
 
-- Task list
-- Task details
-- Kanban board
+- Priority enum: `low | medium | high`.
+- Project statuses: `draft | active | completed | archived`.
+- Task statuses originally included `review` and `cancelled` in the M3 migration; simplified in M4 follow-up to `todo | in_progress | blocked | completed`.
+- `progress_percentage` exists on `tasks` but is **unused** in UI/business logic (retained for possible future progress/Gantt).
+- Activity logs, dependencies, and workload were **Deferred to Milestone 4** (as noted during M3).
+- Comments and attachments remain **Out of scope** for M3–M4 (future).
 
-**Implemented notes (M3):**
+## Migrations
 
-- Priority enum: `low | medium | high`
-- Archive projects via status (no permanent delete API)
-- Kanban is project-scoped at `/projects/[id]/board`
-- Activity logs, dependencies, and workload deferred to Milestone 4
+- `20260725140000_milestone3_projects_tasks.sql`
+- `20260725141000_milestone3_project_manage_admin_only.sql`
 
 ---
 
 # Milestone 4 — Task Management Intelligence
 
+**Status: Completed**
+
 ## Goal
 
-Improve planning and execution.
+Improve planning and execution via dependencies, workload visibility, and activity history.
 
-## Features
+## Planned features
 
-### Task Dependencies
+- Finish-to-start task dependencies (task/subtask cannot start before dependencies complete)
+- Employee workload view before assigning (active task count + estimated hours)
+- Task activity history (assignment, status, updates)
 
-Support:
+## Implementation status
 
-- Finish-to-start dependencies
+| Area | Status | Notes |
+|---|---|---|
+| Finish-to-start dependencies | **Completed** | Same project; hierarchy rules (root↔root, sibling subtasks); cycle/self guards |
+| Incomplete deps → `blocked` + status lock | **Completed** | Stronger than original “cannot start” wording; dependents unlock to `todo` when satisfied |
+| Workload at assignment time | **Completed** | `GET /api/users/[id]/workload` + assignee UI hint (not a standalone `/workload` page) |
+| Activity history | **Completed** | `activity_logs` + task detail panel; create/assign/status/update/dependency events |
+| Task status simplification | **Completed** | Dropped `review` / `cancelled` |
 
-Rules:
+## Differences / additions vs original plan
 
-A task cannot start before dependencies are completed.
-A sub-task cannot start before dependencies are completed.
+- Workload is an **inline hint when choosing an assignee**, not a separate employee workload screen.
+- Dependency rules include explicit hierarchy constraints and auto-`blocked` locking (documented in API spec).
+- Status set simplified post-ship via follow-up migration.
 
----
+## Migrations
 
-### Employee Workload View
+- `20260725150000_milestone4_dependencies_activity.sql`
+- `20260725151000_milestone4_simplify_task_statuses.sql`
 
-Before assigning tasks, managers can see:
+## Testing gap
 
-Employee:
-
-```
-Active Tasks: 5
-
-Estimated Hours:
-18 hours
-```
-
-Purpose:
-
-- Prevent overload
-- Improve task distribution
-
----
-
-### Task Activity History
-
-Track:
-
-- Assignment changes
-- Status changes
-- Updates
+Dependency unit tests exist; dedicated workload and activity-log tests are thin (**Partially completed** relative to the testing strategy table).
 
 ---
 
 # Milestone 5 — Attendance and Work Logging
 
+**Status: Completed**
+
 ## Goal
 
 Track employee time and effort.
 
----
+## Planned features
 
-## Attendance
+- Clock in / clock out, daily records, total hour calculation
+- Manager/admin approve / reject (with reason); no self-approval
+- Work logs against tasks; managers review
 
-Support:
+## Implementation status
 
-- Clock in
-- Clock out
-- Daily records
-- Total hour calculation
+| Area | Status | Notes |
+|---|---|---|
+| One record per user/day + clock in/out | **Completed** | `UNIQUE (user_id, date)`; open = `clock_out IS NULL` |
+| Total hours calculation | **Completed** | Minus break; org timezone `Asia/Riyadh` |
+| Approve / reject | **Completed** | Scoped managers; cannot act on open or own records |
+| Rejected employee correction | **Completed** | Same row → pending; clears approval fields |
+| Admin time corrections | **Completed** | Managers cannot edit timestamps/break |
+| Work logs CRUD + review lists | **Completed** | Independent of attendance hours; `approved_by` unused |
+| `/attendance` RTL UI (tabs) | **Completed** | Today / Records / Approvals / Work logs |
+| Vitest coverage | **Completed** | Hours math, approve assert, lifecycle locks |
 
----
+## Migrations
 
-## Attendance Approval
+- `20260725160000_milestone5_attendance_work_logs.sql`
 
-Managers can:
+## Differences / notes
 
-- Approve attendance
-- Reject attendance
-- Add rejection reason
-
-Users cannot approve their own records.
-
----
-
-## Work Logs
-
-Employees can:
-
-- Log time against tasks
-- Add descriptions
-
-Managers can:
-
-- Review logs
+- Work logs have **no** approve/reject workflow in M5 (review via list only).
+- No coupling between work-log hours and attendance totals.
+- UI states derived from `status` + `clock_out` (currently working / awaiting approval / approved / rejected).
 
 ---
 
 # Milestone 6 — Leave and Employee Requests
 
+**Status: Remaining**
+
 ## Goal
 
 Handle employee workflows.
-
----
 
 ## Leave Management
 
@@ -395,45 +314,25 @@ Support:
 - Leave requests
 - Approval workflow
 
----
-
 ## Employee Requests
-
-Support:
 
 ### Task Extension Request
 
-Employee requests:
-
-- New deadline
-
-Manager:
-
-- Approves
-- Rejects
-
----
+Employee requests a new deadline; manager approves or rejects.
 
 ### Task Excusal Request
 
-Employee requests:
-
-- Removal from task
-
-Manager:
-
-- Approves
-- Rejects
+Employee requests removal from a task; manager approves or rejects.
 
 ---
 
 # Milestone 7 — Communication
 
+**Status: Remaining** (also absorbs deferred M0 notification product)
+
 ## Goal
 
 Improve internal communication.
-
----
 
 ## Announcements
 
@@ -444,8 +343,6 @@ Support:
 - Priority levels
 - Attachments
 - Read tracking
-
----
 
 ## Notifications
 
@@ -464,15 +361,17 @@ Channels:
 - In-app notifications
 - Push notifications
 
+**Note:** M0 left notification stubs and VAPID env placeholders. Milestone 7 should replace stubs with real DB persistence, APIs, notification center UI, and push delivery.
+
 ---
 
 # Milestone 8 — Dashboards and Reporting
 
+**Status: Remaining**
+
 ## Goal
 
 Provide operational visibility.
-
----
 
 ## Admin Dashboard
 
@@ -484,8 +383,6 @@ Show:
 - Pending approvals
 - Company workload
 
----
-
 ## Manager Dashboard
 
 Show:
@@ -494,8 +391,6 @@ Show:
 - Overdue tasks
 - Team workload
 - Pending approvals
-
----
 
 ## Employee Dashboard
 
@@ -506,8 +401,6 @@ Show:
 - Attendance summary
 - Requests
 
----
-
 ## Reports
 
 Initial reports:
@@ -517,15 +410,17 @@ Initial reports:
 - Attendance summary
 - Work log summary
 
+**Note:** `/` is currently a placeholder empty state pending this milestone.
+
 ---
 
 # Milestone 9 — Advanced Views
 
+**Status: Remaining**
+
 ## Goal
 
 Provide advanced planning tools.
-
----
 
 ## Gantt Chart
 
@@ -535,8 +430,6 @@ Support:
 - Task duration
 - Dependencies
 - Overdue indicators
-
----
 
 ## Advanced Filtering
 
@@ -552,16 +445,27 @@ Support:
 
 # Milestone 10 — Future Enhancements
 
-Not part of MVP.
+**Status: Out of scope** (not part of MVP)
 
 Possible additions:
 
+- Task comments and attachments
 - Calendar integration
-- AI assistant
-- Native mobile apps
-- Advanced analytics
 - Resource planning
-- Multi-company support
+
+---
+
+# Deferred from M0–M4 (carry-forward)
+
+| Item | Originally in | Deferred to |
+|---|---|---|
+| Service worker / offline caching | M0 PWA | Later PWA milestone (`next-pwa` removed until then) |
+| Notifications table, APIs, real center, push | M0 foundation | Milestone 7 |
+| Dashboard content | Shell in M0 | Milestone 8 |
+| Task comments / attachments | DB design (not M3/M4 scope) | Future |
+| `progress_percentage` UI | Schema present | Future / unused |
+| Playwright E2E | After workflows exist | After M5+ workflows |
+| Locale switcher (`en`) | Localization future | Future |
 
 ---
 
@@ -580,14 +484,14 @@ Possible additions:
 
 # Recommended Build Order
 
-1. Foundation
-2. Authentication
-3. Organization
-4. Projects
-5. Tasks
-6. Dependencies and workload
-7. Attendance
-8. Leave
-9. Communication
-10. Reports
-11. Gantt
+1. Foundation — **Partially completed** (core done; PWA/notifications deferred)
+2. Authentication — **Completed**
+3. Organization — **Completed**
+4. Projects — **Completed**
+5. Tasks — **Completed**
+6. Dependencies and workload — **Completed**
+7. Attendance — **Completed (Milestone 5)**
+8. Leave — **Remaining (Milestone 6)**
+9. Communication — **Remaining (Milestone 7)**
+10. Reports — **Remaining (Milestone 8)**
+11. Gantt — **Remaining (Milestone 9)**

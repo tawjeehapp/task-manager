@@ -121,6 +121,7 @@ export function TaskDependenciesPanel({
       await queryClient.invalidateQueries({
         queryKey: ["tasks", taskId, "activity"],
       });
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 
@@ -145,6 +146,7 @@ export function TaskDependenciesPanel({
       await queryClient.invalidateQueries({
         queryKey: ["tasks", taskId, "activity"],
       });
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 

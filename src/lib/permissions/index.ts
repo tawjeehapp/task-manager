@@ -1,7 +1,10 @@
 export const PERMISSIONS = {
   TASK_CREATE: "task.create",
   TASK_ASSIGN: "task.assign",
+  ATTENDANCE_VIEW: "attendance.view",
   ATTENDANCE_APPROVE: "attendance.approve",
+  WORK_LOG_CREATE: "work_log.create",
+  WORK_LOG_VIEW: "work_log.view",
   LEAVE_APPROVE: "leave.approve",
   DEPARTMENT_MANAGE: "department.manage",
   DEPARTMENT_VIEW: "department.view",

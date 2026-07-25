@@ -5,6 +5,13 @@ import { useTranslations } from "next-intl";
 
 import type { EmployeeWorkload } from "@/features/tasks/types/task.types";
 import { AssigneeWorkloadHint } from "@/features/tasks/components/assignee-workload-hint";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 export type AssigneeOption = {
@@ -12,6 +19,8 @@ export type AssigneeOption = {
   fullName: string;
   employeeNumber?: string;
 };
+
+const UNASSIGNED_VALUE = "__unassigned__";
 
 async function fetchWorkload(userId: string): Promise<EmployeeWorkload> {
   const response = await fetch(`/api/users/${userId}/workload`);
@@ -32,9 +41,9 @@ type AssigneeSelectProps = {
   disabled?: boolean;
   id?: string;
   className?: string;
-  /** Show compact occupancy under the select for the current value */
+  /** Show occupancy under the closed control (detail forms). Off by default for compact tables. */
   showSelectedHint?: boolean;
-  /** Include employee number in the option label */
+  /** Include employee number in labels */
   showEmployeeNumber?: boolean;
 };
 
@@ -45,7 +54,7 @@ export function AssigneeSelect({
   disabled,
   id,
   className,
-  showSelectedHint = true,
+  showSelectedHint = false,
   showEmployeeNumber = false,
 }: AssigneeSelectProps) {
   const t = useTranslations("tasks");
@@ -67,43 +76,86 @@ export function AssigneeSelect({
     }
   });
 
-  function optionLabel(option: AssigneeOption): string {
-    const base = showEmployeeNumber && option.employeeNumber
-      ? `${option.fullName} (${option.employeeNumber})`
-      : option.fullName;
+  function displayName(option: AssigneeOption): string {
+    if (showEmployeeNumber && option.employeeNumber) {
+      return `${option.fullName} (${option.employeeNumber})`;
+    }
+    return option.fullName;
+  }
+
+  function selectedLabel(selected: string | null): string {
+    if (!selected || selected === UNASSIGNED_VALUE) {
+      return t("unassigned");
+    }
+    const option = options.find((item) => item.id === selected);
+    return option ? displayName(option) : t("unassigned");
+  }
+
+  function optionListLabel(option: AssigneeOption): string {
+    const name = displayName(option);
     const workload = workloadById.get(option.id);
     if (!workload) {
-      return base;
+      return name;
     }
-    return `${base} — ${t("workloadOptionLabel", {
+    return `${name} — ${t("workloadOptionLabel", {
       count: workload.activeTaskCount,
       hours: workload.estimatedHours,
     })}`;
   }
 
   return (
-    <div className="space-y-1">
-      <select
-        id={id}
-        className={cn(
-          "border-input bg-background h-9 w-full rounded-md border px-3 text-sm",
-          className,
-        )}
-        value={value ?? ""}
-        disabled={disabled}
-        onChange={(event) => {
-          const next = event.target.value;
-          onChange(next ? next : null);
+    <div
+      className="space-y-1"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <Select
+        value={value ?? UNASSIGNED_VALUE}
+        onValueChange={(next) => {
+          if (next == null || next === UNASSIGNED_VALUE) {
+            onChange(null);
+            return;
+          }
+          onChange(String(next));
         }}
-        aria-label={t("assignee")}
+        disabled={disabled}
       >
-        <option value="">{t("unassigned")}</option>
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>
-            {optionLabel(option)}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger
+          id={id}
+          size="sm"
+          className={cn(
+            "h-9 w-full min-w-0 max-w-full justify-between",
+            className,
+          )}
+          aria-label={t("assignee")}
+        >
+          <SelectValue placeholder={t("unassigned")}>
+            {(selected) => (
+              <span className="min-w-0 flex-1 truncate text-start">
+                {selectedLabel(selected)}
+              </span>
+            )}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent
+          alignItemWithTrigger={false}
+          align="start"
+          className="min-w-[14rem] max-w-[min(22rem,90vw)]"
+        >
+          <SelectItem value={UNASSIGNED_VALUE} label={t("unassigned")}>
+            {t("unassigned")}
+          </SelectItem>
+          {options.map((option) => (
+            <SelectItem
+              key={option.id}
+              value={option.id}
+              label={displayName(option)}
+            >
+              {optionListLabel(option)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {showSelectedHint ? (
         <AssigneeWorkloadHint userId={value} enabled={!disabled} />
       ) : null}

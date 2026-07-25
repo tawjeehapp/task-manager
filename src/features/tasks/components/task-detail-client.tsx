@@ -503,6 +503,7 @@ export function TaskDetailClient({
                         }
                         options={assignees}
                         showEmployeeNumber
+                        showSelectedHint
                         disabled={!canAssign}
                         onChange={(userId) =>
                           editForm.setValue("assignedTo", userId, {

@@ -801,6 +801,49 @@ Notable error codes:
 
 ---
 
+# Attendance and Work Logs API (Milestone 5)
+
+| Method | Path | Permission |
+|--------|------|------------|
+| GET | `/api/attendance` | `attendance.view` (scoped) |
+| GET | `/api/attendance/today` | `attendance.view` (own today) |
+| POST | `/api/attendance/clock-in` | `attendance.view` |
+| POST | `/api/attendance/clock-out` | `attendance.view` |
+| GET | `/api/attendance/[id]` | `attendance.view` + access assert |
+| PATCH | `/api/attendance/[id]` | owner (rejected) or admin correction |
+| POST | `/api/attendance/[id]/approve` | `attendance.approve` + scope; not self; requires clock_out |
+| POST | `/api/attendance/[id]/reject` | `attendance.approve` + `{ reason }`; not self; requires clock_out |
+| GET | `/api/work-logs` | `work_log.view` (scoped) |
+| POST | `/api/work-logs` | `work_log.create` |
+| GET/PATCH/DELETE | `/api/work-logs/[id]` | view / owner or admin |
+
+List filters:
+
+- Attendance: `status`, `userId`, `dateFrom`/`dateTo`, `awaitingApproval`, pagination, sort
+- Work logs: `userId`, `taskId`, `dateFrom`/`dateTo`, pagination, sort
+
+List attendance also returns `totalHoursSum` for the current filter (daily/reporting total).
+
+Permissions seeded in M5:
+
+- `attendance.view` / `work_log.view` / `work_log.create` — all roles
+- `attendance.approve` — admin (existing) + **department_manager**
+
+Notable error codes:
+
+- `ALREADY_CLOCKED_IN` (409)
+- `ATTENDANCE_EXISTS` (409)
+- `NOT_CLOCKED_IN` (409)
+- `CLOCK_OUT_REQUIRED` (409)
+- `CANNOT_APPROVE_OWN` (403)
+- `ATTENDANCE_APPROVED_LOCKED` (409)
+- `ATTENDANCE_NOT_EDITABLE` (409)
+- `MANAGER_CANNOT_EDIT_ATTENDANCE` (403)
+- `ATTENDANCE_NOT_PENDING` (409)
+- `INVALID_TIME_RANGE` / `BREAK_EXCEEDS_DURATION` (409)
+
+---
+
 # API Design Principles
 
 The API should be:

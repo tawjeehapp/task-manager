@@ -102,9 +102,10 @@ export const navSections: NavSection[] = [
     items: [
       {
         key: "attendance",
-        href: "#",
+        href: "/attendance",
         icon: CalendarCheck,
-        enabled: false,
+        enabled: true,
+        permission: "attendance.view",
       },
     ],
   },

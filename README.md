@@ -4,13 +4,28 @@ Arabic-first, RTL work management platform for organizations. Built with Next.js
 
 ## Current status
 
-**Milestone 1 — Authentication and User Management** is implemented:
+**Milestones 0–5** are implemented for core product scope. **Next: Milestone 6 — Leave and Employee Requests.**
 
-- Employee-number login (`NNNN` → `NNNN@task-manager.com`)
-- Session management, logout, forced password change
-- Admin user CRUD, activate/deactivate, delete, password reset
+| Milestone | Status |
+|---|---|
+| 0 — Foundation | Partial (core done; full PWA offline + notifications deferred) |
+| 1 — Auth & users | Completed |
+| 2 — Departments | Completed |
+| 3 — Projects & tasks | Completed |
+| 4 — Dependencies, workload, activity | Completed |
+| 5 — Attendance & work logs | Completed |
+| 6 — Leave & employee requests | Remaining |
+
+Implemented highlights:
+
+- Employee-number login (`NNNN` → `NNNN@task-manager.com`), sessions, forced password change
+- Admin user CRUD; admin/manager password reset (scoped)
+- Departments, memberships, membership history
+- Projects, members, tasks, one-level subtasks, Kanban
+- Finish-to-start dependencies, assignee workload hints, task activity history
+- Attendance clock in/out, approval workflow, task work logs
 - DB-backed permissions + RLS (`SECURITY DEFINER` helpers)
-- Vitest coverage for auth, permissions, and user rules
+- Vitest coverage for auth, permissions, org, projects, tasks, and attendance rules
 
 ## Quick start
 
@@ -51,4 +66,5 @@ npm run supabase:login   # Log in to Supabase CLI
 npm run supabase:link    # Link repo to remote project
 npm run supabase:db:push # Apply migrations to linked project
 npm run seed:admin       # Seed initial admin 0000
+npm run seed:dev         # Deterministic M1–M5 QA dataset (idempotent)
 ```

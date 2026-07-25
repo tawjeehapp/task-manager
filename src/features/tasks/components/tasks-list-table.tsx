@@ -57,7 +57,13 @@ const PRIORITIES: TaskPriority[] = ["low", "medium", "high"];
 const selectClassName =
   "border-input bg-background h-8 max-w-[9.5rem] rounded-md border px-2 text-sm";
 
-function DependencyCountCell({ task }: { task: Task }) {
+function DependencyCountCell({
+  task,
+  onOpen,
+}: {
+  task: Task;
+  onOpen?: () => void;
+}) {
   const t = useTranslations("tasks");
   const count = task.dependencyCount ?? 0;
   const incomplete = task.incompleteDependencyCount ?? 0;
@@ -66,18 +72,13 @@ function DependencyCountCell({ task }: { task: Task }) {
     return <span className="text-muted-foreground">—</span>;
   }
 
-  return (
-    <span
-      className="inline-flex items-center gap-1.5"
-      title={
-        incomplete > 0
-          ? t("dependencyColumnIncomplete", {
-              incomplete,
-              count,
-            })
-          : t("dependencyColumnComplete", { count })
-      }
-    >
+  const label =
+    incomplete > 0
+      ? t("dependencyColumnIncomplete", { incomplete, count })
+      : t("dependencyColumnComplete", { count });
+
+  const content = (
+    <>
       <GitBranch className="text-muted-foreground size-3.5 shrink-0" />
       <span className="tabular-nums text-sm">{count}</span>
       {incomplete > 0 ? (
@@ -85,7 +86,30 @@ function DependencyCountCell({ task }: { task: Task }) {
           {t("dependencyBlocking")}
         </Badge>
       ) : null}
-    </span>
+    </>
+  );
+
+  if (!onOpen) {
+    return (
+      <span className="inline-flex items-center gap-1.5" title={label}>
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="hover:bg-muted inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-start transition-colors"
+      title={label}
+      aria-label={t("viewDependencies", { title: task.title })}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+    >
+      {content}
+    </button>
   );
 }
 
@@ -211,6 +235,7 @@ function TaskInlineFields({
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
+  const [depsOpen, setDepsOpen] = useState(false);
   const canEditHours = canEditFull && Boolean(isSubtask);
 
   const membersQuery = useQuery({
@@ -339,9 +364,26 @@ function TaskInlineFields({
           </span>
         </TableCell>
         <TableCell>{task.dueDate ?? "—"}</TableCell>
-        <TableCell>
-          <DependencyCountCell task={task} />
+        <TableCell onClick={(event) => event.stopPropagation()}>
+          <DependencyCountCell
+            task={task}
+            onOpen={() => setDepsOpen(true)}
+          />
         </TableCell>
+        <Dialog open={depsOpen} onOpenChange={setDepsOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{t("tabDependencies")}</DialogTitle>
+              <DialogDescription>{task.title}</DialogDescription>
+            </DialogHeader>
+            <TaskDependenciesPanel
+              taskId={task.id}
+              projectId={task.projectId}
+              parentTaskId={task.parentTaskId}
+              canManage={false}
+            />
+          </DialogContent>
+        </Dialog>
       </>
     );
   }
@@ -494,9 +536,26 @@ function TaskInlineFields({
           (task.dueDate ?? "—")
         )}
       </TableCell>
-      <TableCell>
-        <DependencyCountCell task={task} />
+      <TableCell onClick={(event) => event.stopPropagation()}>
+        <DependencyCountCell
+          task={task}
+          onOpen={() => setDepsOpen(true)}
+        />
       </TableCell>
+      <Dialog open={depsOpen} onOpenChange={setDepsOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t("tabDependencies")}</DialogTitle>
+            <DialogDescription>{task.title}</DialogDescription>
+          </DialogHeader>
+          <TaskDependenciesPanel
+            taskId={task.id}
+            projectId={task.projectId}
+            parentTaskId={task.parentTaskId}
+            canManage={canEditFull}
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

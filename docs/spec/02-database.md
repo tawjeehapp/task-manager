@@ -71,7 +71,7 @@ Deleting a department or employee should not destroy business history.
 
 # Archive Strategy
 
-Business entities support archiving.
+Some business entities support archiving via status.
 
 Archived records:
 
@@ -79,12 +79,19 @@ Archived records:
 - Remain available in reports.
 - Remain searchable where appropriate.
 
-Entities supporting archive:
+## Currently supported
 
-- Departments
-- Projects
-- Tasks
-- Users
+- **Departments** — `status`: `active` | `archived`
+- **Projects** — `status` includes `archived`
+
+## Not archive (current implementation)
+
+- **Users** — use `is_active` for activate/deactivate (not an archive status).
+- **Tasks** — no archive status; lifecycle is task statuses only (`todo`, `in_progress`, `blocked`, `completed`).
+
+## Deferred
+
+Task archiving and user archiving (as distinct from deactivation) are **not** implemented and may be considered later. Do not treat them as currently supported.
 
 ---
 
@@ -415,7 +422,7 @@ Notes:
 - Tasks can exist without subtasks.
 - Tasks belong to one project.
 - Priority: `low | medium | high`
-- `progress_percentage` exists (default 0); not exposed in M3 UI.
+- `progress_percentage` exists (default 0). **Currently unused** in UI and business logic; retained for possible future progress/Gantt work. Do not add cleanup migrations solely to remove it.
 - RLS helper: `can_access_task(task_id)` — project access or assignee.
 
 ---
@@ -543,13 +550,25 @@ approved
 rejected
 ```
 
+Constraints / rules (Milestone 5):
+
+- `UNIQUE (user_id, date)` — one record per employee per calendar day.
+- Open session: `clock_out IS NULL` while `status = pending` (no separate open status).
+- `total_hours` computed on clock-out / correction: `(clock_out - clock_in) - break_minutes`, rounded to 2 decimals.
+- Calendar `date` uses organization timezone `Asia/Riyadh`.
+- Approve/reject only when `clock_out` is set; actors cannot act on their own records.
+- Department managers approve/reject department members only; they cannot edit timestamps/break.
+- Employees may correct **rejected** records (same row): edit `clock_in` / `clock_out` / `break_minutes` (clock_out required) → resubmit as `pending` and clear approval fields.
+- Approved records are locked for employees/managers; admins may correct.
+- Writes via service role; RLS SELECT: own / admin / `shares_managed_department_with(user_id)`.
+
 ---
 
 # Work Logs
 
 Tracks time spent on tasks.
 
-Different from attendance.
+Different from attendance. **Independent** of attendance hours in Milestone 5 (no requirement that work-log hours ≤ attendance hours).
 
 Table:
 
@@ -571,8 +590,14 @@ created_at
 updated_at
 ```
 
----
+Notes (Milestone 5):
 
+- Employees create/edit/delete **own** logs on tasks they can access.
+- Managers/admins review via scoped lists (no approve/reject workflow in M5).
+- `approved_by` exists for future use; **unused in M5 UI**.
+- Writes via service role; RLS SELECT: own / admin / managed department / `can_access_task(task_id)`.
+
+---
 # Leave Management
 
 ## Leave Types
