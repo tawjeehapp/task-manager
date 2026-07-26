@@ -9,22 +9,6 @@ export type PendingApprovalsBreakdown = {
   total: number;
 };
 
-export type DashboardWorkloadItem = {
-  userId: string;
-  fullName: string;
-  employeeNumber: string;
-  activeTaskCount: number;
-  estimatedHours: number;
-  href: string;
-};
-
-export type DashboardProjectItem = {
-  id: string;
-  name: string;
-  status: string;
-  href: string;
-};
-
 export type DashboardTaskItem = {
   id: string;
   title: string;
@@ -70,22 +54,80 @@ export type DashboardAttendanceItem = {
   uiState: AttendanceUiState;
 };
 
-export type AdminDashboard = {
-  role: "admin";
-  departmentsCount: number;
+export type LeadershipTodayStatus = "missing" | "working" | "recorded";
+
+export type LeadershipProjectHealth = "on_track" | "overdue";
+
+export type LeadershipMetrics = {
   activeProjectsCount: number;
-  employeesCount: number;
-  pendingApprovals: PendingApprovalsBreakdown;
-  companyWorkload: DashboardWorkloadItem[];
+  avgProgressPercent: number;
+  inProgressCount: number;
+  overdueCount: number;
+  weekHours: number;
 };
 
-export type ManagerDashboard = {
+export type LeadershipOverduePerson = {
+  userId: string;
+  fullName: string;
+  overdueCount: number;
+};
+
+export type LeadershipPersonRef = {
+  userId: string;
+  fullName: string;
+};
+
+export type LeadershipAttention = {
+  overduePeople: LeadershipOverduePerson[];
+  pendingApprovals: PendingApprovalsBreakdown;
+  missingAttendanceToday: LeadershipPersonRef[];
+};
+
+export type LeadershipTeamRow = {
+  userId: string;
+  fullName: string;
+  avatarUrl: string | null;
+  employeeNumber: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  openTaskCount: number;
+  inProgressCount: number;
+  overdueCount: number;
+  dueTodayCount: number;
+  weekHours: number;
+  todayStatus: LeadershipTodayStatus;
+  href: string;
+};
+
+export type LeadershipProjectRow = {
+  id: string;
+  name: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  progressPercent: number;
+  inProgressCount: number;
+  overdueCount: number;
+  estimatedHoursSum: number;
+  nearestDueDate: string | null;
+  health: LeadershipProjectHealth;
+  href: string;
+};
+
+export type LeadershipDashboardBase = {
+  today: string;
+  metrics: LeadershipMetrics;
+  attention: LeadershipAttention;
+  team: LeadershipTeamRow[];
+  projects: LeadershipProjectRow[];
+};
+
+export type AdminDashboard = LeadershipDashboardBase & {
+  role: "admin";
+};
+
+export type ManagerDashboard = LeadershipDashboardBase & {
   role: "department_manager";
   managedDepartmentId: string | null;
-  departmentProjects: DashboardProjectItem[];
-  overdueTasks: DashboardTaskItem[];
-  teamWorkload: DashboardWorkloadItem[];
-  pendingApprovals: PendingApprovalsBreakdown;
 };
 
 export type EmployeeDashboard = {
@@ -106,4 +148,4 @@ export type DashboardSummary =
 export type DashboardRole = Extract<Role, DashboardSummary["role"]>;
 
 export const DASHBOARD_LIST_LIMIT = 8;
-export const UPCOMING_DEADLINE_DAYS = 14;
+export const ATTENTION_OVERDUE_PEOPLE_LIMIT = 10;

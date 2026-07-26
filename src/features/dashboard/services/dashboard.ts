@@ -7,23 +7,21 @@ import {
   type AttendanceStatus,
 } from "@/features/attendance/types/attendance.types";
 import { getManagedDepartmentId } from "@/features/departments/services/membership-helpers";
-import { ACTIVE_TASK_STATUSES } from "@/features/tasks/types/task.types";
-import { computeEmployeeWorkload } from "@/features/tasks/services/workload";
 import {
   DASHBOARD_LIST_LIMIT,
   type AdminDashboard,
   type DashboardAttendanceItem,
   type DashboardAttendanceSummary,
-  type DashboardProjectItem,
   type DashboardRequestItem,
   type DashboardSummary,
   type DashboardTaskItem,
-  type DashboardWorkloadItem,
   type EmployeeDashboard,
   type EmployeeDashboardMetrics,
+  type LeadershipDashboardBase,
   type ManagerDashboard,
   type PendingApprovalsBreakdown,
 } from "@/features/dashboard/types/dashboard.types";
+import { aggregateLeadershipFromRows } from "@/features/dashboard/services/leadership-aggregates";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import {
@@ -37,6 +35,27 @@ import { createAdminClient } from "@/lib/supabase/admin";
 function emptyPending(): PendingApprovalsBreakdown {
   return { leave: 0, extension: 0, excusal: 0, attendance: 0, total: 0 };
 }
+
+function emptyLeadershipBase(today: string): LeadershipDashboardBase {
+  return {
+    today,
+    metrics: {
+      activeProjectsCount: 0,
+      avgProgressPercent: 0,
+      inProgressCount: 0,
+      overdueCount: 0,
+      weekHours: 0,
+    },
+    attention: {
+      overduePeople: [],
+      pendingApprovals: emptyPending(),
+      missingAttendanceToday: [],
+    },
+    team: [],
+    projects: [],
+  };
+}
+
 
 async function listDepartmentMemberIds(
   departmentId: string,
@@ -137,165 +156,226 @@ async function countPendingApprovals(
   return result;
 }
 
-async function buildWorkload(
-  userIds: string[],
-): Promise<DashboardWorkloadItem[]> {
-  if (userIds.length === 0) return [];
+async function buildLeadershipDashboard(input: {
+  userIds: string[];
+  projectIds: string[];
+  today: string;
+  pendingUserIds: string[] | null;
+}): Promise<LeadershipDashboardBase> {
+  const { userIds, projectIds, today, pendingUserIds } = input;
+  const { start: weekStart, end: weekEnd } = currentWeekBounds(today);
 
-  const admin = createAdminClient();
-  const { data: users, error: usersError } = await admin
-    .from("users")
-    .select("id, full_name, employee_number, is_active")
-    .in("id", userIds)
-    .eq("is_active", true)
-    .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER);
-
-  if (usersError) {
-    throw new ApiError(
-      "تعذر جلب عبء العمل.",
-      500,
-      "DASHBOARD_WORKLOAD_FAILED",
-    );
-  }
-
-  const activeIds = (users ?? []).map((u) => u.id as string);
-  if (activeIds.length === 0) return [];
-
-  const { data: tasks, error: tasksError } = await admin
-    .from("tasks")
-    .select("assigned_to, status, estimated_hours")
-    .in("assigned_to", activeIds)
-    .in("status", [...ACTIVE_TASK_STATUSES]);
-
-  if (tasksError) {
-    throw new ApiError(
-      "تعذر جلب عبء العمل.",
-      500,
-      "DASHBOARD_WORKLOAD_FAILED",
-    );
-  }
-
-  const byUser = new Map<string, Array<{ status: string; estimatedHours: number | null }>>();
-  for (const id of activeIds) {
-    byUser.set(id, []);
-  }
-  for (const row of tasks ?? []) {
-    const assignee = row.assigned_to as string | null;
-    if (!assignee || !byUser.has(assignee)) continue;
-    byUser.get(assignee)!.push({
-      status: row.status as string,
-      estimatedHours:
-        row.estimated_hours === null || row.estimated_hours === undefined
-          ? null
-          : Number(row.estimated_hours),
-    });
-  }
-
-  const userMap = new Map(
-    (users ?? []).map((u) => [
-      u.id as string,
-      {
-        fullName: u.full_name as string,
-        employeeNumber: u.employee_number as string,
-      },
-    ]),
-  );
-
-  const items: DashboardWorkloadItem[] = [];
-  for (const userId of activeIds) {
-    const meta = userMap.get(userId);
-    if (!meta) continue;
-    const workload = computeEmployeeWorkload(userId, byUser.get(userId) ?? []);
-    items.push({
-      userId,
-      fullName: meta.fullName,
-      employeeNumber: meta.employeeNumber,
-      activeTaskCount: workload.activeTaskCount,
-      estimatedHours: workload.estimatedHours,
-      href: `/employees/${userId}`,
-    });
-  }
-
-  items.sort((a, b) => {
-    if (b.estimatedHours !== a.estimatedHours) {
-      return b.estimatedHours - a.estimatedHours;
-    }
-    return b.activeTaskCount - a.activeTaskCount;
-  });
-
-  return items.slice(0, DASHBOARD_LIST_LIMIT);
-}
-
-async function listDepartmentProjects(
-  departmentId: string,
-): Promise<DashboardProjectItem[]> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("projects")
-    .select("id, name, status")
-    .eq("department_id", departmentId)
-    .neq("status", "archived")
-    .order("updated_at", { ascending: false })
-    .limit(DASHBOARD_LIST_LIMIT);
-
-  if (error) {
-    throw new ApiError(
-      "تعذر جلب مشاريع القسم.",
-      500,
-      "DASHBOARD_PROJECTS_FAILED",
-    );
-  }
-
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    name: row.name as string,
-    status: row.status as string,
-    href: `/projects/${row.id}`,
-  }));
-}
-
-async function listOverdueTasks(
-  projectIds: string[],
-  today: string,
-): Promise<DashboardTaskItem[]> {
-  if (projectIds.length === 0) return [];
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("tasks")
-    .select("id, title, status, due_date, project:projects!project_id(id, name)")
-    .in("project_id", projectIds)
-    .neq("status", "completed")
-    .not("due_date", "is", null)
-    .lt("due_date", today)
-    .order("due_date", { ascending: true })
-    .limit(DASHBOARD_LIST_LIMIT);
-
-  if (error) {
-    throw new ApiError(
-      "تعذر جلب المهام المتأخرة.",
-      500,
-      "DASHBOARD_OVERDUE_FAILED",
-    );
-  }
-
-  return (data ?? []).map((row) => {
-    const project = row.project as
-      | { id: string; name: string }
-      | { id: string; name: string }[]
-      | null;
-    const projectName = Array.isArray(project)
-      ? (project[0]?.name ?? null)
-      : (project?.name ?? null);
+  if (userIds.length === 0 && projectIds.length === 0) {
+    const pending = await countPendingApprovals(pendingUserIds);
+    const base = emptyLeadershipBase(today);
     return {
-      id: row.id as string,
-      title: row.title as string,
-      status: row.status as string,
-      dueDate: (row.due_date as string | null) ?? null,
-      projectName,
-      href: `/tasks/${row.id}`,
+      ...base,
+      attention: { ...base.attention, pendingApprovals: pending },
+    };
+  }
+
+  const admin = createAdminClient();
+
+  const usersPromise =
+    userIds.length === 0
+      ? Promise.resolve({ data: [] as unknown[], error: null })
+      : admin
+          .from("users")
+          .select("id, full_name, employee_number, avatar_url")
+          .in("id", userIds)
+          .eq("is_active", true)
+          .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER);
+
+  const projectsPromise =
+    projectIds.length === 0
+      ? Promise.resolve({ data: [] as unknown[], error: null })
+      : admin
+          .from("projects")
+          .select(
+            "id, name, status, department:departments!department_id(id, name)",
+          )
+          .in("id", projectIds);
+
+  const tasksPromise =
+    projectIds.length === 0
+      ? Promise.resolve({ data: [] as unknown[], error: null })
+      : admin
+          .from("tasks")
+          .select(
+            "id, project_id, assigned_to, status, due_date, estimated_hours, progress_percentage, parent_task_id",
+          )
+          .in("project_id", projectIds);
+
+  const attendancePromise =
+    userIds.length === 0
+      ? Promise.resolve({ data: [] as unknown[], error: null })
+      : admin
+          .from("attendance_records")
+          .select("user_id, date, clock_out, total_hours")
+          .in("user_id", userIds)
+          .gte("date", weekStart)
+          .lte("date", weekEnd);
+
+  const [usersRes, projectsRes, tasksRes, attendanceRes, membershipsRes, pending] =
+    await Promise.all([
+      usersPromise,
+      projectsPromise,
+      tasksPromise,
+      attendancePromise,
+      userIds.length === 0
+        ? Promise.resolve({ data: [] as unknown[], error: null })
+        : admin
+            .from("department_memberships")
+            .select(
+              "user_id, department_id, department:departments!department_id(id, name)",
+            )
+            .in("user_id", userIds)
+            .eq("is_current", true),
+      countPendingApprovals(pendingUserIds),
+    ]);
+
+  if (
+    usersRes.error ||
+    projectsRes.error ||
+    tasksRes.error ||
+    attendanceRes.error ||
+    membershipsRes.error
+  ) {
+    throw new ApiError(
+      "تعذر جلب لوحة القيادة.",
+      500,
+      "DASHBOARD_LEADERSHIP_FAILED",
+    );
+  }
+
+  const departmentByUser = new Map<
+    string,
+    { departmentId: string; departmentName: string }
+  >();
+  for (const row of membershipsRes.data ?? []) {
+    const r = row as {
+      user_id: string;
+      department_id: string;
+      department:
+        | { id: string; name: string }
+        | { id: string; name: string }[]
+        | null;
+    };
+    if (departmentByUser.has(r.user_id)) continue;
+    const department = Array.isArray(r.department)
+      ? r.department[0]
+      : r.department;
+    departmentByUser.set(r.user_id, {
+      departmentId: r.department_id,
+      departmentName: department?.name ?? "",
+    });
+  }
+
+  const users = (usersRes.data ?? []).map((row) => {
+    const r = row as {
+      id: string;
+      full_name: string;
+      employee_number: string;
+      avatar_url: string | null;
+    };
+    const dept = departmentByUser.get(r.id);
+    return {
+      userId: r.id,
+      fullName: r.full_name,
+      employeeNumber: r.employee_number,
+      avatarUrl: r.avatar_url,
+      departmentId: dept?.departmentId ?? null,
+      departmentName: dept?.departmentName || null,
     };
   });
+
+  const projects = (projectsRes.data ?? []).map((row) => {
+    const r = row as {
+      id: string;
+      name: string;
+      status: string;
+      department:
+        | { id: string; name: string }
+        | { id: string; name: string }[]
+        | null;
+    };
+    const department = Array.isArray(r.department)
+      ? r.department[0]
+      : r.department;
+    return {
+      id: r.id,
+      name: r.name,
+      status: r.status,
+      departmentId: department?.id ?? null,
+      departmentName: department?.name ?? null,
+    };
+  });
+
+  const tasks = (tasksRes.data ?? []).map((row) => {
+    const r = row as {
+      id: string;
+      project_id: string;
+      assigned_to: string | null;
+      status: string;
+      due_date: string | null;
+      estimated_hours: number | string | null;
+      progress_percentage: number;
+      parent_task_id: string | null;
+    };
+    return {
+      id: r.id,
+      projectId: r.project_id,
+      assignedTo: r.assigned_to,
+      status: r.status,
+      dueDate: r.due_date,
+      estimatedHours:
+        r.estimated_hours === null || r.estimated_hours === undefined
+          ? null
+          : Number(r.estimated_hours),
+      progressPercentage: Number(r.progress_percentage ?? 0),
+      parentTaskId: r.parent_task_id,
+    };
+  });
+
+  const attendance = (attendanceRes.data ?? []).map((row) => {
+    const r = row as {
+      user_id: string;
+      date: string;
+      clock_out: string | null;
+      total_hours: number | string | null;
+    };
+    return {
+      userId: r.user_id,
+      date: r.date,
+      clockOut: r.clock_out,
+      totalHours:
+        r.total_hours === null || r.total_hours === undefined
+          ? null
+          : Number(r.total_hours),
+    };
+  });
+
+  const aggregated = aggregateLeadershipFromRows({
+    today,
+    weekStart,
+    weekEnd,
+    users,
+    projects,
+    tasks,
+    attendance,
+  });
+
+  return {
+    today,
+    metrics: aggregated.metrics,
+    attention: {
+      overduePeople: aggregated.overduePeople,
+      pendingApprovals: pending,
+      missingAttendanceToday: aggregated.missingAttendanceToday,
+    },
+    team: aggregated.team,
+    projects: aggregated.projects,
+  };
 }
 
 async function getAttendanceSummary(
@@ -570,31 +650,19 @@ async function listWeekAttendance(
 }
 
 async function getAdminDashboard(): Promise<AdminDashboard> {
+  const today = calendarDateInOrgTimezone(new Date(), ATTENDANCE_TIMEZONE);
   const admin = createAdminClient();
 
-  const [deptRes, projRes, usersRes, pending, allUsers] = await Promise.all([
-    admin
-      .from("departments")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active"),
-    admin
-      .from("projects")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active"),
-    admin
-      .from("users")
-      .select("id", { count: "exact", head: true })
-      .eq("is_active", true)
-      .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER),
-    countPendingApprovals(null),
+  const [usersRes, projectsRes] = await Promise.all([
     admin
       .from("users")
       .select("id")
       .eq("is_active", true)
       .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER),
+    admin.from("projects").select("id").neq("status", "archived"),
   ]);
 
-  if (deptRes.error || projRes.error || usersRes.error || allUsers.error) {
+  if (usersRes.error || projectsRes.error) {
     throw new ApiError(
       "تعذر جلب لوحة التحكم.",
       500,
@@ -602,38 +670,35 @@ async function getAdminDashboard(): Promise<AdminDashboard> {
     );
   }
 
-  const userIds = (allUsers.data ?? []).map((u) => u.id as string);
-  const companyWorkload = await buildWorkload(userIds);
+  const userIds = (usersRes.data ?? []).map((u) => u.id as string);
+  const projectIds = (projectsRes.data ?? []).map((p) => p.id as string);
+  const leadership = await buildLeadershipDashboard({
+    userIds,
+    projectIds,
+    today,
+    pendingUserIds: null,
+  });
 
   return {
     role: "admin",
-    departmentsCount: deptRes.count ?? 0,
-    activeProjectsCount: projRes.count ?? 0,
-    employeesCount: usersRes.count ?? 0,
-    pendingApprovals: pending,
-    companyWorkload,
+    ...leadership,
   };
 }
 
 async function getManagerDashboard(
   viewer: AppUser,
 ): Promise<ManagerDashboard> {
+  const today = calendarDateInOrgTimezone(new Date(), ATTENDANCE_TIMEZONE);
   const managedDepartmentId = await getManagedDepartmentId(viewer.id);
   if (!managedDepartmentId) {
     return {
       role: "department_manager",
       managedDepartmentId: null,
-      departmentProjects: [],
-      overdueTasks: [],
-      teamWorkload: [],
-      pendingApprovals: emptyPending(),
+      ...emptyLeadershipBase(today),
     };
   }
 
-  const today = calendarDateInOrgTimezone(new Date(), ATTENDANCE_TIMEZONE);
   const memberIds = await listDepartmentMemberIds(managedDepartmentId);
-  const departmentProjects = await listDepartmentProjects(managedDepartmentId);
-
   const admin = createAdminClient();
   const { data: projectRows, error: projectError } = await admin
     .from("projects")
@@ -650,19 +715,17 @@ async function getManagerDashboard(
   }
 
   const projectIds = (projectRows ?? []).map((p) => p.id as string);
-  const [overdueTasks, teamWorkload, pendingApprovals] = await Promise.all([
-    listOverdueTasks(projectIds, today),
-    buildWorkload(memberIds),
-    countPendingApprovals(memberIds),
-  ]);
+  const leadership = await buildLeadershipDashboard({
+    userIds: memberIds,
+    projectIds,
+    today,
+    pendingUserIds: memberIds,
+  });
 
   return {
     role: "department_manager",
     managedDepartmentId,
-    departmentProjects,
-    overdueTasks,
-    teamWorkload,
-    pendingApprovals,
+    ...leadership,
   };
 }
 

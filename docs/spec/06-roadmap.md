@@ -461,7 +461,7 @@ Initial reports:
 
 | Area | Status | Notes |
 |---|---|---|
-| Role dashboards on `/` | **Completed** | Action-oriented cards + lists; deep links |
+| Role dashboards on `/` | **Completed** | M8 action lists; **admin/manager UX superseded by Milestone 11** |
 | Pending approvals breakdown | **Completed** | Leave + extension + excusal + attendance; links to `/approvals` and `/attendance` |
 | `/reports` tabbed tables | **Completed** | Four reports; admin/manager only (`report.view`) |
 | Report APIs | **Completed** | Paginated aggregates; default date range = current month Asia/Riyadh |
@@ -572,6 +572,40 @@ Simplify the employee shell and primary workspace: Dashboard + Tasks + Notificat
 
 ---
 
+# Milestone 11 — Leadership Dashboard Redesign
+
+**Status: Completed**
+
+## Goal
+
+Redesign admin and department-manager home dashboards into an operational leadership view: metric cards, attention alerts, team table, and project health table.
+
+## Scope
+
+- Admin: company-wide active users and non-archived projects
+- Department manager: managed-department members and projects
+- Team / week hours from `attendance_records.total_hours`
+- Project progress = average root-task `progress_percentage`; health derived from overdue tasks
+- Estimated hours column = sum of root-task `estimated_hours` (not a budget field)
+- No job titles (no schema field); no migration
+- Employee dashboard unchanged (Milestone 10)
+
+## Implementation status
+
+| Area | Status | Notes |
+|---|---|---|
+| Shared leadership payload | **Completed** | Admin + manager |
+| Aggregates + unit tests | **Completed** | `leadership-aggregates.ts` |
+| Leadership UI | **Completed** | Metrics, attention, team, projects |
+| M8 list-card admin/manager UI | **Superseded** | Replaced by M11 tables |
+
+## Differences / notes
+
+- Job title and real project budget omitted (not in schema).
+- Pending “task requests” on the attention row = extension + excusal counts.
+
+---
+
 ---
 
 # Deferred from M0–M4 (carry-forward)
@@ -617,3 +651,4 @@ Simplify the employee shell and primary workspace: Dashboard + Tasks + Notificat
 10. Reports — **Completed (Milestone 8)**
 11. Gantt — **Completed (Milestone 9; comments/attachments included)**
 12. Employee UX simplification — **Completed (Milestone 10)**
+13. Leadership dashboards — **Completed (Milestone 11)**
