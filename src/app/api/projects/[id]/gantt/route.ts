@@ -1,3 +1,4 @@
+import { featureFlags } from "@/config/feature-flags";
 import { apiError, apiSuccess } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth/require-user";
@@ -10,6 +11,9 @@ type RouteContext = {
 
 export async function GET(request: Request, context: RouteContext) {
   try {
+    if (!featureFlags.gantt) {
+      throw new ApiError("الميزة غير متاحة", 404, "FEATURE_DISABLED");
+    }
     const user = await requireUser({
       routeKey: "GET /api/projects/[id]/gantt",
     });

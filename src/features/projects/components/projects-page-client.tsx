@@ -15,8 +15,10 @@ import {
   type ProjectSortBy,
 } from "@/features/projects/schemas/project.schema";
 import type { Project } from "@/features/projects/types/project.types";
+import type { ProjectsListResult } from "@/features/projects/services/projects";
 import type { Department } from "@/features/departments/types/department.types";
 import type { Role } from "@/lib/permissions";
+import { withInitialData } from "@/lib/query/initial-data";
 import {
   DEFAULT_TABLE_PAGE_SIZE,
   type SortDirection,
@@ -54,14 +56,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 type ProjectsPageClientProps = {
   canManage: boolean;
   viewerRole: Role;
-};
-
-type ProjectsListResult = {
-  items: Project[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  initialProjects: ProjectsListResult;
 };
 
 type FetchProjectsParams = {
@@ -114,6 +109,7 @@ async function fetchDepartments(): Promise<Department[]> {
 export function ProjectsPageClient({
   canManage,
   viewerRole,
+  initialProjects,
 }: ProjectsPageClientProps) {
   const t = useTranslations("projects");
   const tCommon = useTranslations("common");
@@ -137,6 +133,14 @@ export function ProjectsPageClient({
           ? t("adminDescription")
           : t("description");
 
+  const isDefaultProjectsQuery =
+    page === 1 &&
+    pageSize === DEFAULT_TABLE_PAGE_SIZE &&
+    !includeArchived &&
+    statusFilter === "" &&
+    sortBy === "createdAt" &&
+    sortDir === "desc";
+
   const projectsQuery = useQuery({
     queryKey: [
       "projects",
@@ -156,6 +160,7 @@ export function ProjectsPageClient({
         sortBy,
         sortDir,
       }),
+    ...(isDefaultProjectsQuery ? withInitialData(initialProjects) : {}),
   });
 
   const departmentsQuery = useQuery({

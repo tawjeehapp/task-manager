@@ -143,8 +143,10 @@ async function loadDepartmentById(id: string): Promise<Department> {
   }
 
   const row = data as unknown as DepartmentWithManager;
-  const counts = await getMemberCounts([row.id]);
-  const projectCounts = await getActiveProjectCounts([row.id]);
+  const [counts, projectCounts] = await Promise.all([
+    getMemberCounts([row.id]),
+    getActiveProjectCounts([row.id]),
+  ]);
   return mapDepartment(
     row,
     mapManager(row.manager),
@@ -497,8 +499,10 @@ export async function listDepartmentsForViewer(
     }
     const rows = (data ?? []) as unknown as DepartmentWithManager[];
     const ids = rows.map((r) => r.id);
-    const counts = await getMemberCounts(ids);
-    const projectCounts = await getActiveProjectCounts(ids);
+    const [counts, projectCounts] = await Promise.all([
+      getMemberCounts(ids),
+      getActiveProjectCounts(ids),
+    ]);
     let items = rows.map((row) =>
       mapDepartment(
         row,
@@ -535,8 +539,10 @@ export async function listDepartmentsForViewer(
 
   const rows = (data ?? []) as unknown as DepartmentWithManager[];
   const ids = rows.map((r) => r.id);
-  const counts = await getMemberCounts(ids);
-  const projectCounts = await getActiveProjectCounts(ids);
+  const [counts, projectCounts] = await Promise.all([
+    getMemberCounts(ids),
+    getActiveProjectCounts(ids),
+  ]);
   const total = count ?? 0;
 
   return {

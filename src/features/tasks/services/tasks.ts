@@ -2,7 +2,7 @@ import "server-only";
 
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
-import { getManagedDepartmentId } from "@/features/departments/services/membership-helpers";
+import { getManagedDepartmentId, getProjectIdsForUser } from "@/features/departments/services/membership-helpers";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import {
@@ -762,11 +762,15 @@ export async function listTasksForViewer(
     await assertCanAccessProject(viewer, query.projectId);
   }
 
+  const managedDepartmentId =
+    viewer.role === "department_manager"
+      ? await getManagedDepartmentId(viewer.id)
+      : null;
+
   let departmentProjectIds: string[] | null = null;
   if (query.departmentId) {
     if (viewer.role === "department_manager") {
-      const managedId = await getManagedDepartmentId(viewer.id);
-      if (!managedId || managedId !== query.departmentId) {
+      if (!managedDepartmentId || managedDepartmentId !== query.departmentId) {
         return emptyResult(query);
       }
     } else if (viewer.role === "employee") {
@@ -789,11 +793,7 @@ export async function listTasksForViewer(
 
   if (viewer.role === "employee") {
     // Employees see assigned tasks, and tasks in projects they belong to
-    const { data: memberships } = await admin
-      .from("project_members")
-      .select("project_id")
-      .eq("user_id", viewer.id);
-    let projectIds = (memberships ?? []).map((m) => m.project_id as string);
+    let projectIds = await getProjectIdsForUser(viewer.id);
     if (departmentProjectIds) {
       const allowed = new Set(departmentProjectIds);
       projectIds = projectIds.filter((id) => allowed.has(id));
@@ -833,19 +833,26 @@ export async function listTasksForViewer(
       }
     }
   } else if (viewer.role === "department_manager") {
-    const managedId = await getManagedDepartmentId(viewer.id);
-    if (!managedId) {
+    if (!managedDepartmentId) {
       return emptyResult(query);
     }
 
-    const { data: projects } = await admin
-      .from("projects")
-      .select("id")
-      .eq("department_id", managedId);
-    let projectIds = (projects ?? []).map((p) => p.id as string);
-    if (departmentProjectIds) {
-      const allowed = new Set(departmentProjectIds);
-      projectIds = projectIds.filter((id) => allowed.has(id));
+    let projectIds: string[];
+    if (
+      departmentProjectIds &&
+      query.departmentId === managedDepartmentId
+    ) {
+      projectIds = departmentProjectIds;
+    } else {
+      const { data: projects } = await admin
+        .from("projects")
+        .select("id")
+        .eq("department_id", managedDepartmentId);
+      projectIds = (projects ?? []).map((p) => p.id as string);
+      if (departmentProjectIds) {
+        const allowed = new Set(departmentProjectIds);
+        projectIds = projectIds.filter((id) => allowed.has(id));
+      }
     }
 
     if (projectIds.length === 0) {

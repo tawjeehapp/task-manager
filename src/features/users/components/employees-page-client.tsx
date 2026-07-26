@@ -43,6 +43,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { withInitialData } from "@/lib/query/initial-data";
 import {
   DEFAULT_TABLE_PAGE_SIZE,
   type SortDirection,
@@ -53,6 +54,7 @@ import { cn } from "@/lib/utils";
 type EmployeesPageClientProps = {
   canManage: boolean;
   currentUserId: string;
+  initialUsers: UsersListResult;
 };
 
 type BulkAction =
@@ -129,6 +131,7 @@ async function fetchDepartments(): Promise<Department[]> {
 export function EmployeesPageClient({
   canManage,
   currentUserId,
+  initialUsers,
 }: EmployeesPageClientProps) {
   const t = useTranslations("employees");
   const tRoles = useTranslations("roles");
@@ -153,6 +156,16 @@ export function EmployeesPageClient({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [bulkRunning, setBulkRunning] = useState(false);
 
+  const isDefaultUsersQuery =
+    page === 1 &&
+    pageSize === DEFAULT_TABLE_PAGE_SIZE &&
+    search === "" &&
+    roleFilter === "" &&
+    departmentFilter === "" &&
+    statusFilter === "" &&
+    sortBy === "createdAt" &&
+    sortDir === "desc";
+
   const usersQuery = useQuery({
     queryKey: [
       "users",
@@ -176,6 +189,7 @@ export function EmployeesPageClient({
         sortBy,
         sortDir,
       }),
+    ...(isDefaultUsersQuery ? withInitialData(initialUsers) : {}),
   });
 
   const departmentsQuery = useQuery({

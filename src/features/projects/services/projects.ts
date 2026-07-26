@@ -2,7 +2,7 @@ import "server-only";
 
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
-import { getManagedDepartmentId } from "@/features/departments/services/membership-helpers";
+import { getManagedDepartmentId, getProjectIdsForUser } from "@/features/departments/services/membership-helpers";
 import {
   assertCanAccessProject,
   assertCanCreateProject,
@@ -29,6 +29,8 @@ export type ProjectsListResult = {
   totalPages: number;
 };
 
+type ProjectMemberCountEmbed = { count: number }[];
+
 type ProjectWithRelations = ProjectRow & {
   department: { id: string; name: string } | null;
   created_by_user: {
@@ -36,10 +38,11 @@ type ProjectWithRelations = ProjectRow & {
     full_name: string;
     employee_number: string;
   } | null;
+  project_members?: ProjectMemberCountEmbed;
 };
 
 const PROJECT_SELECT =
-  "id, department_id, name, description, status, priority, start_date, end_date, created_by, created_at, updated_at, department:departments!department_id(id, name), created_by_user:users!created_by(id, full_name, employee_number)";
+  "id, department_id, name, description, status, priority, start_date, end_date, created_by, created_at, updated_at, department:departments!department_id(id, name), created_by_user:users!created_by(id, full_name, employee_number), project_members(count)";
 
 const SORT_COLUMN_MAP: Record<ListProjectsQuery["sortBy"], string> = {
   name: "name",
@@ -72,6 +75,16 @@ function mapDepartment(
   return { id: row.id, name: row.name };
 }
 
+function memberCountFromEmbed(
+  row: ProjectWithRelations,
+): number {
+  const embed = row.project_members;
+  if (!embed || embed.length === 0) {
+    return 0;
+  }
+  return embed[0]?.count ?? 0;
+}
+
 export function mapProject(
   row: ProjectRow,
   department: ProjectDepartmentSummary | null,
@@ -96,36 +109,6 @@ export function mapProject(
   };
 }
 
-async function getMemberCounts(
-  projectIds: string[],
-): Promise<Map<string, number>> {
-  const counts = new Map<string, number>();
-  if (projectIds.length === 0) {
-    return counts;
-  }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("project_members")
-    .select("project_id")
-    .in("project_id", projectIds);
-
-  if (error) {
-    throw new ApiError(
-      "تعذر حساب أعضاء المشاريع.",
-      500,
-      "MEMBER_COUNT_FAILED",
-    );
-  }
-
-  for (const row of data ?? []) {
-    const id = row.project_id as string;
-    counts.set(id, (counts.get(id) ?? 0) + 1);
-  }
-
-  return counts;
-}
-
 async function loadProjectById(id: string): Promise<Project> {
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -143,12 +126,11 @@ async function loadProjectById(id: string): Promise<Project> {
   }
 
   const row = data as unknown as ProjectWithRelations;
-  const counts = await getMemberCounts([row.id]);
   return mapProject(
     row,
     mapDepartment(row.department),
     mapUserSummary(row.created_by_user),
-    counts.get(row.id) ?? 0,
+    memberCountFromEmbed(row),
   );
 }
 
@@ -321,42 +303,26 @@ export async function listProjectsForViewer(
   const sortColumn = SORT_COLUMN_MAP[query.sortBy];
 
   let projectIdsFilter: string[] | null = null;
+  let managedDepartmentId: string | null = null;
 
   if (query.memberUserId) {
-    const { data: memberships, error: memberError } = await admin
-      .from("project_members")
-      .select("project_id")
-      .eq("user_id", query.memberUserId);
-
-    if (memberError) {
-      throw new ApiError("تعذر جلب المشاريع.", 500, "LIST_PROJECTS_FAILED");
-    }
-
-    projectIdsFilter = (memberships ?? []).map((m) => m.project_id as string);
+    const ownIds = await getProjectIdsForUser(query.memberUserId);
+    projectIdsFilter = ownIds;
     if (projectIdsFilter.length === 0) {
       return emptyResult(query);
     }
   }
 
   if (viewer.role === "department_manager") {
-    const managedId = await getManagedDepartmentId(viewer.id);
-    if (!managedId) {
+    managedDepartmentId = await getManagedDepartmentId(viewer.id);
+    if (!managedDepartmentId) {
       return emptyResult(query);
     }
-    if (query.departmentId && query.departmentId !== managedId) {
+    if (query.departmentId && query.departmentId !== managedDepartmentId) {
       return emptyResult(query);
     }
   } else if (viewer.role === "employee") {
-    const { data: memberships, error } = await admin
-      .from("project_members")
-      .select("project_id")
-      .eq("user_id", viewer.id);
-
-    if (error) {
-      throw new ApiError("تعذر جلب المشاريع.", 500, "LIST_PROJECTS_FAILED");
-    }
-
-    const ownIds = (memberships ?? []).map((m) => m.project_id as string);
+    const ownIds = await getProjectIdsForUser(viewer.id);
     if (ownIds.length === 0) {
       return emptyResult(query);
     }
@@ -373,8 +339,7 @@ export async function listProjectsForViewer(
     .select(PROJECT_SELECT, { count: "exact" });
 
   if (viewer.role === "department_manager") {
-    const managedId = await getManagedDepartmentId(viewer.id);
-    builder = builder.eq("department_id", managedId!);
+    builder = builder.eq("department_id", managedDepartmentId!);
   }
 
   if (projectIdsFilter) {
@@ -402,7 +367,6 @@ export async function listProjectsForViewer(
   }
 
   const rows = (data ?? []) as unknown as ProjectWithRelations[];
-  const counts = await getMemberCounts(rows.map((r) => r.id));
   const total = count ?? 0;
 
   return {
@@ -411,7 +375,7 @@ export async function listProjectsForViewer(
         row,
         mapDepartment(row.department),
         mapUserSummary(row.created_by_user),
-        counts.get(row.id) ?? 0,
+        memberCountFromEmbed(row),
       ),
     ),
     total,

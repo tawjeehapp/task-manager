@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 
+import { featureFlags } from "@/config/feature-flags";
 import { ProjectBoardClient } from "@/features/projects/components/project-board-client";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -32,6 +33,11 @@ export default async function ProjectBoardPage({ params }: PageProps) {
   }
 
   const { id } = await params;
+
+  if (!featureFlags.kanban) {
+    redirect(`/projects/${id}`);
+  }
+
   const canUpdateStatus =
     user.role === "admin" ||
     user.role === "department_manager" ||

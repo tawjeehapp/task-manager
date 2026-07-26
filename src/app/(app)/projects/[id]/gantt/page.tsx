@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 
+import { featureFlags } from "@/config/feature-flags";
 import { ProjectGanttClient } from "@/features/gantt/components/project-gantt-client";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
@@ -32,6 +33,10 @@ export default async function ProjectGanttPage({ params }: PageProps) {
   }
 
   const { id } = await params;
+
+  if (!featureFlags.gantt) {
+    redirect(`/projects/${id}`);
+  }
 
   return <ProjectGanttClient projectId={id} />;
 }

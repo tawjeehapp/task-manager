@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 
 import { DepartmentsPageClient } from "@/features/departments/components/departments-page-client";
+import { listDepartmentsQuerySchema } from "@/features/departments/schemas/department.schema";
+import { listDepartmentsForViewer } from "@/features/departments/services/departments";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
@@ -33,10 +35,14 @@ export default async function DepartmentsPage() {
     permissions,
   );
 
+  const defaultQuery = listDepartmentsQuerySchema.parse({});
+  const initialDepartments = await listDepartmentsForViewer(user, defaultQuery);
+
   return (
     <DepartmentsPageClient
       canManage={canManage}
       viewerRole={user.role}
+      initialDepartments={initialDepartments}
     />
   );
 }

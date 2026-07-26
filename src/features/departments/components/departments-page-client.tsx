@@ -14,7 +14,9 @@ import {
   type DepartmentSortBy,
 } from "@/features/departments/schemas/department.schema";
 import type { Department } from "@/features/departments/types/department.types";
+import type { DepartmentsListResult } from "@/features/departments/services/departments";
 import type { Role } from "@/lib/permissions";
+import { withInitialData } from "@/lib/query/initial-data";
 import {
   DEFAULT_TABLE_PAGE_SIZE,
   type SortDirection,
@@ -53,14 +55,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 type DepartmentsPageClientProps = {
   canManage: boolean;
   viewerRole: Role;
-};
-
-type DepartmentsListResult = {
-  items: Department[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  initialDepartments: DepartmentsListResult;
 };
 
 type FetchDepartmentsParams = {
@@ -131,6 +126,7 @@ async function fetchManagers(): Promise<ManagerOption[]> {
 export function DepartmentsPageClient({
   canManage,
   viewerRole,
+  initialDepartments,
 }: DepartmentsPageClientProps) {
   const t = useTranslations("departments");
   const tCommon = useTranslations("common");
@@ -156,6 +152,14 @@ export function DepartmentsPageClient({
         ? t("managerDescription")
         : t("description");
 
+  const isDefaultDepartmentsQuery =
+    page === 1 &&
+    pageSize === DEFAULT_TABLE_PAGE_SIZE &&
+    statusFilter === "" &&
+    managerFilter === "" &&
+    sortBy === "name" &&
+    sortDir === "asc";
+
   const departmentsQuery = useQuery({
     queryKey: [
       "departments",
@@ -175,6 +179,9 @@ export function DepartmentsPageClient({
         sortBy,
         sortDir,
       }),
+    ...(isDefaultDepartmentsQuery
+      ? withInitialData(initialDepartments)
+      : {}),
   });
 
   const managersQuery = useQuery({

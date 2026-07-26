@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 
+import { featureFlags } from "@/config/feature-flags";
 import {
   updateProjectSchema,
   type UpdateProjectInput,
@@ -397,18 +398,22 @@ export function ProjectDetailClient({
           description={project.department?.name ?? t("detailsTitle")}
           actions={
             <div className="flex flex-wrap gap-2">
-              <Link
-                href={`/projects/${projectId}/board`}
-                className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
-              >
-                {t("kanban")}
-              </Link>
-              <Link
-                href={`/projects/${projectId}/gantt`}
-                className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
-              >
-                {t("gantt")}
-              </Link>
+              {featureFlags.kanban ? (
+                <Link
+                  href={`/projects/${projectId}/board`}
+                  className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
+                >
+                  {t("kanban")}
+                </Link>
+              ) : null}
+              {featureFlags.gantt ? (
+                <Link
+                  href={`/projects/${projectId}/gantt`}
+                  className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
+                >
+                  {t("gantt")}
+                </Link>
+              ) : null}
               {allowProjectEdit ? (
                 <>
                   <Button

@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 
 import { EmployeesPageClient } from "@/features/users/components/employees-page-client";
+import { listUsersQuerySchema } from "@/features/users/schemas/user.schema";
+import { listUsersForViewer } from "@/features/users/services/get-users";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
@@ -38,7 +40,14 @@ export default async function EmployeesPage() {
     redirect("/");
   }
 
+  const defaultQuery = listUsersQuerySchema.parse({});
+  const initialUsers = await listUsersForViewer(user, defaultQuery, canManage);
+
   return (
-    <EmployeesPageClient canManage={canManage} currentUserId={user.id} />
+    <EmployeesPageClient
+      canManage={canManage}
+      currentUserId={user.id}
+      initialUsers={initialUsers}
+    />
   );
 }

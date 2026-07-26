@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import {
   mapUserRow,
@@ -10,7 +12,7 @@ import {
 
 export type { AppUser, AuthSession, AuthUser } from "@/lib/auth/types";
 
-export async function getSession(): Promise<AuthSession | null> {
+export const getSession = cache(async (): Promise<AuthSession | null> => {
   const supabase = await createClient();
   const {
     data: { user: authUser },
@@ -20,39 +22,35 @@ export async function getSession(): Promise<AuthSession | null> {
     return null;
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
   const user = await getAppUserByAuthId(authUser.id);
   if (!user) {
     return null;
   }
 
   return {
-    accessToken: session?.access_token ?? "",
+    accessToken: "",
     user,
   };
-}
+});
 
-export async function getCurrentUser(): Promise<AppUser | null> {
+export const getCurrentUser = cache(async (): Promise<AppUser | null> => {
   const session = await getSession();
   return session?.user ?? null;
-}
+});
 
-export async function getAppUserByAuthId(
-  authUserId: string,
-): Promise<AppUser | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select("*")
-    .eq("auth_user_id", authUserId)
-    .maybeSingle();
+export const getAppUserByAuthId = cache(
+  async (authUserId: string): Promise<AppUser | null> => {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
 
-  if (error || !data) {
-    return null;
-  }
+    if (error || !data) {
+      return null;
+    }
 
-  return mapUserRow(data as UserRow);
-}
+    return mapUserRow(data as UserRow);
+  },
+);

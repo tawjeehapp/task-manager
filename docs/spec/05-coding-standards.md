@@ -595,6 +595,7 @@ Consider performance for:
 - Large tables
 - Reports
 - Dashboards
+- Client navigations between primary routes
 
 Use:
 
@@ -610,6 +611,34 @@ Shared table UI:
 - `lib/table/constants.ts`
 
 List API responses should include `items`, `total`, `page`, `pageSize`, and `totalPages`.
+
+## List page first paint (required)
+
+Primary list routes must avoid a client waterfall on first paint:
+
+**Bad:** Server page only checks auth → Client mounts → `useQuery` → `GET /api/...` → table appears.
+
+**Good:** Server page calls the feature service with default list params → passes `initial*` into the client → TanStack Query is seeded → table appears with the RSC payload.
+
+### Rules
+
+1. Fetch default list data in the page **Server Component** via the feature **service** (not by calling your own HTTP API from the server).
+2. Default query must match the client’s initial UI state (page, pageSize, sort, filters such as employee `mineOnly`).
+3. Seed the matching `useQuery` with `withInitialData` from `src/lib/query/initial-data.ts` (`initialData` + `initialDataUpdatedAt`). Bare `initialData` alone is treated as stale and will refetch immediately.
+4. Apply `withInitialData` **only** when the live query key still matches those defaults; otherwise filters/pagination would show the wrong rows.
+5. Keep `/api` routes for interactive refetches (page change, sort, filter, mutations).
+
+### Navigation shell
+
+- Provide `src/app/(app)/loading.tsx` so route changes show a skeleton immediately.
+- Deduplicate per-request auth/permissions with React `cache()` on session and role-permission helpers.
+- Request-cache scope helpers (`getManagedDepartmentId`, `getProjectIdsForUser`, etc.).
+- Prefer `Promise.all` for independent post-list aggregates; prefer PostgREST count/relation embeds over follow-up count queries where filters allow.
+
+### Reference
+
+- Dashboard: server fetch → props (`src/app/(app)/page.tsx`)
+- Projects / Tasks / Departments / Employees: server fetch → `initial*` + `withInitialData`
 
 ---
 

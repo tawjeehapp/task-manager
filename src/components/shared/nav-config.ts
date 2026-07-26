@@ -10,7 +10,6 @@ import {
   FolderKanban,
   LayoutDashboard,
   Megaphone,
-  Settings,
   Users,
 } from "lucide-react";
 
@@ -153,18 +152,6 @@ export const navSections: NavSection[] = [
         icon: FileText,
         enabled: true,
         permission: "report.view",
-        hideForRoles: ["employee"],
-      },
-    ],
-  },
-  {
-    key: "administration",
-    items: [
-      {
-        key: "settings",
-        href: "#",
-        icon: Settings,
-        enabled: false,
         hideForRoles: ["employee"],
       },
     ],

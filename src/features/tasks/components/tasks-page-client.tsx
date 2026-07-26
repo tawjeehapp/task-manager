@@ -13,8 +13,10 @@ import {
   type TaskSortBy,
 } from "@/features/tasks/schemas/task.schema";
 import type { Task } from "@/features/tasks/types/task.types";
+import type { TasksListResult } from "@/features/tasks/services/tasks";
 import type { Project } from "@/features/projects/types/project.types";
 import type { Role } from "@/lib/permissions";
+import { withInitialData } from "@/lib/query/initial-data";
 import {
   DEFAULT_TABLE_PAGE_SIZE,
   type SortDirection,
@@ -44,14 +46,7 @@ type TasksPageClientProps = {
   canCreate: boolean;
   viewerRole: Role;
   viewerId: string;
-};
-
-type TasksListResult = {
-  items: Task[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
+  initialTasks: TasksListResult;
 };
 
 async function fetchTasks(params: {
@@ -149,6 +144,7 @@ export function TasksPageClient({
   canCreate,
   viewerRole,
   viewerId,
+  initialTasks,
 }: TasksPageClientProps) {
   const t = useTranslations("tasks");
   const tCommon = useTranslations("common");
@@ -171,6 +167,20 @@ export function TasksPageClient({
     viewerRole === "admin" || viewerRole === "department_manager";
   const canFilterAssignee =
     viewerRole === "admin" || viewerRole === "department_manager";
+
+  const isDefaultTasksQuery =
+    page === 1 &&
+    pageSize === DEFAULT_TABLE_PAGE_SIZE &&
+    sortBy === "createdAt" &&
+    sortDir === "desc" &&
+    statusFilter === "" &&
+    projectFilter === "" &&
+    departmentFilter === "" &&
+    assigneeFilter === "" &&
+    priorityFilter === "" &&
+    dueFrom === "" &&
+    dueTo === "" &&
+    mineOnly === (viewerRole === "employee");
 
   const tasksQuery = useQuery({
     queryKey: [
@@ -202,6 +212,7 @@ export function TasksPageClient({
         dueFrom: dueFrom || undefined,
         dueTo: dueTo || undefined,
       }),
+    ...(isDefaultTasksQuery ? withInitialData(initialTasks) : {}),
   });
 
   const projectsQuery = useQuery({

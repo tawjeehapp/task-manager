@@ -913,6 +913,12 @@ Frequently filtered fields:
 - created_at
 - due_date
 
+Composite / partial indexes for list and scope queries (`20260726121500_list_query_indexes.sql`):
+
+- `department_memberships (department_id) WHERE is_current = true`
+- `tasks (project_id, parent_task_id)`
+- `projects (department_id, status)`
+
 ---
 
 # Row Level Security

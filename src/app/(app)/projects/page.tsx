@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 
 import { ProjectsPageClient } from "@/features/projects/components/projects-page-client";
+import { listProjectsQuerySchema } from "@/features/projects/schemas/project.schema";
+import { listProjectsForViewer } from "@/features/projects/services/projects";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
@@ -32,7 +34,14 @@ export default async function ProjectsPage() {
     user.role === "admin" ||
     hasPermission(user.role, PERMISSIONS.PROJECT_MANAGE, permissions);
 
+  const defaultQuery = listProjectsQuerySchema.parse({});
+  const initialProjects = await listProjectsForViewer(user, defaultQuery);
+
   return (
-    <ProjectsPageClient canManage={canManage} viewerRole={user.role} />
+    <ProjectsPageClient
+      canManage={canManage}
+      viewerRole={user.role}
+      initialProjects={initialProjects}
+    />
   );
 }

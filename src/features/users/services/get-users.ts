@@ -30,43 +30,38 @@ const USER_SORT_COLUMNS: Record<UserSortBy, string> = {
   createdAt: "created_at",
 };
 
-async function attachCurrentDepartments(
-  userIds: string[],
-): Promise<Map<string, CurrentDepartmentSummary>> {
-  const map = new Map<string, CurrentDepartmentSummary>();
-  if (userIds.length === 0) {
-    return map;
+const USER_LIST_SELECT =
+  "*, department_memberships(is_current, department:departments(id, name, status))";
+
+type UserListRow = UserRow & {
+  department_memberships?: Array<{
+    is_current: boolean;
+    department:
+      | { id: string; name: string; status: "active" | "archived" }
+      | { id: string; name: string; status: "active" | "archived" }[]
+      | null;
+  }>;
+};
+
+function currentDepartmentFromEmbed(
+  row: UserListRow,
+): CurrentDepartmentSummary | null {
+  const memberships = row.department_memberships ?? [];
+  const current = memberships.find((m) => m.is_current);
+  if (!current?.department) {
+    return null;
   }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("department_memberships")
-    .select("user_id, department:departments!inner(id, name, status)")
-    .in("user_id", userIds)
-    .eq("is_current", true);
-
-  if (error) {
-    throw new ApiError(
-      "تعذر جلب أقسام الموظفين.",
-      500,
-      "LIST_USER_DEPARTMENTS_FAILED",
-    );
+  const dept = Array.isArray(current.department)
+    ? current.department[0]
+    : current.department;
+  if (!dept) {
+    return null;
   }
-
-  for (const row of data ?? []) {
-    const dept = row.department as unknown as {
-      id: string;
-      name: string;
-      status: "active" | "archived";
-    };
-    map.set(row.user_id as string, {
-      id: dept.id,
-      name: dept.name,
-      status: dept.status,
-    });
-  }
-
-  return map;
+  return {
+    id: dept.id,
+    name: dept.name,
+    status: dept.status,
+  };
 }
 
 async function getCurrentMemberUserIds(departmentId: string): Promise<string[]> {
@@ -141,7 +136,7 @@ export async function listUsers(
 
   let builder = admin
     .from("users")
-    .select("*", { count: "exact" })
+    .select(USER_LIST_SELECT, { count: "exact" })
     .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER)
     .order(sortColumn, { ascending })
     .range(from, to);
@@ -179,14 +174,13 @@ export async function listUsers(
     throw new ApiError("تعذر جلب المستخدمين.", 500, "LIST_USERS_FAILED");
   }
 
-  const rows = (data ?? []) as UserRow[];
-  const deptMap = await attachCurrentDepartments(rows.map((r) => r.id));
+  const rows = (data ?? []) as unknown as UserListRow[];
   const total = count ?? 0;
 
   return {
     items: rows.map((row) => ({
       ...toPublicUser(mapUserRow(row)),
-      currentDepartment: deptMap.get(row.id) ?? null,
+      currentDepartment: currentDepartmentFromEmbed(row),
     })),
     total,
     page: query.page,

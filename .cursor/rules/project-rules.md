@@ -323,6 +323,34 @@ Local UI state:
 - React state
 
 
+# List Page Data Loading
+
+Primary navigable list pages must paint from server-fetched data on first view.
+
+Do not ship a list page that only auth-gates on the server and then waits for TanStack Query → `/api` for the default table.
+
+Required pattern:
+
+1. Page Server Component: `getCurrentUser` → permission check → feature service (`listXForViewer` / equivalent) with **default** query params matching the client’s initial filters.
+2. Pass result as `initial*` prop to the page client.
+3. Client `useQuery`: spread `withInitialData(initial*)` from `src/lib/query/initial-data.ts` **only when** current page/filters/sort match those defaults.
+4. Keep API routes for pagination, filter changes, and mutations.
+
+Reference implementations:
+
+- `src/app/(app)/projects/page.tsx` + `projects-page-client.tsx`
+- Same for tasks, departments, employees; dashboard already passes server data as props
+
+Also required for app shell navigations:
+
+- `src/app/(app)/loading.tsx` for instant route skeletons
+- Request-scoped `cache()` on `getCurrentUser` / `getPermissionsForRole` (already in `lib/auth` and `lib/permissions`)
+- Request-scoped `cache()` on membership scope helpers (`getManagedDepartmentId`, `getProjectIdsForUser`)
+- Prefer `Promise.all` for independent aggregates; Prefer PostgREST embeds for list counts/relations over N+1 follow-up queries
+
+When adding a new primary sidebar list route, follow this pattern in the same PR.
+
+
 # Database Rules
 
 Database changes require:
@@ -365,8 +393,9 @@ When implementing a feature:
 4. Implement service layer.
 5. Implement API.
 6. Implement UI.
-7. Add loading, error, and success feedback.
-8. Verify RTL.
+7. For primary list routes: server-fetch default list data and seed TanStack Query (`withInitialData`).
+8. Add loading, error, and success feedback.
+9. Verify RTL.
 
 
 # User Feedback Rules

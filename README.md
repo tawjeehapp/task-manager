@@ -169,6 +169,24 @@ See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for f
 | [Roadmap](docs/spec/06-roadmap.md) | Milestones |
 | [Development setup](docs/spec/07-development-setup.md) | Local environment |
 
+## List pages and navigation performance
+
+Primary list routes (Projects, Tasks, Departments, Employees, Dashboard) must **not** wait on a client `/api` round-trip for first paint.
+
+Pattern:
+
+1. The page **Server Component** authenticates, then calls the feature **service** with default list query params (same defaults as the client UI).
+2. Pass the result into the page client as `initial*` (e.g. `initialProjects`).
+3. The client seeds TanStack Query with `withInitialData(...)` from `src/lib/query/initial-data.ts` — only when the current filters match those defaults.
+4. Pagination, sort, filter, and mutations still use `/api/*` + Query refetch.
+
+Also:
+
+- `src/app/(app)/loading.tsx` provides an instant skeleton during route transitions.
+- Auth/permission helpers use React `cache()` so layout + page share one lookup per request.
+
+See [Coding standards — Performance](docs/spec/05-coding-standards.md#performance) and `.cursor/rules/project-rules.md`.
+
 ## Scripts
 
 ```bash
