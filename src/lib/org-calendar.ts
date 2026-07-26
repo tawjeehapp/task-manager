@@ -28,3 +28,26 @@ export function currentMonthBounds(today: string): {
 export function todayInOrgTimezone(instant: Date = new Date()): string {
   return calendarDateInOrgTimezone(instant, ATTENDANCE_TIMEZONE);
 }
+
+/**
+ * Inclusive Sunday–Saturday week containing `today` (YYYY-MM-DD).
+ * Gulf work week often starts Sunday; Fri–Sat are weekend.
+ */
+export function currentWeekBounds(today: string): {
+  start: string;
+  end: string;
+} {
+  const [y, m, d] = today.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const day = date.getUTCDay(); // 0 Sun … 6 Sat
+  const start = addCalendarDays(today, -day);
+  const end = addCalendarDays(start, 6);
+  return { start, end };
+}
+
+/** True when the UTC weekday of `dateIso` is Friday (5) or Saturday (6). */
+export function isOrgWeekend(dateIso: string): boolean {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 5 || day === 6;
+}

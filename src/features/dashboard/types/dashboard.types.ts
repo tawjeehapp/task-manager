@@ -1,3 +1,4 @@
+import type { AttendanceUiState } from "@/features/attendance/types/attendance.types";
 import type { Role } from "@/lib/permissions";
 
 export type PendingApprovalsBreakdown = {
@@ -51,6 +52,24 @@ export type DashboardAttendanceSummary = {
   href: string;
 };
 
+export type EmployeeDashboardMetrics = {
+  inProgress: number;
+  completed: number;
+  overdue: number;
+  weekHours: number;
+  dueToday: number;
+};
+
+export type DashboardAttendanceItem = {
+  id: string;
+  date: string;
+  clockIn: string;
+  clockOut: string | null;
+  totalHours: number | null;
+  status: string;
+  uiState: AttendanceUiState;
+};
+
 export type AdminDashboard = {
   role: "admin";
   departmentsCount: number;
@@ -71,8 +90,10 @@ export type ManagerDashboard = {
 
 export type EmployeeDashboard = {
   role: "employee";
-  assignedTasks: DashboardTaskItem[];
-  upcomingDeadlines: DashboardTaskItem[];
+  today: string;
+  metrics: EmployeeDashboardMetrics;
+  todayTasks: DashboardTaskItem[];
+  weekAttendance: DashboardAttendanceItem[];
   attendanceSummary: DashboardAttendanceSummary;
   myRequests: DashboardRequestItem[];
 };

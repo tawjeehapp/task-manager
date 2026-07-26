@@ -16,7 +16,7 @@ export function MobileNav() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background pb-[env(safe-area-inset-bottom)] lg:hidden"
       aria-label={t("menu")}
     >
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-3">
         {mobileNavItems.map((item) => {
           const Icon = item.icon;
           const label = t(item.key);

@@ -1,31 +1,83 @@
 import { describe, expect, it } from "vitest";
 
-import { navItemIsVisible, navSections } from "@/components/shared/nav-config";
+import {
+  mobileNavItems,
+  navItemIsVisible,
+  navSections,
+} from "@/components/shared/nav-config";
+
+const EMPLOYEE_PERMS = [
+  "department.view",
+  "project.view",
+  "attendance.view",
+  "leave.view",
+  "announcement.view",
+  "notification.view",
+  "employee_request.view",
+  "employee_request.create",
+  "work_log.create",
+  "work_log.view",
+];
+
+function allItems() {
+  return navSections.flatMap((section) => section.items);
+}
 
 describe("navItemIsVisible", () => {
-  it("hides reports and settings from employees", () => {
-    const reports = navSections
-      .flatMap((section) => section.items)
-      .find((item) => item.key === "reports");
-    const settings = navSections
-      .flatMap((section) => section.items)
-      .find((item) => item.key === "settings");
+  it("shows employees only Dashboard, Tasks, and Notifications", () => {
+    const visible = allItems()
+      .filter((item) => navItemIsVisible(item, EMPLOYEE_PERMS, "employee"))
+      .map((item) => item.key);
 
-    expect(reports).toBeDefined();
-    expect(settings).toBeDefined();
-    expect(navItemIsVisible(reports!, [], "employee")).toBe(false);
-    expect(navItemIsVisible(settings!, [], "employee")).toBe(false);
+    expect(visible).toEqual(["dashboard", "tasks", "notifications"]);
   });
 
-  it("still shows reports and settings placeholders to admins", () => {
-    const reports = navSections
-      .flatMap((section) => section.items)
-      .find((item) => item.key === "reports");
-    const settings = navSections
-      .flatMap((section) => section.items)
-      .find((item) => item.key === "settings");
+  it("hides Projects, Departments, Attendance, Leave, Announcements, and Reports from employees", () => {
+    for (const key of [
+      "projects",
+      "departments",
+      "attendance",
+      "leave",
+      "announcements",
+      "reports",
+    ]) {
+      const item = allItems().find((entry) => entry.key === key);
+      expect(item).toBeDefined();
+      expect(navItemIsVisible(item!, EMPLOYEE_PERMS, "employee")).toBe(false);
+    }
+  });
 
-    expect(navItemIsVisible(reports!, [], "admin")).toBe(true);
-    expect(navItemIsVisible(settings!, [], "admin")).toBe(true);
+  it("still shows Projects and Attendance to managers with permissions", () => {
+    const managerPerms = [
+      "project.view",
+      "attendance.view",
+      "leave.view",
+      "leave.approve",
+      "department.view",
+      "announcement.view",
+      "notification.view",
+      "report.view",
+    ];
+    const projects = allItems().find((item) => item.key === "projects");
+    const attendance = allItems().find((item) => item.key === "attendance");
+    const reports = allItems().find((item) => item.key === "reports");
+
+    expect(navItemIsVisible(projects!, managerPerms, "department_manager")).toBe(
+      true,
+    );
+    expect(
+      navItemIsVisible(attendance!, managerPerms, "department_manager"),
+    ).toBe(true);
+    expect(navItemIsVisible(reports!, managerPerms, "department_manager")).toBe(
+      true,
+    );
+  });
+
+  it("mobile nav is Dashboard, Tasks, Notifications", () => {
+    expect(mobileNavItems.map((item) => item.key)).toEqual([
+      "dashboard",
+      "tasks",
+      "notifications",
+    ]);
   });
 });

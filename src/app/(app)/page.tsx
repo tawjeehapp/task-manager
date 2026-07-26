@@ -34,5 +34,12 @@ export default async function DashboardPage() {
     permissions,
   );
 
-  return <DashboardPageView data={data} canViewReports={canViewReports} />;
+  return (
+    <DashboardPageView
+      data={data}
+      canViewReports={canViewReports}
+      viewerId={user.id}
+      viewerName={user.fullName}
+    />
+  );
 }

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 
 import type { DashboardSummary } from "@/features/dashboard/types/dashboard.types";
+import { EmployeeDashboardClient } from "@/features/dashboard/components/employee-dashboard-client";
 import { formatDate } from "@/lib/dates";
 import { PageHeader } from "@/components/shared/page-header";
 import {
@@ -18,6 +19,8 @@ import { cn } from "@/lib/utils";
 type DashboardPageViewProps = {
   data: DashboardSummary;
   canViewReports: boolean;
+  viewerId: string;
+  viewerName: string;
 };
 
 function MetricCard({
@@ -82,8 +85,20 @@ function ListCard({
 export async function DashboardPageView({
   data,
   canViewReports,
+  viewerId,
+  viewerName,
 }: DashboardPageViewProps) {
   const t = await getTranslations("dashboard");
+
+  if (data.role === "employee") {
+    return (
+      <EmployeeDashboardClient
+        data={data}
+        viewerId={viewerId}
+        viewerName={viewerName}
+      />
+    );
+  }
 
   const statusLabel = (status: string) => {
     const map: Record<string, string> = {
@@ -344,100 +359,6 @@ export async function DashboardPageView({
             </Card>
           </div>
         </>
-      ) : null}
-
-      {data.role === "employee" ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ListCard title={t("assignedTasks")} empty={t("noAssigned")}>
-            {data.assignedTasks.map((item) => (
-              <li key={item.id}>
-                <Link
-                  href={item.href}
-                  className="flex flex-col gap-0.5 py-2.5 text-sm hover:text-foreground"
-                >
-                  <span className="font-medium">{item.title}</span>
-                  <span className="text-muted-foreground">
-                    {statusLabel(item.status)}
-                    {item.dueDate
-                      ? ` · ${t("dueDate", { date: formatDate(item.dueDate) })}`
-                      : ""}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ListCard>
-
-          <ListCard title={t("upcomingDeadlines")} empty={t("noDeadlines")}>
-            {data.upcomingDeadlines.map((item) => (
-              <li key={item.id}>
-                <Link
-                  href={item.href}
-                  className="flex flex-col gap-0.5 py-2.5 text-sm hover:text-foreground"
-                >
-                  <span className="font-medium">{item.title}</span>
-                  <span className="text-muted-foreground">
-                    {item.dueDate
-                      ? t("dueDate", { date: formatDate(item.dueDate) })
-                      : null}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ListCard>
-
-          <Card>
-            <CardHeader className="flex flex-row items-start justify-between gap-3">
-              <CardTitle>{t("attendanceSummary")}</CardTitle>
-              <Link
-                href={data.attendanceSummary.href}
-                className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
-              >
-                {t("viewAttendance")}
-              </Link>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p className="text-lg font-semibold tabular-nums text-primary">
-                {t("monthHours", {
-                  hours: data.attendanceSummary.totalHours,
-                })}
-              </p>
-              <p className="text-muted-foreground">
-                {t("approvedDays", {
-                  count: data.attendanceSummary.approvedDays,
-                })}{" "}
-                ·{" "}
-                {t("pendingDays", {
-                  count: data.attendanceSummary.pendingDays,
-                })}{" "}
-                ·{" "}
-                {t("rejectedDays", {
-                  count: data.attendanceSummary.rejectedDays,
-                })}
-              </p>
-            </CardContent>
-          </Card>
-
-          <ListCard title={t("myRequests")} empty={t("noRequests")}>
-            {data.myRequests.map((item) => (
-              <li key={`${item.kind}-${item.id}`}>
-                <Link
-                  href={item.href}
-                  className="flex items-center justify-between gap-3 py-2.5 text-sm hover:text-foreground"
-                >
-                  <span className="min-w-0 truncate">
-                    <span className="text-muted-foreground">
-                      {t(`requestKind_${item.kind}`)} ·{" "}
-                    </span>
-                    <span className="font-medium">{item.title}</span>
-                  </span>
-                  <span className="shrink-0 text-muted-foreground">
-                    {statusLabel(item.status)}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ListCard>
-        </div>
       ) : null}
     </div>
   );

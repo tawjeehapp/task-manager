@@ -1,14 +1,18 @@
 import "server-only";
 
 import { calendarDateInOrgTimezone } from "@/features/attendance/services/compute-hours";
-import { ATTENDANCE_TIMEZONE } from "@/features/attendance/types/attendance.types";
+import {
+  ATTENDANCE_TIMEZONE,
+  deriveAttendanceUiState,
+  type AttendanceStatus,
+} from "@/features/attendance/types/attendance.types";
 import { getManagedDepartmentId } from "@/features/departments/services/membership-helpers";
 import { ACTIVE_TASK_STATUSES } from "@/features/tasks/types/task.types";
 import { computeEmployeeWorkload } from "@/features/tasks/services/workload";
 import {
   DASHBOARD_LIST_LIMIT,
-  UPCOMING_DEADLINE_DAYS,
   type AdminDashboard,
+  type DashboardAttendanceItem,
   type DashboardAttendanceSummary,
   type DashboardProjectItem,
   type DashboardRequestItem,
@@ -16,6 +20,7 @@ import {
   type DashboardTaskItem,
   type DashboardWorkloadItem,
   type EmployeeDashboard,
+  type EmployeeDashboardMetrics,
   type ManagerDashboard,
   type PendingApprovalsBreakdown,
 } from "@/features/dashboard/types/dashboard.types";
@@ -24,6 +29,7 @@ import type { AppUser } from "@/lib/auth/types";
 import {
   addCalendarDays,
   currentMonthBounds,
+  currentWeekBounds,
 } from "@/lib/org-calendar";
 import { SYSTEM_ADMIN_EMPLOYEE_NUMBER } from "@/lib/table/constants";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -292,87 +298,6 @@ async function listOverdueTasks(
   });
 }
 
-async function listAssignedTasks(userId: string): Promise<DashboardTaskItem[]> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("tasks")
-    .select("id, title, status, due_date, project:projects!project_id(id, name)")
-    .eq("assigned_to", userId)
-    .in("status", [...ACTIVE_TASK_STATUSES])
-    .order("due_date", { ascending: true })
-    .limit(DASHBOARD_LIST_LIMIT);
-
-  if (error) {
-    throw new ApiError(
-      "تعذر جلب المهام المسندة.",
-      500,
-      "DASHBOARD_ASSIGNED_FAILED",
-    );
-  }
-
-  return (data ?? []).map((row) => {
-    const project = row.project as
-      | { id: string; name: string }
-      | { id: string; name: string }[]
-      | null;
-    const projectName = Array.isArray(project)
-      ? (project[0]?.name ?? null)
-      : (project?.name ?? null);
-    return {
-      id: row.id as string,
-      title: row.title as string,
-      status: row.status as string,
-      dueDate: (row.due_date as string | null) ?? null,
-      projectName,
-      href: `/tasks/${row.id}`,
-    };
-  });
-}
-
-async function listUpcomingDeadlines(
-  userId: string,
-  today: string,
-): Promise<DashboardTaskItem[]> {
-  const until = addCalendarDays(today, UPCOMING_DEADLINE_DAYS);
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("tasks")
-    .select("id, title, status, due_date, project:projects!project_id(id, name)")
-    .eq("assigned_to", userId)
-    .neq("status", "completed")
-    .not("due_date", "is", null)
-    .gte("due_date", today)
-    .lte("due_date", until)
-    .order("due_date", { ascending: true })
-    .limit(DASHBOARD_LIST_LIMIT);
-
-  if (error) {
-    throw new ApiError(
-      "تعذر جلب المواعيد القادمة.",
-      500,
-      "DASHBOARD_DEADLINES_FAILED",
-    );
-  }
-
-  return (data ?? []).map((row) => {
-    const project = row.project as
-      | { id: string; name: string }
-      | { id: string; name: string }[]
-      | null;
-    const projectName = Array.isArray(project)
-      ? (project[0]?.name ?? null)
-      : (project?.name ?? null);
-    return {
-      id: row.id as string,
-      title: row.title as string,
-      status: row.status as string,
-      dueDate: (row.due_date as string | null) ?? null,
-      projectName,
-      href: `/tasks/${row.id}`,
-    };
-  });
-}
-
 async function getAttendanceSummary(
   userId: string,
   today: string,
@@ -487,6 +412,163 @@ async function listMyRequests(userId: string): Promise<DashboardRequestItem[]> {
   return items.slice(0, DASHBOARD_LIST_LIMIT);
 }
 
+function mapTaskRow(row: {
+  id: unknown;
+  title: unknown;
+  status: unknown;
+  due_date: unknown;
+  project: unknown;
+}): DashboardTaskItem {
+  const project = row.project as
+    | { id: string; name: string }
+    | { id: string; name: string }[]
+    | null;
+  const projectName = Array.isArray(project)
+    ? (project[0]?.name ?? null)
+    : (project?.name ?? null);
+  return {
+    id: row.id as string,
+    title: row.title as string,
+    status: row.status as string,
+    dueDate: (row.due_date as string | null) ?? null,
+    projectName,
+    href: `/tasks/${row.id}`,
+  };
+}
+
+async function getEmployeeMetrics(
+  userId: string,
+  today: string,
+): Promise<EmployeeDashboardMetrics> {
+  const { start: weekStart, end: weekEnd } = currentWeekBounds(today);
+  const admin = createAdminClient();
+
+  const [tasksRes, weekAttRes] = await Promise.all([
+    admin
+      .from("tasks")
+      .select("id, status, due_date")
+      .eq("assigned_to", userId)
+      .is("parent_task_id", null),
+    admin
+      .from("attendance_records")
+      .select("total_hours")
+      .eq("user_id", userId)
+      .gte("date", weekStart)
+      .lte("date", weekEnd),
+  ]);
+
+  if (tasksRes.error) {
+    throw new ApiError(
+      "تعذر جلب مقاييس المهام.",
+      500,
+      "DASHBOARD_METRICS_FAILED",
+    );
+  }
+  if (weekAttRes.error) {
+    throw new ApiError(
+      "تعذر جلب ساعات الأسبوع.",
+      500,
+      "DASHBOARD_WEEK_HOURS_FAILED",
+    );
+  }
+
+  let inProgress = 0;
+  let completed = 0;
+  let overdue = 0;
+  let dueToday = 0;
+
+  for (const row of tasksRes.data ?? []) {
+    const status = row.status as string;
+    const dueDate = (row.due_date as string | null) ?? null;
+    if (status === "in_progress") inProgress += 1;
+    if (status === "completed") completed += 1;
+    if (status !== "completed" && dueDate && dueDate < today) overdue += 1;
+    if (status !== "completed" && dueDate === today) dueToday += 1;
+  }
+
+  let weekHours = 0;
+  for (const row of weekAttRes.data ?? []) {
+    const hours = Number(row.total_hours ?? 0);
+    if (Number.isFinite(hours)) weekHours += hours;
+  }
+
+  return {
+    inProgress,
+    completed,
+    overdue,
+    weekHours: Math.round(weekHours * 100) / 100,
+    dueToday,
+  };
+}
+
+async function listTodayTasks(
+  userId: string,
+  today: string,
+): Promise<DashboardTaskItem[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("tasks")
+    .select("id, title, status, due_date, project:projects!project_id(id, name)")
+    .eq("assigned_to", userId)
+    .eq("due_date", today)
+    .is("parent_task_id", null)
+    .order("status", { ascending: true })
+    .limit(50);
+
+  if (error) {
+    throw new ApiError(
+      "تعذر جلب مهام اليوم.",
+      500,
+      "DASHBOARD_TODAY_TASKS_FAILED",
+    );
+  }
+
+  return (data ?? []).map(mapTaskRow);
+}
+
+async function listWeekAttendance(
+  userId: string,
+  today: string,
+): Promise<DashboardAttendanceItem[]> {
+  const { start, end } = currentWeekBounds(today);
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("attendance_records")
+    .select(
+      "id, date, clock_in, clock_out, total_hours, status",
+    )
+    .eq("user_id", userId)
+    .gte("date", start)
+    .lte("date", end)
+    .order("date", { ascending: false });
+
+  if (error) {
+    throw new ApiError(
+      "تعذر جلب سجل الأسبوع.",
+      500,
+      "DASHBOARD_WEEK_ATTENDANCE_FAILED",
+    );
+  }
+
+  return (data ?? []).map((row) => {
+    const status = row.status as AttendanceStatus;
+    const clockOut = (row.clock_out as string | null) ?? null;
+    const totalHours =
+      row.total_hours === null || row.total_hours === undefined
+        ? null
+        : Number(row.total_hours);
+    return {
+      id: row.id as string,
+      date: row.date as string,
+      clockIn: row.clock_in as string,
+      clockOut,
+      totalHours,
+      status,
+      uiState: deriveAttendanceUiState(status, clockOut),
+    };
+  });
+}
+
 async function getAdminDashboard(): Promise<AdminDashboard> {
   const admin = createAdminClient();
 
@@ -588,18 +670,21 @@ async function getEmployeeDashboard(
   viewer: AppUser,
 ): Promise<EmployeeDashboard> {
   const today = calendarDateInOrgTimezone(new Date(), ATTENDANCE_TIMEZONE);
-  const [assignedTasks, upcomingDeadlines, attendanceSummary, myRequests] =
+  const [metrics, todayTasks, weekAttendance, attendanceSummary, myRequests] =
     await Promise.all([
-      listAssignedTasks(viewer.id),
-      listUpcomingDeadlines(viewer.id, today),
+      getEmployeeMetrics(viewer.id, today),
+      listTodayTasks(viewer.id, today),
+      listWeekAttendance(viewer.id, today),
       getAttendanceSummary(viewer.id, today),
       listMyRequests(viewer.id),
     ]);
 
   return {
     role: "employee",
-    assignedTasks,
-    upcomingDeadlines,
+    today,
+    metrics,
+    todayTasks,
+    weekAttendance,
     attendanceSummary,
     myRequests,
   };
@@ -617,4 +702,4 @@ export async function getDashboardSummary(
   return getEmployeeDashboard(viewer);
 }
 
-export { addCalendarDays, currentMonthBounds };
+export { addCalendarDays, currentMonthBounds, currentWeekBounds };

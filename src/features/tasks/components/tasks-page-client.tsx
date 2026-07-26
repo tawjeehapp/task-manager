@@ -28,6 +28,7 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { TablePagination } from "@/components/shared/table-pagination";
 import { TasksListTable } from "@/features/tasks/components/tasks-list-table";
+import { EmployeeTasksBoard } from "@/features/tasks/components/employee-tasks-board";
 import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,6 +147,12 @@ export function TasksPageClient({
   viewerId,
   initialTasks,
 }: TasksPageClientProps) {
+  if (viewerRole === "employee") {
+    return (
+      <EmployeeTasksBoard viewerId={viewerId} initialTasks={initialTasks} />
+    );
+  }
+
   const t = useTranslations("tasks");
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
@@ -160,7 +167,7 @@ export function TasksPageClient({
   const [priorityFilter, setPriorityFilter] = useState("");
   const [dueFrom, setDueFrom] = useState("");
   const [dueTo, setDueTo] = useState("");
-  const [mineOnly, setMineOnly] = useState(viewerRole === "employee");
+  const [mineOnly, setMineOnly] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const canFilterDepartment =
@@ -180,7 +187,7 @@ export function TasksPageClient({
     priorityFilter === "" &&
     dueFrom === "" &&
     dueTo === "" &&
-    mineOnly === (viewerRole === "employee");
+    mineOnly === false;
 
   const tasksQuery = useQuery({
     queryKey: [
@@ -291,9 +298,7 @@ export function TasksPageClient({
     <div className="space-y-6">
       <PageHeader
         title={t("title")}
-        description={
-          viewerRole === "employee" ? t("employeeDescription") : t("description")
-        }
+        description={t("description")}
         actions={
           canCreate ? (
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>

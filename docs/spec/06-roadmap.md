@@ -538,6 +538,40 @@ Support:
 
 ---
 
+# Milestone 10 — Employee UX Simplification
+
+**Status: Completed**
+
+## Goal
+
+Simplify the employee shell and primary workspace: Dashboard + Tasks + Notifications only, with attendance clock-in/out on the dashboard and a personal day/week/month task calendar.
+
+## Scope
+
+- Employee nav trimmed to Dashboard, Tasks, Notifications (routes for leave, attendance, projects, announcements remain reachable via deep links)
+- Employee dashboard: greeting, metrics, task calendar (day/week/month by `due_date`), week attendance log, clock-in/out widget, compact my-requests
+- Employee `/tasks`: personal Kanban (todo / in_progress / blocked / completed) with search, status/priority filters, late-only
+- Calendar view pulled forward from Future Enhancements for employees only
+- No schema migration; reuses existing attendance and task APIs
+
+## Implementation status
+
+| Area | Status | Notes |
+|---|---|---|
+| Employee nav trim | **Completed** | `hideForRoles: employee` + 3-item mobile nav |
+| Employee dashboard redesign | **Completed** | Greeting, metrics, calendar, clock widget |
+| Day/week/month calendar | **Completed** | Client range fetch via `GET /api/tasks` |
+| Dashboard clock-in/out | **Completed** | Reuses `/api/attendance/today`, clock-in, clock-out |
+| Employee personal Kanban | **Completed** | `/tasks` for employees only |
+| Admin/manager UX | Unchanged | List tasks + full nav |
+
+## Differences / notes
+
+- Manual attendance form from design mockups was not adopted; live clock-in/out retained.
+- Status labels/colors follow existing i18n and UI-spec semantics.
+
+---
+
 ---
 
 # Deferred from M0–M4 (carry-forward)
@@ -582,3 +616,4 @@ Support:
 9. Communication — **Completed (Milestone 7; push/attachments deferred)**
 10. Reports — **Completed (Milestone 8)**
 11. Gantt — **Completed (Milestone 9; comments/attachments included)**
+12. Employee UX simplification — **Completed (Milestone 10)**

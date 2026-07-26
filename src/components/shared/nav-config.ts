@@ -53,6 +53,9 @@ export function navItemIsVisible(
   return true;
 }
 
+/** Sidebar items hidden from the simplified employee shell (routes stay open). */
+const HIDE_FROM_EMPLOYEE: Role[] = ["employee"];
+
 export const navSections: NavSection[] = [
   {
     key: "main",
@@ -69,6 +72,7 @@ export const navSections: NavSection[] = [
         icon: FolderKanban,
         enabled: true,
         permission: "project.view",
+        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "tasks",
@@ -88,6 +92,7 @@ export const navSections: NavSection[] = [
         icon: Building2,
         enabled: true,
         permission: "department.view",
+        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "employees",
@@ -107,6 +112,7 @@ export const navSections: NavSection[] = [
         icon: CalendarCheck,
         enabled: true,
         permission: "attendance.view",
+        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "leave",
@@ -114,6 +120,7 @@ export const navSections: NavSection[] = [
         icon: CalendarDays,
         enabled: true,
         permission: "leave.view",
+        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "approvals",
@@ -133,6 +140,7 @@ export const navSections: NavSection[] = [
         icon: Megaphone,
         enabled: true,
         permission: "announcement.view",
+        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "notifications",
@@ -158,19 +166,13 @@ export const navSections: NavSection[] = [
   },
 ];
 
+/** Mobile bottom nav: Dashboard, Tasks, Notifications (employee-simplified). */
 export const mobileNavItems: NavItem[] = [
   {
     key: "dashboard",
     href: "/",
     icon: LayoutDashboard,
     enabled: true,
-  },
-  {
-    key: "projects",
-    href: "/projects",
-    icon: FolderKanban,
-    enabled: true,
-    permission: "project.view",
   },
   {
     key: "tasks",
