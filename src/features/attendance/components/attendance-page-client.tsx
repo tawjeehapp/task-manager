@@ -4,6 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import {
+  AttendanceEditDialog,
+  canEmployeeEditAttendance,
+} from "@/features/attendance/components/attendance-edit-dialog";
+import { AttendanceSubmitForm } from "@/features/attendance/components/attendance-submit-form";
+import { calendarDateInOrgTimezone } from "@/features/attendance/services/compute-hours";
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import type { WorkLog } from "@/features/work-logs/types/work-log.types";
 import type { Role } from "@/lib/permissions";
@@ -120,6 +126,7 @@ export function AttendancePageClient({
   );
   const [rejectReason, setRejectReason] = useState("");
 
+  const [editTarget, setEditTarget] = useState<AttendanceRecord | null>(null);
   const [correctTarget, setCorrectTarget] = useState<AttendanceRecord | null>(
     null,
   );
@@ -133,7 +140,6 @@ export function AttendancePageClient({
   const [workLogDate, setWorkLogDate] = useState("");
   const [workLogHours, setWorkLogHours] = useState("1");
   const [workLogDescription, setWorkLogDescription] = useState("");
-  const [breakMinutes, setBreakMinutes] = useState("0");
 
   const showEmployeeColumn =
     viewerRole === "admin" || viewerRole === "department_manager";
@@ -221,44 +227,6 @@ export function AttendancePageClient({
   const invalidateAttendance = async () => {
     await queryClient.invalidateQueries({ queryKey: ["attendance"] });
   };
-
-  const clockInMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/attendance/clock-in", { method: "POST" });
-      return readApi<AttendanceRecord>(response);
-    },
-    onSuccess: async () => {
-      setActionError(null);
-      setSuccessMessage(t("clockInSuccess"));
-      await invalidateAttendance();
-    },
-    onError: (error: Error) => {
-      setSuccessMessage(null);
-      setActionError(error.message);
-    },
-  });
-
-  const clockOutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/attendance/clock-out", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          breakMinutes: Number(breakMinutes) || 0,
-        }),
-      });
-      return readApi<AttendanceRecord>(response);
-    },
-    onSuccess: async () => {
-      setActionError(null);
-      setSuccessMessage(t("clockOutSuccess"));
-      await invalidateAttendance();
-    },
-    onError: (error: Error) => {
-      setSuccessMessage(null);
-      setActionError(error.message);
-    },
-  });
 
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -368,7 +336,6 @@ export function AttendancePageClient({
   }, [canApprove, t]);
 
   const today = todayQuery.data;
-  const isWorking = today?.uiState === "currently_working";
   const hasToday = Boolean(today);
 
   function openCorrectDialog(record: AttendanceRecord) {
@@ -406,51 +373,15 @@ export function AttendancePageClient({
           {!todayQuery.isLoading && !todayQuery.isError ? (
             <div className="space-y-4 rounded-lg border p-4">
               {!hasToday ? (
-                <>
-                  <p className="text-muted-foreground text-sm">
-                    {t("notClockedIn")}
-                  </p>
-                  <Button
-                    onClick={() => clockInMutation.mutate()}
-                    disabled={clockInMutation.isPending}
-                  >
-                    {t("clockIn")}
-                  </Button>
-                </>
-              ) : null}
-
-              {isWorking && today ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={uiStateBadgeVariant(today.uiState)}>
-                      {t(`uiState_${today.uiState}`)}
-                    </Badge>
-                    <span className="text-sm">
-                      {t("clockedInAt", {
-                        time: formatDateTime(today.clockIn),
-                      })}
-                    </span>
-                  </div>
-                  <div className="max-w-xs space-y-2">
-                    <Label htmlFor="breakMinutes">{t("breakMinutes")}</Label>
-                    <Input
-                      id="breakMinutes"
-                      type="number"
-                      min={0}
-                      value={breakMinutes}
-                      onChange={(e) => setBreakMinutes(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    onClick={() => clockOutMutation.mutate()}
-                    disabled={clockOutMutation.isPending}
-                  >
-                    {t("clockOut")}
-                  </Button>
-                </>
-              ) : null}
-
-              {today && !isWorking ? (
+                <AttendanceSubmitForm
+                  viewerId={viewerId}
+                  defaultDate={calendarDateInOrgTimezone()}
+                  onSuccess={() => {
+                    setActionError(null);
+                    setSuccessMessage(t("submitSuccess"));
+                  }}
+                />
+              ) : today ? (
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={uiStateBadgeVariant(today.uiState)}>
@@ -469,22 +400,20 @@ export function AttendancePageClient({
                           : "—",
                     })}
                   </p>
-                  {today.uiState === "rejected" ? (
-                    <div className="space-y-2">
-                      {today.rejectionReason ? (
-                        <p className="text-destructive text-sm">
-                          {t("rejectionReason", {
-                            reason: today.rejectionReason,
-                          })}
-                        </p>
-                      ) : null}
-                      <Button
-                        variant="outline"
-                        onClick={() => openCorrectDialog(today)}
-                      >
-                        {t("correctAndResubmit")}
-                      </Button>
-                    </div>
+                  {today.uiState === "rejected" && today.rejectionReason ? (
+                    <p className="text-destructive text-sm">
+                      {t("rejectionReason", {
+                        reason: today.rejectionReason,
+                      })}
+                    </p>
+                  ) : null}
+                  {canEmployeeEditAttendance(today) ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditTarget(today)}
+                    >
+                      {t("editAttendance")}
+                    </Button>
                   ) : null}
                 </div>
               ) : null}
@@ -598,15 +527,15 @@ export function AttendancePageClient({
                           {t(`uiState_${row.uiState}`)}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="space-x-2 space-x-reverse">
                         {row.userId === viewerId &&
-                        row.uiState === "rejected" ? (
+                        canEmployeeEditAttendance(row) ? (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => openCorrectDialog(row)}
+                            onClick={() => setEditTarget(row)}
                           >
-                            {t("correct")}
+                            {t("editAttendance")}
                           </Button>
                         ) : null}
                         {viewerRole === "admin" ? (
@@ -759,7 +688,10 @@ export function AttendancePageClient({
                       {showEmployeeColumn ? (
                         <TableCell>{row.user?.fullName ?? "—"}</TableCell>
                       ) : null}
-                      <TableCell>{row.task?.title ?? "—"}</TableCell>
+                      <TableCell>
+                        {row.task?.title ??
+                          (row.taskId == null ? t("entryTypeGeneral") : "—")}
+                      </TableCell>
                       <TableCell>{row.hours}</TableCell>
                       <TableCell>{row.description ?? "—"}</TableCell>
                       <TableCell>
@@ -821,6 +753,20 @@ export function AttendancePageClient({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AttendanceEditDialog
+        open={Boolean(editTarget)}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        viewerId={viewerId}
+        record={editTarget}
+        onSuccess={() => {
+          setActionError(null);
+          setSuccessMessage(t("editSuccess"));
+          void invalidateAttendance();
+        }}
+      />
 
       <Dialog
         open={Boolean(correctTarget)}

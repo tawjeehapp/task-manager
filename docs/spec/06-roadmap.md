@@ -276,7 +276,7 @@ Track employee time and effort.
 
 | Area | Status | Notes |
 |---|---|---|
-| One record per user/day + clock in/out | **Completed** | `UNIQUE (user_id, date)`; open = `clock_out IS NULL` |
+| One record per user/day + manual submit | **Completed** | `UNIQUE (user_id, date)`; full-day submit with explicit task/general allocations |
 | Total hours calculation | **Completed** | Minus break; org timezone `Asia/Riyadh` |
 | Approve / reject | **Completed** | Scoped managers; cannot act on open or own records |
 | Rejected employee correction | **Completed** | Same row → pending; clears approval fields |
@@ -544,12 +544,12 @@ Support:
 
 ## Goal
 
-Simplify the employee shell and primary workspace: Dashboard + Tasks + Notifications only, with attendance clock-in/out on the dashboard and a personal day/week/month task calendar.
+Simplify the employee shell and primary workspace: Dashboard + Tasks + Notifications only, with manual attendance submit on the dashboard and a personal day/week/month task calendar.
 
 ## Scope
 
 - Employee nav trimmed to Dashboard, Tasks, Notifications (routes for leave, attendance, projects, announcements remain reachable via deep links)
-- Employee dashboard: greeting, metrics, task calendar (day/week/month by `due_date`), week attendance log, clock-in/out widget, compact my-requests
+- Employee dashboard: greeting, metrics, task calendar (day/week/month by `due_date`), week attendance log, manual attendance submit widget, compact my-requests
 - Employee `/tasks`: personal Kanban (todo / in_progress / blocked / completed) with search, status/priority filters, late-only
 - Calendar view pulled forward from Future Enhancements for employees only
 - No schema migration; reuses existing attendance and task APIs
@@ -559,16 +559,18 @@ Simplify the employee shell and primary workspace: Dashboard + Tasks + Notificat
 | Area | Status | Notes |
 |---|---|---|
 | Employee nav trim | **Completed** | `hideForRoles: employee` + 3-item mobile nav |
-| Employee dashboard redesign | **Completed** | Greeting, metrics, calendar, clock widget |
+| Employee dashboard redesign | **Completed** | Greeting, metrics, calendar, attendance widget |
 | Day/week/month calendar | **Completed** | Client range fetch via `GET /api/tasks` |
-| Dashboard clock-in/out | **Completed** | Reuses `/api/attendance/today`, clock-in, clock-out |
+| Dashboard attendance submit | **Completed** | Manual form via `POST /api/attendance/submit` + explicit task/general time breakdown |
 | Employee personal Kanban | **Completed** | `/tasks` for employees only |
 | Admin/manager UX | Unchanged | List tasks + full nav |
 
 ## Differences / notes
 
-- Manual attendance form from design mockups was not adopted; live clock-in/out retained.
+- Manual attendance form adopted; live punch in/out removed.
+- Attendance submit requires an explicit task/general time breakdown that sums to net hours; general entries require a reason.
 - Status labels/colors follow existing i18n and UI-spec semantics.
+- **Follow-up (employee pages):** `/attendance` and `/leave` exposed in employee sidebar with dedicated single-purpose views; dashboard keeps compact attendance widget (week log + submit); manager/admin tabbed UIs unchanged.
 
 ---
 

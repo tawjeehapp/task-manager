@@ -43,14 +43,40 @@ describe("createEmployeeRequestSchema", () => {
     const result = createEmployeeRequestSchema.safeParse({
       taskId: "11111111-1111-4111-8111-111111111111",
       type: "extension",
+      reason: "need more time",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("requires reason for extension and excusal", () => {
+    expect(
+      createEmployeeRequestSchema.safeParse({
+        taskId: "11111111-1111-4111-8111-111111111111",
+        type: "extension",
+        requestedDate: "2026-08-01",
+      }).success,
+    ).toBe(false);
+    expect(
+      createEmployeeRequestSchema.safeParse({
+        taskId: "11111111-1111-4111-8111-111111111111",
+        type: "extension",
+        requestedDate: "2026-08-01",
+        reason: "   ",
+      }).success,
+    ).toBe(false);
+    expect(
+      createEmployeeRequestSchema.safeParse({
+        taskId: "11111111-1111-4111-8111-111111111111",
+        type: "excusal",
+      }).success,
+    ).toBe(false);
   });
 
   it("rejects requestedDate for excusal", () => {
     const result = createEmployeeRequestSchema.safeParse({
       taskId: "11111111-1111-4111-8111-111111111111",
       type: "excusal",
+      reason: "conflict",
       requestedDate: "2026-08-01",
     });
     expect(result.success).toBe(false);
@@ -62,12 +88,14 @@ describe("createEmployeeRequestSchema", () => {
         taskId: "11111111-1111-4111-8111-111111111111",
         type: "extension",
         requestedDate: "2026-08-01",
+        reason: "need more time",
       }).success,
     ).toBe(true);
     expect(
       createEmployeeRequestSchema.safeParse({
         taskId: "11111111-1111-4111-8111-111111111111",
         type: "excusal",
+        reason: "conflict with other work",
       }).success,
     ).toBe(true);
   });

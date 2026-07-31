@@ -440,7 +440,6 @@ In particular:
 - `02-database.md` is the source of truth for database conventions and schema design.
 - `04-api.md` is the source of truth for API conventions.
 - `05-coding-standards.md` is the source of truth for implementation conventions.
-- `06-roadmap.md` defines milestone scope and boundaries.
 
 Do not rely on previous chat instructions when they conflict with the current specification files.
 

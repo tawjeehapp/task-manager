@@ -112,7 +112,6 @@ export const navSections: NavSection[] = [
         icon: CalendarCheck,
         enabled: true,
         permission: "attendance.view",
-        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "leave",
@@ -120,7 +119,6 @@ export const navSections: NavSection[] = [
         icon: CalendarDays,
         enabled: true,
         permission: "leave.view",
-        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "approvals",

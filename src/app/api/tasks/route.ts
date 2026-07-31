@@ -25,6 +25,7 @@ export async function GET(request: Request) {
       assignee: url.searchParams.get("assignee") ?? undefined,
       priority: url.searchParams.get("priority") ?? undefined,
       parentTaskId: url.searchParams.get("parentTaskId") ?? undefined,
+      subtasksOnly: url.searchParams.get("subtasksOnly") ?? undefined,
       dueFrom: url.searchParams.get("dueFrom") ?? undefined,
       dueTo: url.searchParams.get("dueTo") ?? undefined,
       page: url.searchParams.get("page") ?? undefined,

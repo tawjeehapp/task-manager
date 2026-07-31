@@ -21,6 +21,11 @@ import {
   type ManagerDashboard,
   type PendingApprovalsBreakdown,
 } from "@/features/dashboard/types/dashboard.types";
+import {
+  calendarDateOnly,
+  isIncludedInTodayList,
+  sortTodayListTasks,
+} from "@/features/dashboard/lib/actionable-tasks";
 import { aggregateLeadershipFromRows } from "@/features/dashboard/services/leadership-aggregates";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
@@ -497,6 +502,8 @@ function mapTaskRow(row: {
   title: unknown;
   status: unknown;
   due_date: unknown;
+  priority: unknown;
+  parent_task_id: unknown;
   project: unknown;
 }): DashboardTaskItem {
   const project = row.project as
@@ -510,9 +517,12 @@ function mapTaskRow(row: {
     id: row.id as string,
     title: row.title as string,
     status: row.status as string,
-    dueDate: (row.due_date as string | null) ?? null,
+    dueDate: calendarDateOnly(row.due_date as string | null),
+    priority: row.priority as string,
+    parentTaskId: (row.parent_task_id as string | null) ?? null,
     projectName,
     href: `/tasks/${row.id}`,
+    incompleteDependencyCount: 0,
   };
 }
 
@@ -526,9 +536,8 @@ async function getEmployeeMetrics(
   const [tasksRes, weekAttRes] = await Promise.all([
     admin
       .from("tasks")
-      .select("id, status, due_date")
-      .eq("assigned_to", userId)
-      .is("parent_task_id", null),
+      .select("id, status, due_date, parent_task_id")
+      .eq("assigned_to", userId),
     admin
       .from("attendance_records")
       .select("total_hours")
@@ -552,7 +561,9 @@ async function getEmployeeMetrics(
     );
   }
 
+  let todo = 0;
   let inProgress = 0;
+  let blocked = 0;
   let completed = 0;
   let overdue = 0;
   let dueToday = 0;
@@ -560,7 +571,9 @@ async function getEmployeeMetrics(
   for (const row of tasksRes.data ?? []) {
     const status = row.status as string;
     const dueDate = (row.due_date as string | null) ?? null;
+    if (status === "todo") todo += 1;
     if (status === "in_progress") inProgress += 1;
+    if (status === "blocked") blocked += 1;
     if (status === "completed") completed += 1;
     if (status !== "completed" && dueDate && dueDate < today) overdue += 1;
     if (status !== "completed" && dueDate === today) dueToday += 1;
@@ -573,7 +586,9 @@ async function getEmployeeMetrics(
   }
 
   return {
+    todo,
     inProgress,
+    blocked,
     completed,
     overdue,
     weekHours: Math.round(weekHours * 100) / 100,
@@ -588,12 +603,14 @@ async function listTodayTasks(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("tasks")
-    .select("id, title, status, due_date, project:projects!project_id(id, name)")
+    .select(
+      "id, title, status, due_date, priority, parent_task_id, project:projects!project_id(id, name)",
+    )
     .eq("assigned_to", userId)
-    .eq("due_date", today)
-    .is("parent_task_id", null)
-    .order("status", { ascending: true })
-    .limit(50);
+    .lte("due_date", today)
+    .not("due_date", "is", null)
+    .order("due_date", { ascending: true })
+    .limit(100);
 
   if (error) {
     throw new ApiError(
@@ -603,7 +620,11 @@ async function listTodayTasks(
     );
   }
 
-  return (data ?? []).map(mapTaskRow);
+  const items = (data ?? [])
+    .map(mapTaskRow)
+    .filter((task) => isIncludedInTodayList(task, today));
+
+  return sortTodayListTasks(items, today).slice(0, 50);
 }
 
 async function listWeekAttendance(
@@ -612,17 +633,24 @@ async function listWeekAttendance(
 ): Promise<DashboardAttendanceItem[]> {
   const { start, end } = currentWeekBounds(today);
   const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("attendance_records")
-    .select(
-      "id, date, clock_in, clock_out, total_hours, status",
-    )
-    .eq("user_id", userId)
-    .gte("date", start)
-    .lte("date", end)
-    .order("date", { ascending: false });
+  const [attendanceRes, workLogsRes] = await Promise.all([
+    admin
+      .from("attendance_records")
+      .select("id, date, clock_in, clock_out, total_hours, status")
+      .eq("user_id", userId)
+      .gte("date", start)
+      .lte("date", end)
+      .order("date", { ascending: false }),
+    admin
+      .from("work_logs")
+      .select("date, hours, task_id, description, task:tasks!task_id(id, title)")
+      .eq("user_id", userId)
+      .gte("date", start)
+      .lte("date", end)
+      .order("date", { ascending: true }),
+  ]);
 
-  if (error) {
+  if (attendanceRes.error) {
     throw new ApiError(
       "تعذر جلب سجل الأسبوع.",
       500,
@@ -630,21 +658,65 @@ async function listWeekAttendance(
     );
   }
 
-  return (data ?? []).map((row) => {
+  const allocationsByDate = new Map<
+    string,
+    {
+      kind: "task" | "general";
+      taskId: string | null;
+      title: string;
+      hours: number;
+      reason: string | null;
+    }[]
+  >();
+
+  if (!workLogsRes.error) {
+    for (const row of workLogsRes.data ?? []) {
+      const date = row.date as string;
+      const task = row.task as
+        | { id: string; title: string }
+        | { id: string; title: string }[]
+        | null;
+      const taskObj = Array.isArray(task) ? (task[0] ?? null) : task;
+      const taskId = (row.task_id as string | null) ?? taskObj?.id ?? null;
+      const list = allocationsByDate.get(date) ?? [];
+      if (taskId) {
+        list.push({
+          kind: "task",
+          taskId,
+          title: taskObj?.title ?? "—",
+          hours: Number(row.hours),
+          reason: null,
+        });
+      } else {
+        list.push({
+          kind: "general",
+          taskId: null,
+          title: "",
+          hours: Number(row.hours),
+          reason: (row.description as string | null) ?? null,
+        });
+      }
+      allocationsByDate.set(date, list);
+    }
+  }
+
+  return (attendanceRes.data ?? []).map((row) => {
     const status = row.status as AttendanceStatus;
     const clockOut = (row.clock_out as string | null) ?? null;
     const totalHours =
       row.total_hours === null || row.total_hours === undefined
         ? null
         : Number(row.total_hours);
+    const date = row.date as string;
     return {
       id: row.id as string,
-      date: row.date as string,
+      date,
       clockIn: row.clock_in as string,
       clockOut,
       totalHours,
       status,
       uiState: deriveAttendanceUiState(status, clockOut),
+      allocations: allocationsByDate.get(date) ?? [],
     };
   });
 }

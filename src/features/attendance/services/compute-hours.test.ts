@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   calendarDateInOrgTimezone,
   computeTotalHours,
+  orgLocalDateTimeIso,
 } from "@/features/attendance/services/compute-hours";
 
 describe("computeTotalHours", () => {
@@ -45,5 +46,16 @@ describe("calendarDateInOrgTimezone", () => {
       "Asia/Riyadh",
     );
     expect(date).toBe("2026-07-26");
+  });
+});
+
+describe("orgLocalDateTimeIso", () => {
+  it("builds Asia/Riyadh offset ISO from date and time", () => {
+    expect(orgLocalDateTimeIso("2026-07-25", "08:00")).toBe(
+      "2026-07-25T08:00:00.000+03:00",
+    );
+    expect(orgLocalDateTimeIso("2026-07-25", "16:30:00")).toBe(
+      "2026-07-25T16:30:00.000+03:00",
+    );
   });
 });

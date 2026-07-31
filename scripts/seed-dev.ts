@@ -489,6 +489,9 @@ async function main() {
 
   // --- Attendance scenarios ---
   const saraIn = orgLocalDateTimeIso(today, 9, 0);
+  const saraOut = orgLocalDateTimeIso(today, 17, 0);
+  const saraBreak = 30;
+  const saraHours = computeTotalHours(saraIn, saraOut, saraBreak);
   const khalidIn = orgLocalDateTimeIso(today, 8, 0);
   const khalidOut = orgLocalDateTimeIso(today, 16, 0);
   const khalidBreak = 45;
@@ -527,9 +530,9 @@ async function main() {
       user_id: users["1003"],
       date: today,
       clock_in: saraIn,
-      clock_out: null,
-      break_minutes: 0,
-      total_hours: null,
+      clock_out: saraOut,
+      break_minutes: saraBreak,
+      total_hours: saraHours,
       status: "pending",
       approved_by: null,
       approved_at: null,
@@ -1055,7 +1058,7 @@ async function main() {
 
   console.log("\nManual QA scenarios:");
   console.log(
-    `  • Open attendance today: سارة المطورة (1003) — clocked in, no clock_out`,
+    `  • Awaiting approval today (+30m break → ${saraHours}h): سارة المطورة (1003)`,
   );
   console.log(
     `  • Awaiting approval today (+45m break → ${khalidHours}h): خالد الدعم (1004)`,

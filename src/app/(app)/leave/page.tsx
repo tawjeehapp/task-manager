@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 
 import { LeavePageClient } from "@/features/leave/components/leave-page-client";
+import { EmployeeLeavePageClient } from "@/features/leave/components/employee-leave-page-client";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
@@ -32,6 +33,10 @@ export default async function LeavePage() {
     PERMISSIONS.LEAVE_MANAGE,
     permissions,
   );
+
+  if (user.role === "employee") {
+    return <EmployeeLeavePageClient />;
+  }
 
   return (
     <LeavePageClient viewerRole={user.role} canManage={canManage} />

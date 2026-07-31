@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { LeaveRequestForm } from "@/features/leave/components/leave-request-form";
 import type { LeaveBalance, LeaveRequest, LeaveType } from "@/features/leave/types/leave.types";
 import type { Role } from "@/lib/permissions";
 import {
@@ -84,10 +85,6 @@ export function LeavePageClient({
     useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [leaveTypeId, setLeaveTypeId] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [reason, setReason] = useState("");
 
   const [typeName, setTypeName] = useState("");
   const [typeDescription, setTypeDescription] = useState("");
@@ -135,34 +132,6 @@ export function LeavePageClient({
       const data = await readApi<{ items: EmployeeOption[] }>(response);
       return data.items;
     },
-  });
-
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/leave-requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          leaveTypeId,
-          startDate,
-          endDate,
-          reason: reason || null,
-        }),
-      });
-      return readApi<LeaveRequest>(response);
-    },
-    onSuccess: async () => {
-      setSuccessMessage(t("createSuccess"));
-      setActionError(null);
-      setDialogOpen(false);
-      setLeaveTypeId("");
-      setStartDate("");
-      setEndDate("");
-      setReason("");
-      await queryClient.invalidateQueries({ queryKey: ["leave-requests"] });
-      await queryClient.invalidateQueries({ queryKey: ["leave-balances"] });
-    },
-    onError: (error: Error) => setActionError(error.message),
   });
 
   const createTypeMutation = useMutation({
@@ -509,50 +478,18 @@ export function LeavePageClient({
           <DialogHeader>
             <DialogTitle>{t("newRequest")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="leaveType">{t("leaveType")}</Label>
-              <select
-                id="leaveType"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-                value={leaveTypeId}
-                onChange={(e) => setLeaveTypeId(e.target.value)}
-              >
-                <option value="">{t("selectType")}</option>
-                {activeTypes.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="startDate">{t("startDate")}</Label>
-              <Input
-                id="startDate"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate">{t("endDate")}</Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="reason">{t("reason")}</Label>
-              <Input
-                id="reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </div>
-          </div>
+          {typesQuery.data ? (
+            <LeaveRequestForm
+              leaveTypes={typesQuery.data}
+              resetOnSuccess
+              submitLabel={tCommon("confirm")}
+              onSuccess={() => {
+                setSuccessMessage(t("createSuccess"));
+                setActionError(null);
+                setDialogOpen(false);
+              }}
+            />
+          ) : null}
           <DialogFooter>
             <Button
               type="button"
@@ -560,18 +497,6 @@ export function LeavePageClient({
               onClick={() => setDialogOpen(false)}
             >
               {tCommon("cancel")}
-            </Button>
-            <Button
-              type="button"
-              disabled={
-                !leaveTypeId ||
-                !startDate ||
-                !endDate ||
-                createMutation.isPending
-              }
-              onClick={() => createMutation.mutate()}
-            >
-              {tCommon("confirm")}
             </Button>
           </DialogFooter>
         </DialogContent>

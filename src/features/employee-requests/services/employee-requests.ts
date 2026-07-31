@@ -4,6 +4,7 @@ import type {
   CreateEmployeeRequestInput,
   ListEmployeeRequestsQuery,
   RejectEmployeeRequestInput,
+  UpdateEmployeeRequestInput,
 } from "@/features/employee-requests/schemas/employee-request.schema";
 import {
   assertCanApproveEmployeeRequest,
@@ -215,22 +216,7 @@ export async function createEmployeeRequest(
   }
 
   if (input.type === "extension") {
-    const requested = input.requestedDate!;
-    const today = calendarDateInOrgTimezone();
-    if (requested < today) {
-      throw new ApiError(
-        "تاريخ التمديد يجب أن يكون اليوم أو بعده.",
-        400,
-        "EXTENSION_DATE_INVALID",
-      );
-    }
-    if (task.due_date && requested <= task.due_date) {
-      throw new ApiError(
-        "تاريخ التمديد يجب أن يكون بعد الموعد الحالي للمهمة.",
-        400,
-        "EXTENSION_DATE_INVALID",
-      );
-    }
+    await validateExtensionDateForTask(input.taskId, input.requestedDate!);
   }
 
   const { data, error } = await admin
@@ -239,7 +225,7 @@ export async function createEmployeeRequest(
       user_id: actor.id,
       task_id: input.taskId,
       type: input.type,
-      reason: input.reason ?? null,
+      reason: input.reason,
       requested_date: input.type === "extension" ? input.requestedDate : null,
       status: "pending",
     })
@@ -273,6 +259,137 @@ export async function createEmployeeRequest(
   });
 
   return created;
+}
+
+async function validateExtensionDateForTask(
+  taskId: string,
+  requestedDate: string,
+): Promise<void> {
+  const admin = createAdminClient();
+  const { data: task, error: taskError } = await admin
+    .from("tasks")
+    .select("due_date")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (taskError) {
+    throw new ApiError("تعذر التحقق من المهمة.", 500, "TASK_LOOKUP_FAILED");
+  }
+  if (!task) {
+    throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+  }
+
+  const today = calendarDateInOrgTimezone();
+  if (requestedDate < today) {
+    throw new ApiError(
+      "تاريخ التمديد يجب أن يكون اليوم أو بعده.",
+      400,
+      "EXTENSION_DATE_INVALID",
+    );
+  }
+  const dueDate = task.due_date as string | null;
+  if (dueDate && requestedDate <= dueDate) {
+    throw new ApiError(
+      "تاريخ التمديد يجب أن يكون بعد الموعد الحالي للمهمة.",
+      400,
+      "EXTENSION_DATE_INVALID",
+    );
+  }
+}
+
+export async function updateEmployeeRequest(
+  actor: AppUser,
+  id: string,
+  input: UpdateEmployeeRequestInput,
+): Promise<EmployeeRequest> {
+  const existing = await getRow(id);
+
+  if (existing.user_id !== actor.id) {
+    throw new ApiError(
+      "يمكنك تعديل طلباتك فقط.",
+      403,
+      "NOT_REQUEST_OWNER",
+    );
+  }
+  if (existing.status !== "pending") {
+    throw new ApiError(
+      "يمكن تعديل الطلبات المعلقة فقط.",
+      409,
+      "EMPLOYEE_REQUEST_NOT_PENDING",
+    );
+  }
+
+  const admin = createAdminClient();
+  const { data: task, error: taskError } = await admin
+    .from("tasks")
+    .select("id, assigned_to")
+    .eq("id", existing.task_id)
+    .maybeSingle();
+
+  if (taskError) {
+    throw new ApiError("تعذر التحقق من المهمة.", 500, "TASK_LOOKUP_FAILED");
+  }
+  if (!task || task.assigned_to !== actor.id) {
+    throw new ApiError(
+      "يمكنك تعديل الطلب فقط للمهام المسندة إليك.",
+      403,
+      "NOT_TASK_ASSIGNEE",
+    );
+  }
+
+  if (existing.type === "excusal" && input.requestedDate !== undefined) {
+    throw new ApiError(
+      "طلب الإعفاء لا يتضمن تاريخاً.",
+      400,
+      "VALIDATION_ERROR",
+    );
+  }
+
+  const patch: {
+    reason?: string | null;
+    requested_date?: string | null;
+  } = {};
+
+  if (input.reason !== undefined) {
+    patch.reason = input.reason;
+  }
+
+  if (existing.type === "extension" && input.requestedDate !== undefined) {
+    if (!input.requestedDate) {
+      throw new ApiError(
+        "تاريخ التمديد مطلوب",
+        400,
+        "VALIDATION_ERROR",
+      );
+    }
+    await validateExtensionDateForTask(existing.task_id, input.requestedDate);
+    patch.requested_date = input.requestedDate;
+  }
+
+  const { data, error } = await admin
+    .from("employee_requests")
+    .update(patch)
+    .eq("id", id)
+    .eq("status", "pending")
+    .select(SELECT)
+    .maybeSingle();
+
+  if (error) {
+    throw new ApiError(
+      "تعذر تحديث الطلب.",
+      500,
+      "UPDATE_EMPLOYEE_REQUEST_FAILED",
+    );
+  }
+  if (!data) {
+    throw new ApiError(
+      "يمكن تعديل الطلبات المعلقة فقط.",
+      409,
+      "EMPLOYEE_REQUEST_NOT_PENDING",
+    );
+  }
+
+  return mapEmployeeRequestRow(data as unknown as EmployeeRequestRow);
 }
 
 export async function approveEmployeeRequest(

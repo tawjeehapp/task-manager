@@ -158,7 +158,7 @@ npm run seed:dev -- --reset
 - Users `0000`–`1008` (Arabic names; roles: admin, 2 managers, employees)
 - Departments: تقنية المعلومات، المناهج والتخطيط (current memberships only)
 - Projects, tasks/subtasks, dependencies, uneven workload
-- Attendance scenarios (open, awaiting approval, approved, rejected, resubmitted pending, break minutes, empty today)
+- Attendance scenarios (awaiting approval, approved, rejected, resubmitted pending, break minutes, empty today)
 - Work logs on parent tasks and subtasks across multiple days
 
 ### Credential rules
@@ -260,7 +260,7 @@ Milestones **0–9** core product scope is implemented (M0 PWA offline + Web Pus
 | 2 Departments | `20260725130000_milestone2_departments.sql` |
 | 3 Projects & tasks | `20260725140000_milestone3_projects_tasks.sql`, `20260725141000_milestone3_project_manage_admin_only.sql` |
 | 4 Dependencies & activity | `20260725150000_milestone4_dependencies_activity.sql`, `20260725151000_milestone4_simplify_task_statuses.sql` |
-| 5 Attendance & work logs | `20260725160000_milestone5_attendance_work_logs.sql` |
+| 5 Attendance & work logs | `20260725160000_milestone5_attendance_work_logs.sql`, `20260731180000_attendance_general_work_logs.sql` |
 | 6 Leave & employee requests | `20260725170000_milestone6_leave_employee_requests.sql` |
 | 7 Announcements & notifications | `20260725180000_milestone7_announcements_notifications.sql` |
 | 8 Dashboards & reporting | `20260725190000_milestone8_dashboards_reporting.sql` |
@@ -271,7 +271,7 @@ Milestones **0–9** core product scope is implemented (M0 PWA offline + Web Pus
 - Auth, users, permissions, departments, memberships
 - Projects, members, tasks, one-level subtasks, Kanban, Gantt
 - Finish-to-start dependencies, assignee workload hints, task activity history
-- Attendance clock in/out, approval/rejection, daily hour totals, task work logs
+- Attendance manual submit, approval/rejection, daily hour totals, task work logs
 - Leave types/balances/requests, task extension/excusal, centralized `/approvals`
 - Announcements (company/department), read tracking, in-app notifications + header bell
 - Role dashboards on `/` and operational reports on `/reports` (`report.view`)

@@ -60,11 +60,12 @@ This section explains the live business rules as implemented — useful when wal
 ### Attendance & work logs (M5)
 
 - One attendance record per employee per calendar day (`Asia/Riyadh`).
-- Clock in / clock out; total hours = elapsed time minus break minutes.
-- After clock-out, status is **pending** until manager/admin approves or rejects (with reason).
+- Employees **submit** entry/exit times and break minutes in one step; total hours = elapsed time minus break.
+- Optional **subtask allocations** on submit create work logs (assigned subtasks only); leftover hours are general time.
+- After submit, status is **pending** until manager/admin approves or rejects (with reason).
 - **No self-approval.** Managers approve only current members of their department; admins can approve anyone except themselves.
 - Rejected records can be corrected by the employee and return to pending; admins can correct timestamps.
-- **Work logs** record hours against tasks independently of attendance totals. There is **no** work-log approve/reject workflow in M5 (list/review only). Attendance approvals stay on `/attendance` (not moved to the central approvals page).
+- **Work logs** can also be created standalone. There is **no** work-log approve/reject workflow in M5 (list/review only). Attendance approvals stay on `/attendance` (not moved to the central approvals page).
 
 ### Leave (M6)
 

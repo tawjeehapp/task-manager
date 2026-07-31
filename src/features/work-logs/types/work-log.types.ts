@@ -1,7 +1,7 @@
 export type WorkLog = {
   id: string;
   userId: string;
-  taskId: string;
+  taskId: string | null;
   date: string;
   hours: number;
   description: string | null;
@@ -23,7 +23,7 @@ export type WorkLog = {
 export type WorkLogRow = {
   id: string;
   user_id: string;
-  task_id: string;
+  task_id: string | null;
   date: string;
   hours: number | string;
   description: string | null;

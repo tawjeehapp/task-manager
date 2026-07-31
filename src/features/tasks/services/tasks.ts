@@ -129,8 +129,10 @@ export function mapTask(
     assignee: mapUserSummary(row.assignee),
     createdBy: row.created_by,
     createdByUser: mapUserSummary(row.created_by_user),
-    startDate: row.start_date,
-    dueDate: row.due_date,
+    startDate: row.start_date
+      ? String(row.start_date).slice(0, 10)
+      : null,
+    dueDate: row.due_date ? String(row.due_date).slice(0, 10) : null,
     estimatedHours: toHours(row.estimated_hours),
     progressPercentage: row.progress_percentage,
     completedAt: row.completed_at,
@@ -888,7 +890,9 @@ export async function listTasksForViewer(
   if (query.priority) {
     builder = builder.eq("priority", query.priority);
   }
-  if (query.parentTaskId === null) {
+  if (query.subtasksOnly) {
+    builder = builder.not("parent_task_id", "is", null);
+  } else if (query.parentTaskId === null) {
     builder = builder.is("parent_task_id", null);
   } else if (query.parentTaskId !== undefined) {
     builder = builder.eq("parent_task_id", query.parentTaskId);

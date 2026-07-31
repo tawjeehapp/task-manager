@@ -14,8 +14,11 @@ export type DashboardTaskItem = {
   title: string;
   status: string;
   dueDate: string | null;
+  priority: string;
+  parentTaskId: string | null;
   projectName: string | null;
   href: string;
+  incompleteDependencyCount?: number;
 };
 
 export type DashboardRequestItem = {
@@ -37,11 +40,21 @@ export type DashboardAttendanceSummary = {
 };
 
 export type EmployeeDashboardMetrics = {
+  todo: number;
   inProgress: number;
+  blocked: number;
   completed: number;
-  overdue: number;
   weekHours: number;
+  overdue: number;
   dueToday: number;
+};
+
+export type DashboardAttendanceAllocation = {
+  kind: "task" | "general";
+  taskId: string | null;
+  title: string;
+  hours: number;
+  reason: string | null;
 };
 
 export type DashboardAttendanceItem = {
@@ -52,6 +65,7 @@ export type DashboardAttendanceItem = {
   totalHours: number | null;
   status: string;
   uiState: AttendanceUiState;
+  allocations: DashboardAttendanceAllocation[];
 };
 
 export type LeadershipTodayStatus = "missing" | "working" | "recorded";

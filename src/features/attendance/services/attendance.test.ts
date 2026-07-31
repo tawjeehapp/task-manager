@@ -23,8 +23,9 @@ vi.mock("@/features/attendance/services/compute-hours", async (importOriginal) =
 
 import {
   approveAttendance,
-  clockIn,
   rejectAttendance,
+  resubmitAttendance,
+  submitAttendance,
   updateAttendance,
 } from "@/features/attendance/services/attendance";
 import type { AttendanceRow } from "@/features/attendance/types/attendance.types";
@@ -34,6 +35,14 @@ import {
 } from "@/features/departments/services/membership-helpers";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+vi.mock("@/features/notifications/services/notifications", () => ({
+  notifySafe: vi.fn(async () => undefined),
+}));
+
+vi.mock("@/features/notifications/services/recipients", () => ({
+  listApproverUserIdsForRequester: vi.fn(async () => ["mgr-1"]),
+}));
 
 const createAdminClientMock = vi.mocked(createAdminClient);
 const sharesMock = vi.mocked(sharesManagedDepartmentWith);
@@ -92,6 +101,7 @@ function chain(result: QueryResult, extras?: Record<string, unknown>) {
   api.select = self;
   api.insert = self;
   api.update = self;
+  api.delete = self;
   api.eq = self;
   api.neq = self;
   api.is = self;
@@ -104,6 +114,11 @@ function chain(result: QueryResult, extras?: Record<string, unknown>) {
   api.range = self;
   api.maybeSingle = async () => result;
   api.single = async () => result;
+  // Supabase builders are thenable when awaited without .single()
+  api.then = (
+    onfulfilled?: (value: QueryResult) => unknown,
+    onrejected?: (reason: unknown) => unknown,
+  ) => Promise.resolve(result).then(onfulfilled, onrejected);
   return api;
 }
 
@@ -153,6 +168,45 @@ describe("attendance service", () => {
       ).rejects.toMatchObject({
         code: "MANAGER_CANNOT_EDIT_ATTENDANCE",
         status: 403,
+      });
+    });
+
+    it("allows pending attendance to be corrected by the owner", async () => {
+      const existing = makeAttendanceRow({
+        user_id: "emp-1",
+        status: "pending",
+      });
+      const updated = makeAttendanceRow({
+        ...existing,
+        break_minutes: 15,
+        total_hours: 7.75,
+      });
+
+      let updatePayload: Record<string, unknown> | undefined;
+      let call = 0;
+
+      createAdminClientMock.mockReturnValue({
+        from: () => {
+          call += 1;
+          if (call === 1) {
+            return chain({ data: existing, error: null });
+          }
+          const api = chain({ data: updated, error: null });
+          api.update = (payload: Record<string, unknown>) => {
+            updatePayload = payload;
+            return api;
+          };
+          return api;
+        },
+      } as never);
+
+      await updateAttendance(makeUser({ id: "emp-1", role: "employee" }), "att-1", {
+        breakMinutes: 15,
+      });
+
+      expect(updatePayload).toMatchObject({
+        status: "pending",
+        break_minutes: 15,
       });
     });
 
@@ -225,93 +279,358 @@ describe("attendance service", () => {
     });
   });
 
-  describe("clockIn", () => {
-    it("rejects clock-in when approved (closed) attendance already exists", async () => {
+  describe("submitAttendance", () => {
+    const baseInput = {
+      date: "2026-07-25",
+      clockIn: "08:00",
+      clockOut: "16:00",
+      breakMinutes: 30,
+      allocations: [
+        {
+          type: "general" as const,
+          reason: "أعمال إدارية",
+          hours: 7.5,
+        },
+      ],
+    };
+
+    it("rejects when attendance already exists for the date", async () => {
       createAdminClientMock.mockReturnValue({
         from: () =>
           chain({
-            data: {
-              id: "att-1",
-              clock_out: "2026-07-25T13:00:00.000Z",
-              status: "approved",
-            },
+            data: { id: "att-1" },
             error: null,
           }),
       } as never);
 
       await expect(
-        clockIn(makeUser({ id: "emp-1", role: "employee" })),
+        submitAttendance(makeUser({ id: "emp-1", role: "employee" }), baseInput),
       ).rejects.toMatchObject({
         code: "ATTENDANCE_EXISTS",
         status: 409,
       });
     });
 
-    it("rejects duplicate same-day clock-in when still open", async () => {
-      createAdminClientMock.mockReturnValue({
-        from: () =>
-          chain({
-            data: {
-              id: "att-1",
-              clock_out: null,
-              status: "pending",
-            },
-            error: null,
-          }),
-      } as never);
-
+    it("rejects when allocations do not equal net hours", async () => {
       await expect(
-        clockIn(makeUser({ id: "emp-1", role: "employee" })),
+        submitAttendance(makeUser({ id: "emp-1", role: "employee" }), {
+          ...baseInput,
+          allocations: [
+            {
+              type: "task",
+              taskId: "11111111-1111-1111-1111-111111111111",
+              hours: 8,
+            },
+          ],
+        }),
       ).rejects.toMatchObject({
-        code: "ALREADY_CLOCKED_IN",
+        code: "ALLOCATION_MUST_EQUAL_NET_HOURS",
         status: 409,
       });
     });
 
-    it("succeeds when no existing row for today", async () => {
+    it("rejects root tasks as allocations", async () => {
+      let call = 0;
+      createAdminClientMock.mockReturnValue({
+        from: (table: string) => {
+          if (table === "tasks") {
+            return chain({
+              data: [
+                {
+                  id: "11111111-1111-1111-1111-111111111111",
+                  parent_task_id: null,
+                  assigned_to: "emp-1",
+                },
+              ],
+              error: null,
+            });
+          }
+          call += 1;
+          return chain({ data: null, error: null });
+        },
+      } as never);
+
+      await expect(
+        submitAttendance(makeUser({ id: "emp-1", role: "employee" }), {
+          ...baseInput,
+          allocations: [
+            {
+              type: "task",
+              taskId: "11111111-1111-1111-1111-111111111111",
+              hours: 7.5,
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        code: "NOT_A_SUBTASK",
+        status: 409,
+      });
+      expect(call).toBe(0);
+    });
+
+    it("rejects unassigned subtasks", async () => {
+      createAdminClientMock.mockReturnValue({
+        from: (table: string) => {
+          if (table === "tasks") {
+            return chain({
+              data: [
+                {
+                  id: "11111111-1111-1111-1111-111111111111",
+                  parent_task_id: "parent-1",
+                  assigned_to: "other-user",
+                },
+              ],
+              error: null,
+            });
+          }
+          return chain({ data: null, error: null });
+        },
+      } as never);
+
+      await expect(
+        submitAttendance(makeUser({ id: "emp-1", role: "employee" }), {
+          ...baseInput,
+          allocations: [
+            {
+              type: "task",
+              taskId: "11111111-1111-1111-1111-111111111111",
+              hours: 7.5,
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        code: "SUBTASK_NOT_ASSIGNED",
+        status: 403,
+      });
+    });
+
+    it("succeeds and creates attendance with task and general work logs", async () => {
       const inserted = makeAttendanceRow({
         user_id: "emp-1",
-        clock_out: null,
-        break_minutes: 0,
-        total_hours: null,
+        date: "2026-07-25",
+        clock_in: "2026-07-25T05:00:00.000Z",
+        clock_out: "2026-07-25T13:00:00.000Z",
+        break_minutes: 30,
+        total_hours: 7.5,
         status: "pending",
       });
 
-      let insertPayload: Record<string, unknown> | undefined;
+      let attendancePayload: Record<string, unknown> | undefined;
+      let workLogPayload: unknown;
       let call = 0;
 
       createAdminClientMock.mockReturnValue({
-        from: () => {
+        from: (table: string) => {
+          if (table === "tasks") {
+            return chain({
+              data: [
+                {
+                  id: "11111111-1111-1111-1111-111111111111",
+                  parent_task_id: "parent-1",
+                  assigned_to: "emp-1",
+                },
+              ],
+              error: null,
+            });
+          }
+          if (table === "work_logs") {
+            const api = chain({ data: null, error: null });
+            api.insert = (payload: unknown) => {
+              workLogPayload = payload;
+              return api;
+            };
+            return api;
+          }
           call += 1;
           if (call === 1) {
             return chain({ data: null, error: null });
           }
           const api = chain({ data: inserted, error: null });
           api.insert = (payload: Record<string, unknown>) => {
-            insertPayload = payload;
+            attendancePayload = payload;
             return api;
           };
           return api;
         },
       } as never);
 
-      const result = await clockIn(
+      const result = await submitAttendance(
         makeUser({ id: "emp-1", role: "employee" }),
+        {
+          ...baseInput,
+          allocations: [
+            {
+              type: "task",
+              taskId: "11111111-1111-1111-1111-111111111111",
+              hours: 3,
+            },
+            {
+              type: "general",
+              reason: "متابعة بريد داخلي",
+              hours: 4.5,
+            },
+          ],
+        },
       );
 
-      expect(insertPayload).toMatchObject({
+      expect(attendancePayload).toMatchObject({
         user_id: "emp-1",
         date: "2026-07-25",
-        clock_out: null,
-        break_minutes: 0,
-        total_hours: null,
+        break_minutes: 30,
+        total_hours: 7.5,
         status: "pending",
       });
-      expect(typeof insertPayload?.clock_in).toBe("string");
+      expect(attendancePayload?.clock_out).toBeTruthy();
+      expect(workLogPayload).toEqual([
+        {
+          user_id: "emp-1",
+          task_id: "11111111-1111-1111-1111-111111111111",
+          date: "2026-07-25",
+          hours: 3,
+          description: null,
+          approved_by: null,
+        },
+        {
+          user_id: "emp-1",
+          task_id: null,
+          date: "2026-07-25",
+          hours: 4.5,
+          description: "متابعة بريد داخلي",
+          approved_by: null,
+        },
+      ]);
       expect(result.id).toBe("att-1");
-      expect(result.userId).toBe("emp-1");
       expect(result.status).toBe("pending");
-      expect(result.clockOut).toBeNull();
+      expect(result.totalHours).toBe(7.5);
+    });
+  });
+
+  describe("resubmitAttendance", () => {
+    it("blocks editing approved attendance", async () => {
+      createAdminClientMock.mockReturnValue({
+        from: () =>
+          chain({
+            data: makeAttendanceRow({
+              user_id: "emp-1",
+              status: "approved",
+            }),
+            error: null,
+          }),
+      } as never);
+
+      await expect(
+        resubmitAttendance(makeUser({ id: "emp-1" }), "att-1", {
+          clockIn: "08:00",
+          clockOut: "16:00",
+          breakMinutes: 30,
+          allocations: [
+            {
+              type: "general",
+              reason: "أعمال إدارية",
+              hours: 7.5,
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        code: "ATTENDANCE_APPROVED_LOCKED",
+        status: 409,
+      });
+    });
+
+    it("allows pending owner to resubmit with allocations", async () => {
+      const existing = makeAttendanceRow({
+        user_id: "emp-1",
+        status: "pending",
+        date: "2026-07-25",
+      });
+      const updated = makeAttendanceRow({
+        ...existing,
+        break_minutes: 0,
+        total_hours: 8,
+      });
+
+      let workLogDeleted = false;
+      let workLogInserted: unknown;
+      let attendanceCall = 0;
+
+      createAdminClientMock.mockReturnValue({
+        from: (table: string) => {
+          if (table === "tasks") {
+            return chain({
+              data: [
+                {
+                  id: "11111111-1111-1111-1111-111111111111",
+                  parent_task_id: "parent-1",
+                  assigned_to: "emp-1",
+                },
+              ],
+              error: null,
+            });
+          }
+          if (table === "work_logs") {
+            const api = chain({ data: null, error: null });
+            api.delete = () => {
+              workLogDeleted = true;
+              return api;
+            };
+            api.insert = (payload: unknown) => {
+              workLogInserted = payload;
+              return api;
+            };
+            return api;
+          }
+          attendanceCall += 1;
+          if (attendanceCall === 1) {
+            return chain({ data: existing, error: null });
+          }
+          const api = chain({ data: updated, error: null });
+          api.update = () => api;
+          return api;
+        },
+      } as never);
+
+      const result = await resubmitAttendance(
+        makeUser({ id: "emp-1" }),
+        "att-1",
+        {
+          clockIn: "08:00",
+          clockOut: "16:00",
+          breakMinutes: 0,
+          allocations: [
+            {
+              type: "task",
+              taskId: "11111111-1111-1111-1111-111111111111",
+              hours: 2,
+            },
+            {
+              type: "general",
+              reason: "تنسيق داخلي",
+              hours: 6,
+            },
+          ],
+        },
+      );
+
+      expect(result.status).toBe("pending");
+      expect(workLogDeleted).toBe(true);
+      expect(workLogInserted).toEqual([
+        {
+          user_id: "emp-1",
+          task_id: "11111111-1111-1111-1111-111111111111",
+          date: "2026-07-25",
+          hours: 2,
+          description: null,
+          approved_by: null,
+        },
+        {
+          user_id: "emp-1",
+          task_id: null,
+          date: "2026-07-25",
+          hours: 6,
+          description: "تنسيق داخلي",
+          approved_by: null,
+        },
+      ]);
     });
   });
 

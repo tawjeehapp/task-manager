@@ -1,27 +1,31 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Link from "next/link";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  AlertTriangle,
+  Ban,
   CheckCircle2,
+  Circle,
   Clock3,
   Loader2,
 } from "lucide-react";
 
 import type { EmployeeDashboard } from "@/features/dashboard/types/dashboard.types";
+import type { TaskStatus } from "@/features/tasks/types/task.types";
 import { EmployeeTaskCalendar } from "@/features/dashboard/components/employee-task-calendar";
 import { EmployeeAttendanceWidget } from "@/features/dashboard/components/employee-attendance-widget";
+import {
+  EmployeeStatusTasksDialog,
+  EmployeeWeekHoursDialog,
+} from "@/features/dashboard/components/employee-metric-dialogs";
 import { formatDate } from "@/lib/dates";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type EmployeeDashboardClientProps = {
@@ -30,16 +34,22 @@ type EmployeeDashboardClientProps = {
   viewerName: string;
 };
 
+type MetricTone = "default" | "success" | "danger" | "info" | "muted";
+
+type OpenMetric = TaskStatus | "hours" | null;
+
 function MetricCard({
   label,
   value,
   icon,
   tone,
+  onClick,
 }: {
   label: string;
   value: number | string;
   icon: ReactNode;
-  tone?: "default" | "success" | "danger" | "info";
+  tone?: MetricTone;
+  onClick?: () => void;
 }) {
   const toneClass =
     tone === "success"
@@ -48,10 +58,19 @@ function MetricCard({
         ? "text-destructive"
         : tone === "info"
           ? "text-sky-600"
-          : "text-amber-600";
+          : tone === "muted"
+            ? "text-muted-foreground"
+            : "text-amber-600";
 
-  return (
-    <Card size="sm" className="h-full">
+  const card = (
+    <Card
+      size="sm"
+      className={cn(
+        "h-full",
+        onClick &&
+          "cursor-pointer transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+      )}
+    >
       <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
         <div>
           <CardDescription>{label}</CardDescription>
@@ -63,6 +82,14 @@ function MetricCard({
       </CardHeader>
     </Card>
   );
+
+  if (!onClick) return card;
+
+  return (
+    <button type="button" onClick={onClick} className="h-full w-full text-start">
+      {card}
+    </button>
+  );
 }
 
 export function EmployeeDashboardClient({
@@ -71,24 +98,18 @@ export function EmployeeDashboardClient({
   viewerName,
 }: EmployeeDashboardClientProps) {
   const t = useTranslations("dashboard");
+  const [openMetric, setOpenMetric] = useState<OpenMetric>(null);
 
-  const statusLabel = (status: string) => {
-    const map: Record<string, string> = {
-      pending: t("status_pending"),
-      approved: t("status_approved"),
-      rejected: t("status_rejected"),
-      todo: t("status_todo"),
-      in_progress: t("status_in_progress"),
-      blocked: t("status_blocked"),
-      completed: t("status_completed"),
-    };
-    return map[status] ?? status;
-  };
+  const subtitle = t("greetingSummary", {
+    dueToday: data.metrics.dueToday,
+    overdue: data.metrics.overdue,
+  });
 
-  const subtitle =
-    data.metrics.dueToday === 0
-      ? t("greetingQuiet")
-      : t("greetingDueToday", { count: data.metrics.dueToday });
+  const statusDialogOpen =
+    openMetric === "todo" ||
+    openMetric === "in_progress" ||
+    openMetric === "blocked" ||
+    openMetric === "completed";
 
   return (
     <div className="space-y-6">
@@ -102,30 +123,41 @@ export function EmployeeDashboardClient({
         <p className="text-muted-foreground">{subtitle}</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
+        <MetricCard
+          label={t("metricTodo")}
+          value={data.metrics.todo}
+          icon={<Circle className="size-5" />}
+          tone="muted"
+          onClick={() => setOpenMetric("todo")}
+        />
         <MetricCard
           label={t("metricInProgress")}
           value={data.metrics.inProgress}
           icon={<Loader2 className="size-5" />}
           tone="default"
+          onClick={() => setOpenMetric("in_progress")}
+        />
+        <MetricCard
+          label={t("metricBlocked")}
+          value={data.metrics.blocked}
+          icon={<Ban className="size-5" />}
+          tone="danger"
+          onClick={() => setOpenMetric("blocked")}
         />
         <MetricCard
           label={t("metricCompleted")}
           value={data.metrics.completed}
           icon={<CheckCircle2 className="size-5" />}
           tone="success"
-        />
-        <MetricCard
-          label={t("metricOverdue")}
-          value={data.metrics.overdue}
-          icon={<AlertTriangle className="size-5" />}
-          tone="danger"
+          onClick={() => setOpenMetric("completed")}
         />
         <MetricCard
           label={t("metricWeekHours")}
           value={data.metrics.weekHours}
           icon={<Clock3 className="size-5" />}
           tone="info"
+          onClick={() => setOpenMetric("hours")}
         />
       </div>
 
@@ -136,47 +168,31 @@ export function EmployeeDashboardClient({
       />
 
       <EmployeeAttendanceWidget
+        viewerId={viewerId}
         weekAttendance={data.weekAttendance}
         weekHours={data.metrics.weekHours}
       />
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <CardTitle>{t("myRequests")}</CardTitle>
-          <Link
-            href="/leave"
-            className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
-          >
-            {t("viewLeave")}
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {data.myRequests.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{t("noRequests")}</p>
-          ) : (
-            <ul className="divide-y divide-border">
-              {data.myRequests.map((item) => (
-                <li key={`${item.kind}-${item.id}`}>
-                  <Link
-                    href={item.href}
-                    className="flex items-center justify-between gap-3 py-2.5 text-sm hover:text-foreground"
-                  >
-                    <span className="min-w-0 truncate">
-                      <span className="text-muted-foreground">
-                        {t(`requestKind_${item.kind}`)} ·{" "}
-                      </span>
-                      <span className="font-medium">{item.title}</span>
-                    </span>
-                    <span className="shrink-0 text-muted-foreground">
-                      {statusLabel(item.status)}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      {statusDialogOpen ? (
+        <EmployeeStatusTasksDialog
+          open={statusDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) setOpenMetric(null);
+          }}
+          viewerId={viewerId}
+          status={openMetric as TaskStatus}
+          today={data.today}
+        />
+      ) : null}
+
+      <EmployeeWeekHoursDialog
+        open={openMetric === "hours"}
+        onOpenChange={(open) => {
+          if (!open) setOpenMetric(null);
+        }}
+        weekAttendance={data.weekAttendance}
+        weekHours={data.metrics.weekHours}
+      />
     </div>
   );
 }

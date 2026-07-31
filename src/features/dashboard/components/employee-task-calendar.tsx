@@ -6,6 +6,12 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import {
+  calendarDateOnly,
+  isIncludedInTodayList,
+  sortTodayListTasks,
+} from "@/features/dashboard/lib/actionable-tasks";
+import { DashboardDayTaskTable } from "@/features/dashboard/components/dashboard-day-task-table";
 import type { DashboardTaskItem } from "@/features/dashboard/types/dashboard.types";
 import type { Task } from "@/features/tasks/types/task.types";
 import type { TasksListResult } from "@/features/tasks/services/tasks";
@@ -14,6 +20,7 @@ import {
   monthGridDays,
   shiftFocusDate,
   weekDays,
+  type CalendarRange,
   type CalendarViewMode,
 } from "@/features/dashboard/lib/calendar-range";
 import { isOrgWeekend } from "@/lib/org-calendar";
@@ -40,27 +47,33 @@ function toDashboardItem(task: Task): DashboardTaskItem {
     id: task.id,
     title: task.title,
     status: task.status,
-    dueDate: task.dueDate,
+    dueDate: calendarDateOnly(task.dueDate),
+    priority: task.priority,
+    parentTaskId: task.parentTaskId,
     projectName: task.project?.name ?? null,
     href: `/tasks/${task.id}`,
+    incompleteDependencyCount: task.incompleteDependencyCount ?? 0,
   };
 }
 
 async function fetchTasksInRange(
   viewerId: string,
-  dueFrom: string,
-  dueTo: string,
+  range: CalendarRange,
+  today: string,
 ): Promise<DashboardTaskItem[]> {
   const params = new URLSearchParams({
     page: "1",
     pageSize: "100",
     sortBy: "dueDate",
     sortDir: "asc",
-    parentTaskId: "null",
     assignee: viewerId,
-    dueFrom,
-    dueTo,
+    dueTo: range.dueTo,
   });
+
+  if (range.dueFrom) {
+    params.set("dueFrom", range.dueFrom);
+  }
+
   const response = await fetch(`/api/tasks?${params.toString()}`);
   const payload = (await response.json()) as {
     data?: TasksListResult;
@@ -69,7 +82,17 @@ async function fetchTasksInRange(
   if (!response.ok) {
     throw new Error(payload.error?.message ?? "Failed");
   }
-  return (payload.data?.items ?? []).map(toDashboardItem);
+
+  let items = (payload.data?.items ?? []).map(toDashboardItem);
+
+  if (range.isTodayActionable) {
+    items = sortTodayListTasks(
+      items.filter((task) => isIncludedInTodayList(task, today)),
+      today,
+    );
+  }
+
+  return items;
 }
 
 export function EmployeeTaskCalendar({
@@ -83,41 +106,47 @@ export function EmployeeTaskCalendar({
   const [focusDate, setFocusDate] = useState(today);
 
   const range = useMemo(
-    () => calendarRangeFor(mode, focusDate),
-    [mode, focusDate],
+    () => calendarRangeFor(mode, focusDate, today),
+    [mode, focusDate, today],
   );
 
   const isInitialDay =
-    mode === "day" && focusDate === today && range.dueFrom === today;
+    mode === "day" && focusDate === today && range.isTodayActionable === true;
 
   const tasksQuery = useQuery({
-    queryKey: ["tasks", "calendar", viewerId, range.dueFrom, range.dueTo],
-    queryFn: () => fetchTasksInRange(viewerId, range.dueFrom, range.dueTo),
+    queryKey: [
+      "tasks",
+      "calendar",
+      viewerId,
+      range.dueFrom ?? "actionable",
+      range.dueTo,
+      range.isTodayActionable ?? false,
+    ],
+    queryFn: () => fetchTasksInRange(viewerId, range, today),
     initialData: isInitialDay ? initialTodayTasks : undefined,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const tasksByDate = useMemo(() => {
     const map = new Map<string, DashboardTaskItem[]>();
     for (const task of tasksQuery.data ?? []) {
-      if (!task.dueDate) continue;
-      const list = map.get(task.dueDate) ?? [];
+      const date = calendarDateOnly(task.dueDate);
+      if (!date) continue;
+      const list = map.get(date) ?? [];
       list.push(task);
-      map.set(task.dueDate, list);
+      map.set(date, list);
     }
     return map;
   }, [tasksQuery.data]);
 
-  const dayTasks =
-    mode === "day" ? (tasksByDate.get(focusDate) ?? []) : [];
-
-  function statusLabel(status: string) {
-    const key = `status_${status}` as
-      | "status_todo"
-      | "status_in_progress"
-      | "status_blocked"
-      | "status_completed";
-    return t(key);
-  }
+  const dayTasks = useMemo(() => {
+    if (mode !== "day") return [];
+    if (range.isTodayActionable) {
+      return tasksQuery.data ?? [];
+    }
+    return tasksByDate.get(focusDate) ?? [];
+  }, [mode, range.isTodayActionable, tasksQuery.data, tasksByDate, focusDate]);
 
   function focusLabel() {
     if (mode === "day") return formatDate(focusDate);
@@ -187,22 +216,7 @@ export function EmployeeTaskCalendar({
               </Link>
             </p>
           ) : (
-            <ul className="divide-y divide-border">
-              {dayTasks.map((task) => (
-                <li key={task.id}>
-                  <Link
-                    href={task.href}
-                    className="flex flex-col gap-0.5 py-2.5 text-sm hover:text-foreground"
-                  >
-                    <span className="font-medium">{task.title}</span>
-                    <span className="text-muted-foreground">
-                      {statusLabel(task.status)}
-                      {task.projectName ? ` · ${task.projectName}` : ""}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            <DashboardDayTaskTable tasks={dayTasks} today={today} />
           )
         ) : null}
 

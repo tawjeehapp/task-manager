@@ -1,13 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { CalendarCheck } from "lucide-react";
+import { CalendarCheck, Clock, Link2 } from "lucide-react";
 
 import type { DashboardAttendanceItem } from "@/features/dashboard/types/dashboard.types";
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
+import {
+  AttendanceEditDialog,
+  canEmployeeEditAttendance,
+} from "@/features/attendance/components/attendance-edit-dialog";
+import { AttendanceSubmitForm } from "@/features/attendance/components/attendance-submit-form";
+import {
+  calendarDateInOrgTimezone,
+  orgLocalTimeOfDay,
+} from "@/features/attendance/services/compute-hours";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -18,12 +28,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { LoadingState } from "@/components/shared/loading-state";
 import { ErrorState } from "@/components/shared/error-state";
 
 type EmployeeAttendanceWidgetProps = {
+  viewerId: string;
   weekAttendance: DashboardAttendanceItem[];
   weekHours: number;
 };
@@ -48,17 +57,27 @@ function uiStateBadgeVariant(
   return "outline";
 }
 
+function timeRangeLabel(clockIn: string, clockOut: string | null): string {
+  try {
+    const start = orgLocalTimeOfDay(clockIn);
+    if (!clockOut) return start;
+    return `${start}-${orgLocalTimeOfDay(clockOut)}`;
+  } catch {
+    return "—";
+  }
+}
+
 export function EmployeeAttendanceWidget({
+  viewerId,
   weekAttendance,
   weekHours,
 }: EmployeeAttendanceWidgetProps) {
   const t = useTranslations("dashboard");
   const tAtt = useTranslations("attendance");
   const tCommon = useTranslations("common");
-  const queryClient = useQueryClient();
-  const [breakMinutes, setBreakMinutes] = useState("0");
+  const router = useRouter();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null);
 
   const todayQuery = useQuery({
     queryKey: ["attendance", "today"],
@@ -68,54 +87,10 @@ export function EmployeeAttendanceWidget({
     },
   });
 
-  const invalidate = async () => {
-    await queryClient.invalidateQueries({ queryKey: ["attendance"] });
-    await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-  };
-
-  const clockInMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/attendance/clock-in", {
-        method: "POST",
-      });
-      return readApi<AttendanceRecord>(response);
-    },
-    onSuccess: async () => {
-      setActionError(null);
-      setSuccessMessage(tAtt("clockInSuccess"));
-      await invalidate();
-    },
-    onError: (error: Error) => {
-      setSuccessMessage(null);
-      setActionError(error.message);
-    },
-  });
-
-  const clockOutMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/attendance/clock-out", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          breakMinutes: Number(breakMinutes) || 0,
-        }),
-      });
-      return readApi<AttendanceRecord>(response);
-    },
-    onSuccess: async () => {
-      setActionError(null);
-      setSuccessMessage(tAtt("clockOutSuccess"));
-      await invalidate();
-    },
-    onError: (error: Error) => {
-      setSuccessMessage(null);
-      setActionError(error.message);
-    },
-  });
-
   const today = todayQuery.data;
-  const isWorking = today?.uiState === "currently_working";
   const hasToday = Boolean(today);
+  const todayDate = calendarDateInOrgTimezone();
+  const canEditToday = today ? canEmployeeEditAttendance(today) : false;
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -125,7 +100,7 @@ export function EmployeeAttendanceWidget({
             <CalendarCheck className="size-4 text-muted-foreground" />
             <CardTitle>{t("weekLogTitle")}</CardTitle>
           </div>
-          <span className="text-sm tabular-nums text-muted-foreground">
+          <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-sm tabular-nums text-sky-800">
             {t("weekHoursLabel", { hours: weekHours })}
           </span>
         </CardHeader>
@@ -135,18 +110,57 @@ export function EmployeeAttendanceWidget({
           ) : (
             <ul className="divide-y divide-border">
               {weekAttendance.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex items-center justify-between gap-3 py-2.5 text-sm"
-                >
-                  <span>{formatDate(row.date)}</span>
-                  <span className="text-muted-foreground tabular-nums">
-                    {row.totalHours != null
-                      ? t("hoursValue", { hours: row.totalHours })
-                      : isWorking && row.clockOut == null
-                        ? tAtt("uiState_currently_working")
+                <li key={row.id} className="space-y-2 py-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="font-medium">
+                        {formatDate(row.date, "dddd D MMMM")}
+                      </span>
+                      <span className="text-muted-foreground tabular-nums">
+                        {timeRangeLabel(row.clockIn, row.clockOut)}
+                      </span>
+                      <Badge variant={uiStateBadgeVariant(row.uiState)}>
+                        {tAtt(`uiState_${row.uiState}`)}
+                      </Badge>
+                    </div>
+                    <span className="shrink-0 tabular-nums text-muted-foreground">
+                      {row.totalHours != null
+                        ? t("hoursShort", { hours: row.totalHours })
                         : "—"}
-                  </span>
+                    </span>
+                  </div>
+                  {row.allocations.length > 0 ? (
+                    <ul className="flex flex-col gap-1.5">
+                      {row.allocations.map((alloc, index) => (
+                        <li
+                          key={`${row.id}-${alloc.kind}-${alloc.taskId ?? index}`}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span
+                            className={
+                              alloc.kind === "general"
+                                ? "inline-flex min-w-0 items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs text-amber-950"
+                                : "inline-flex min-w-0 items-center gap-1.5 rounded-full bg-teal-50 px-2.5 py-0.5 text-xs text-teal-900"
+                            }
+                          >
+                            <Link2 className="size-3 shrink-0 opacity-70" />
+                            <span className="truncate">
+                              {alloc.kind === "general"
+                                ? `${tAtt("entryTypeGeneral")}: ${alloc.reason ?? "—"}`
+                                : alloc.title}
+                            </span>
+                            <span className="tabular-nums opacity-80">
+                              · {t("hoursShort", { hours: alloc.hours })}
+                            </span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      {tAtt("generalTimeOnly")}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -162,17 +176,15 @@ export function EmployeeAttendanceWidget({
 
       <Card>
         <CardHeader>
-          <CardTitle>{t("clockWidgetTitle")}</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="size-4 text-muted-foreground" />
+            {t("clockWidgetTitle")}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {successMessage ? (
             <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
               <AlertDescription>{successMessage}</AlertDescription>
-            </Alert>
-          ) : null}
-          {actionError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{actionError}</AlertDescription>
             </Alert>
           ) : null}
 
@@ -186,56 +198,18 @@ export function EmployeeAttendanceWidget({
           ) : null}
 
           {!todayQuery.isLoading && !todayQuery.isError ? (
-            <div className="space-y-3">
+            <>
               {!hasToday ? (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    {tAtt("notClockedIn")}
-                  </p>
-                  <Button
-                    onClick={() => clockInMutation.mutate()}
-                    disabled={clockInMutation.isPending}
-                  >
-                    {tAtt("clockIn")}
-                  </Button>
-                </>
-              ) : null}
-
-              {isWorking && today ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={uiStateBadgeVariant(today.uiState)}>
-                      {tAtt(`uiState_${today.uiState}`)}
-                    </Badge>
-                    <span className="text-sm">
-                      {tAtt("clockedInAt", {
-                        time: formatDateTime(today.clockIn),
-                      })}
-                    </span>
-                  </div>
-                  <div className="max-w-xs space-y-2">
-                    <Label htmlFor="dashBreakMinutes">
-                      {tAtt("breakMinutes")}
-                    </Label>
-                    <Input
-                      id="dashBreakMinutes"
-                      type="number"
-                      min={0}
-                      value={breakMinutes}
-                      onChange={(e) => setBreakMinutes(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    onClick={() => clockOutMutation.mutate()}
-                    disabled={clockOutMutation.isPending}
-                  >
-                    {tAtt("clockOut")}
-                  </Button>
-                </>
-              ) : null}
-
-              {today && !isWorking ? (
-                <div className="space-y-2">
+                <AttendanceSubmitForm
+                  viewerId={viewerId}
+                  defaultDate={todayDate}
+                  onSuccess={() => {
+                    setSuccessMessage(tAtt("submitSuccess"));
+                    router.refresh();
+                  }}
+                />
+              ) : today ? (
+                <div className="space-y-3">
                   <Badge variant={uiStateBadgeVariant(today.uiState)}>
                     {tAtt(`uiState_${today.uiState}`)}
                   </Badge>
@@ -251,12 +225,41 @@ export function EmployeeAttendanceWidget({
                           : "—",
                     })}
                   </p>
+                  {today.uiState === "rejected" && today.rejectionReason ? (
+                    <p className="text-destructive text-sm">
+                      {tAtt("rejectionReason", {
+                        reason: today.rejectionReason,
+                      })}
+                    </p>
+                  ) : null}
+                  {canEditToday ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditRecord(today)}
+                    >
+                      {tAtt("editAttendance")}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
-            </div>
+            </>
           ) : null}
         </CardContent>
       </Card>
+
+      <AttendanceEditDialog
+        open={Boolean(editRecord)}
+        onOpenChange={(open) => {
+          if (!open) setEditRecord(null);
+        }}
+        viewerId={viewerId}
+        record={editRecord}
+        onSuccess={() => {
+          setSuccessMessage(tAtt("editSuccess"));
+          void todayQuery.refetch();
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

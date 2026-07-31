@@ -24,20 +24,24 @@ function allItems() {
 }
 
 describe("navItemIsVisible", () => {
-  it("shows employees only Dashboard, Tasks, and Notifications", () => {
+  it("shows employees Dashboard, Tasks, Attendance, Leave, and Notifications", () => {
     const visible = allItems()
       .filter((item) => navItemIsVisible(item, EMPLOYEE_PERMS, "employee"))
       .map((item) => item.key);
 
-    expect(visible).toEqual(["dashboard", "tasks", "notifications"]);
+    expect(visible).toEqual([
+      "dashboard",
+      "tasks",
+      "attendance",
+      "leave",
+      "notifications",
+    ]);
   });
 
-  it("hides Projects, Departments, Attendance, Leave, Announcements, and Reports from employees", () => {
+  it("hides Projects, Departments, Announcements, and Reports from employees", () => {
     for (const key of [
       "projects",
       "departments",
-      "attendance",
-      "leave",
       "announcements",
       "reports",
     ]) {

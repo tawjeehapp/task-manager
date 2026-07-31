@@ -808,20 +808,31 @@ Notable error codes:
 |--------|------|------------|
 | GET | `/api/attendance` | `attendance.view` (scoped) |
 | GET | `/api/attendance/today` | `attendance.view` (own today) |
-| POST | `/api/attendance/clock-in` | `attendance.view` |
-| POST | `/api/attendance/clock-out` | `attendance.view` |
+| POST | `/api/attendance/submit` | `attendance.view` (manual full-day submit + optional subtask allocations) |
 | GET | `/api/attendance/[id]` | `attendance.view` + access assert |
-| PATCH | `/api/attendance/[id]` | owner (rejected) or admin correction |
+| POST | `/api/attendance/[id]/resubmit` | owner; pending or rejected only; replaces times + same-day work logs |
+| PATCH | `/api/attendance/[id]` | owner (pending/rejected) or admin correction |
 | POST | `/api/attendance/[id]/approve` | `attendance.approve` + scope; not self; requires clock_out |
 | POST | `/api/attendance/[id]/reject` | `attendance.approve` + `{ reason }`; not self; requires clock_out |
 | GET | `/api/work-logs` | `work_log.view` (scoped) |
 | POST | `/api/work-logs` | `work_log.create` |
 | GET/PATCH/DELETE | `/api/work-logs/[id]` | view / owner or admin |
 
+`POST /api/attendance/submit` body:
+
+- `date` (YYYY-MM-DD), `clockIn` / `clockOut` (HH:mm), `breakMinutes`
+- `allocations`: discriminated entries that must sum **exactly** to net attendance hours:
+  - `{ type: "task", taskId, hours }` — assigned **subtasks** only
+  - `{ type: "general", reason, hours }` — reason required (why not on an assigned task)
+  - Each entry creates a `work_logs` row (`task_id` null for general; reason in `description`)
+
+`POST /api/attendance/[id]/resubmit` body: same as submit without `date` (date locked to the record).
+
 List filters:
 
 - Attendance: `status`, `userId`, `dateFrom`/`dateTo`, `awaitingApproval`, pagination, sort
 - Work logs: `userId`, `taskId`, `dateFrom`/`dateTo`, pagination, sort
+- Tasks (for allocation dropdown): `assignee`, `subtasksOnly=true`
 
 List attendance also returns `totalHoursSum` for the current filter (daily/reporting total).
 
@@ -832,9 +843,10 @@ Permissions seeded in M5:
 
 Notable error codes:
 
-- `ALREADY_CLOCKED_IN` (409)
 - `ATTENDANCE_EXISTS` (409)
-- `NOT_CLOCKED_IN` (409)
+- `ALLOCATION_MUST_EQUAL_NET_HOURS` (409)
+- `NOT_A_SUBTASK` (409)
+- `SUBTASK_NOT_ASSIGNED` (403)
 - `CLOCK_OUT_REQUIRED` (409)
 - `CANNOT_APPROVE_OWN` (403)
 - `ATTENDANCE_APPROVED_LOCKED` (409)

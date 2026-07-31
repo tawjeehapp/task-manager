@@ -18,7 +18,7 @@ export const createEmployeeRequestSchema = z
   .object({
     taskId: z.string().uuid(),
     type: employeeRequestTypeSchema,
-    reason: z.string().trim().max(1000).optional().nullable(),
+    reason: z.string().trim().min(1, "السبب مطلوب").max(1000),
     requestedDate: isoDate.optional().nullable(),
   })
   .superRefine((data, ctx) => {
@@ -38,6 +38,16 @@ export const createEmployeeRequestSchema = z
       });
     }
   });
+
+export const updateEmployeeRequestSchema = z
+  .object({
+    reason: z.string().trim().min(1, "السبب مطلوب").max(1000).optional(),
+    requestedDate: isoDate.optional().nullable(),
+  })
+  .refine(
+    (data) => data.reason !== undefined || data.requestedDate !== undefined,
+    { message: "لا توجد بيانات للتحديث" },
+  );
 
 export const rejectEmployeeRequestSchema = z.object({
   reason: z.string().trim().min(2, "سبب الرفض مطلوب"),
@@ -61,6 +71,9 @@ export const listEmployeeRequestsQuerySchema = z.object({
 
 export type CreateEmployeeRequestInput = z.infer<
   typeof createEmployeeRequestSchema
+>;
+export type UpdateEmployeeRequestInput = z.infer<
+  typeof updateEmployeeRequestSchema
 >;
 export type RejectEmployeeRequestInput = z.infer<
   typeof rejectEmployeeRequestSchema

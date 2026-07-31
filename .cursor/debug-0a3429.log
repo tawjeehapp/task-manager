@@ -1,0 +1,1 @@
+{"sessionId":"0a3429","runId":"post-fix","hypothesisId":"A-B-C","location":"attendance-submit-form.tsx:handleSubmit","message":"form submit reached handleSubmit","data":{"hoursInputs":[{"value":"3","min":"0","step":"0.25","max":"","valid":true,"stepMismatch":false,"rangeUnderflow":false,"badInput":false,"validationMessage":""}]},"timestamp":1785505991929}

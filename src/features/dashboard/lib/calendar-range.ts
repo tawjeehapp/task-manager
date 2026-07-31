@@ -6,11 +6,21 @@ import {
 
 export type CalendarViewMode = "day" | "week" | "month";
 
+export type CalendarRange = {
+  dueFrom?: string;
+  dueTo: string;
+  isTodayActionable?: boolean;
+};
+
 export function calendarRangeFor(
   mode: CalendarViewMode,
   focusDate: string,
-): { dueFrom: string; dueTo: string } {
+  today?: string,
+): CalendarRange {
   if (mode === "day") {
+    if (today && focusDate === today) {
+      return { dueTo: today, isTodayActionable: true };
+    }
     return { dueFrom: focusDate, dueTo: focusDate };
   }
   if (mode === "week") {

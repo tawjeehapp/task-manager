@@ -11,9 +11,75 @@ export const attendanceStatusSchema = z.enum([
   "rejected",
 ]);
 
-export const clockOutSchema = z.object({
-  breakMinutes: z.coerce.number().int().min(0).optional().default(0),
-});
+const dateString = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ غير صالح");
+
+const timeOfDay = z
+  .string()
+  .regex(/^\d{2}:\d{2}(:\d{2})?$/, "وقت غير صالح");
+
+const positiveHours = z.coerce
+  .number()
+  .positive("عدد الساعات يجب أن يكون أكبر من صفر");
+
+export const attendanceAllocationSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("task"),
+    taskId: z.string().uuid("معرّف المهمة غير صالح"),
+    hours: positiveHours,
+  }),
+  z.object({
+    type: z.literal("general"),
+    reason: z
+      .string()
+      .trim()
+      .min(2, "سبب الدوام العام مطلوب"),
+    hours: positiveHours,
+  }),
+]);
+
+function refineUniqueTaskAllocations(
+  data: { allocations: z.infer<typeof attendanceAllocationSchema>[] },
+  ctx: z.RefinementCtx,
+) {
+  const seen = new Set<string>();
+  for (const [index, row] of data.allocations.entries()) {
+    if (row.type !== "task") continue;
+    if (seen.has(row.taskId)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "لا يمكن تكرار نفس المهمة الفرعية",
+        path: ["allocations", index, "taskId"],
+      });
+    }
+    seen.add(row.taskId);
+  }
+}
+
+const allocationsField = z
+  .array(attendanceAllocationSchema)
+  .min(1, "يجب توزيع كامل ساعات الدوام على مهام أو دوام عام");
+
+export const submitAttendanceSchema = z
+  .object({
+    date: dateString,
+    clockIn: timeOfDay,
+    clockOut: timeOfDay,
+    breakMinutes: z.coerce.number().int().min(0).default(0),
+    allocations: allocationsField,
+  })
+  .superRefine(refineUniqueTaskAllocations);
+
+/** Employee edit of an existing pending/rejected submission (date locked on record). */
+export const resubmitAttendanceSchema = z
+  .object({
+    clockIn: timeOfDay,
+    clockOut: timeOfDay,
+    breakMinutes: z.coerce.number().int().min(0).default(0),
+    allocations: allocationsField,
+  })
+  .superRefine(refineUniqueTaskAllocations);
 
 export const rejectAttendanceSchema = z.object({
   reason: z.string().trim().min(2, "سبب الرفض مطلوب"),
@@ -66,5 +132,9 @@ export const listAttendanceQuerySchema = z.object({
 
 export type ListAttendanceQuery = z.infer<typeof listAttendanceQuerySchema>;
 export type UpdateAttendanceInput = z.infer<typeof updateAttendanceSchema>;
-export type ClockOutInput = z.infer<typeof clockOutSchema>;
+export type AttendanceAllocationInput = z.infer<
+  typeof attendanceAllocationSchema
+>;
+export type SubmitAttendanceInput = z.infer<typeof submitAttendanceSchema>;
+export type ResubmitAttendanceInput = z.infer<typeof resubmitAttendanceSchema>;
 export type RejectAttendanceInput = z.infer<typeof rejectAttendanceSchema>;

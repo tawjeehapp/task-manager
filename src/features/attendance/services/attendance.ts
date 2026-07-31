@@ -7,11 +7,14 @@ import {
 import {
   calendarDateInOrgTimezone,
   computeTotalHours,
+  orgLocalDateTimeIso,
 } from "@/features/attendance/services/compute-hours";
 import type {
-  ClockOutInput,
+  AttendanceAllocationInput,
   ListAttendanceQuery,
   RejectAttendanceInput,
+  ResubmitAttendanceInput,
+  SubmitAttendanceInput,
   UpdateAttendanceInput,
 } from "@/features/attendance/schemas/attendance.schema";
 import {
@@ -107,29 +110,157 @@ export async function getTodayAttendance(
   return data ? mapRow(data) : null;
 }
 
-export async function clockIn(viewer: AppUser): Promise<AttendanceRecord> {
-  const date = calendarDateInOrgTimezone();
-  const admin = createAdminClient();
+async function assertAllocatedSubtasks(
+  viewer: AppUser,
+  taskIds: string[],
+): Promise<void> {
+  if (taskIds.length === 0) {
+    return;
+  }
 
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("tasks")
+    .select("id, parent_task_id, assigned_to")
+    .in("id", taskIds);
+
+  if (error) {
+    throw new ApiError(
+      "تعذر التحقق من المهام الفرعية.",
+      500,
+      "VALIDATE_ALLOCATIONS_FAILED",
+    );
+  }
+
+  const byId = new Map(
+    (data ?? []).map((row) => [
+      row.id as string,
+      row as {
+        id: string;
+        parent_task_id: string | null;
+        assigned_to: string | null;
+      },
+    ]),
+  );
+
+  for (const taskId of taskIds) {
+    const task = byId.get(taskId);
+    if (!task) {
+      throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+    }
+    if (task.parent_task_id == null) {
+      throw new ApiError(
+        "يمكن تخصيص الوقت للمهام الفرعية فقط.",
+        409,
+        "NOT_A_SUBTASK",
+      );
+    }
+    if (task.assigned_to !== viewer.id) {
+      throw new ApiError(
+        "يمكن تخصيص الوقت لمهامك المسندة فقط.",
+        403,
+        "SUBTASK_NOT_ASSIGNED",
+      );
+    }
+  }
+}
+
+function roundHours(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function assertAllocationsEqualNet(
+  allocations: AttendanceAllocationInput[],
+  totalHours: number,
+): void {
+  const allocatedRounded = roundHours(
+    allocations.reduce((sum, row) => sum + row.hours, 0),
+  );
+  if (allocatedRounded !== totalHours) {
+    throw new ApiError(
+      "يجب أن يساوي مجموع الساعات الموزعة صافي الدوام.",
+      409,
+      "ALLOCATION_MUST_EQUAL_NET_HOURS",
+    );
+  }
+}
+
+function taskIdsFromAllocations(
+  allocations: AttendanceAllocationInput[],
+): string[] {
+  return allocations
+    .filter(
+      (row): row is Extract<AttendanceAllocationInput, { type: "task" }> =>
+        row.type === "task",
+    )
+    .map((row) => row.taskId);
+}
+
+function allocationsToWorkLogInserts(
+  userId: string,
+  date: string,
+  allocations: AttendanceAllocationInput[],
+) {
+  return allocations.map((row) => {
+    if (row.type === "task") {
+      return {
+        user_id: userId,
+        task_id: row.taskId,
+        date,
+        hours: row.hours,
+        description: null as string | null,
+        approved_by: null,
+      };
+    }
+    return {
+      user_id: userId,
+      task_id: null as string | null,
+      date,
+      hours: row.hours,
+      description: row.reason,
+      approved_by: null,
+    };
+  });
+}
+
+/**
+ * Manual full-day attendance submit (replaces punch in/out).
+ * Explicit task/general allocations must sum exactly to net hours.
+ */
+export async function submitAttendance(
+  viewer: AppUser,
+  input: SubmitAttendanceInput,
+): Promise<AttendanceRecord> {
+  let clockInAt: string;
+  let clockOutAt: string;
+  try {
+    clockInAt = orgLocalDateTimeIso(input.date, input.clockIn);
+    clockOutAt = orgLocalDateTimeIso(input.date, input.clockOut);
+  } catch {
+    throw new ApiError("وقت غير صالح.", 400, "INVALID_TIME");
+  }
+
+  const totalHours = recomputeOrThrow(
+    clockInAt,
+    clockOutAt,
+    input.breakMinutes,
+  );
+
+  assertAllocationsEqualNet(input.allocations, totalHours);
+  await assertAllocatedSubtasks(viewer, taskIdsFromAllocations(input.allocations));
+
+  const admin = createAdminClient();
   const { data: existing, error: existingError } = await admin
     .from("attendance_records")
-    .select("id, clock_out, status")
+    .select("id")
     .eq("user_id", viewer.id)
-    .eq("date", date)
+    .eq("date", input.date)
     .maybeSingle();
 
   if (existingError) {
-    throw new ApiError("تعذر التحقق من الحضور.", 500, "CLOCK_IN_FAILED");
+    throw new ApiError("تعذر التحقق من الحضور.", 500, "SUBMIT_ATTENDANCE_FAILED");
   }
-
   if (existing) {
-    if (existing.clock_out == null) {
-      throw new ApiError(
-        "أنت مسجّل دخولاً بالفعل لهذا اليوم.",
-        409,
-        "ALREADY_CLOCKED_IN",
-      );
-    }
     throw new ApiError(
       "يوجد سجل حضور لهذا اليوم بالفعل.",
       409,
@@ -137,16 +268,15 @@ export async function clockIn(viewer: AppUser): Promise<AttendanceRecord> {
     );
   }
 
-  const clockInAt = nowIso();
   const { data, error } = await admin
     .from("attendance_records")
     .insert({
       user_id: viewer.id,
-      date,
+      date: input.date,
       clock_in: clockInAt,
-      clock_out: null,
-      break_minutes: 0,
-      total_hours: null,
+      clock_out: clockOutAt,
+      break_minutes: input.breakMinutes,
+      total_hours: totalHours,
       status: "pending",
     })
     .select(ATTENDANCE_SELECT)
@@ -160,71 +290,24 @@ export async function clockIn(viewer: AppUser): Promise<AttendanceRecord> {
         "ATTENDANCE_EXISTS",
       );
     }
-    throw new ApiError("تعذر تسجيل الدخول.", 500, "CLOCK_IN_FAILED");
-  }
-
-  return mapRow(data);
-}
-
-export async function clockOut(
-  viewer: AppUser,
-  input: ClockOutInput,
-): Promise<AttendanceRecord> {
-  const date = calendarDateInOrgTimezone();
-  const admin = createAdminClient();
-
-  const { data: existing, error: existingError } = await admin
-    .from("attendance_records")
-    .select("*")
-    .eq("user_id", viewer.id)
-    .eq("date", date)
-    .maybeSingle();
-
-  if (existingError) {
-    throw new ApiError("تعذر التحقق من الحضور.", 500, "CLOCK_OUT_FAILED");
-  }
-
-  if (!existing || existing.clock_out != null) {
-    throw new ApiError(
-      "لا يوجد تسجيل دخول مفتوح للخروج.",
-      409,
-      "NOT_CLOCKED_IN",
-    );
-  }
-
-  if (existing.status !== "pending") {
-    throw new ApiError(
-      "لا يمكن تسجيل الخروج لهذا السجل.",
-      409,
-      "ATTENDANCE_NOT_EDITABLE",
-    );
-  }
-
-  const clockOutAt = nowIso();
-  const breakMinutes = input.breakMinutes ?? existing.break_minutes ?? 0;
-  const totalHours = recomputeOrThrow(
-    existing.clock_in,
-    clockOutAt,
-    breakMinutes,
-  );
-
-  const { data, error } = await admin
-    .from("attendance_records")
-    .update({
-      clock_out: clockOutAt,
-      break_minutes: breakMinutes,
-      total_hours: totalHours,
-      updated_at: nowIso(),
-    })
-    .eq("id", existing.id)
-    .select(ATTENDANCE_SELECT)
-    .single();
-
-  if (error) {
-    throw new ApiError("تعذر تسجيل الخروج.", 500, "CLOCK_OUT_FAILED");
+    throw new ApiError("تعذر حفظ الدوام.", 500, "SUBMIT_ATTENDANCE_FAILED");
   }
 
   const record = mapRow(data);
+
+  const { error: workLogError } = await admin.from("work_logs").insert(
+    allocationsToWorkLogInserts(viewer.id, input.date, input.allocations),
+  );
+
+  if (workLogError) {
+    await admin.from("attendance_records").delete().eq("id", record.id);
+    throw new ApiError(
+      "تعذر حفظ توزيع ساعات الدوام.",
+      500,
+      "CREATE_WORK_LOGS_FAILED",
+    );
+  }
+
   const approvers = await listApproverUserIdsForRequester(viewer.id);
   await notifySafe(approvers, {
     type: "approval_request",
@@ -237,8 +320,133 @@ export async function clockOut(
   return record;
 }
 
+async function replaceDayWorkLogs(
+  userId: string,
+  date: string,
+  allocations: AttendanceAllocationInput[],
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error: deleteError } = await admin
+    .from("work_logs")
+    .delete()
+    .eq("user_id", userId)
+    .eq("date", date);
+
+  if (deleteError) {
+    throw new ApiError(
+      "تعذر تحديث توزيع ساعات الدوام.",
+      500,
+      "REPLACE_WORK_LOGS_FAILED",
+    );
+  }
+
+  const { error: insertError } = await admin.from("work_logs").insert(
+    allocationsToWorkLogInserts(userId, date, allocations),
+  );
+
+  if (insertError) {
+    throw new ApiError(
+      "تعذر حفظ توزيع ساعات الدوام.",
+      500,
+      "CREATE_WORK_LOGS_FAILED",
+    );
+  }
+}
+
 /**
- * Employee: own pending/rejected only; rejected correction requires clock_out.
+ * Employee edit of own pending/rejected attendance (full submission + allocations).
+ * Approved records stay locked.
+ */
+export async function resubmitAttendance(
+  viewer: AppUser,
+  id: string,
+  input: ResubmitAttendanceInput,
+): Promise<AttendanceRecord> {
+  const existing = await getAttendanceRow(id);
+
+  if (viewer.id !== existing.user_id) {
+    throw new ApiError("ليس لديك صلاحية تعديل هذا السجل.", 403, "FORBIDDEN");
+  }
+
+  if (existing.status === "approved") {
+    throw new ApiError(
+      "لا يمكن تعديل سجل حضور معتمد.",
+      409,
+      "ATTENDANCE_APPROVED_LOCKED",
+    );
+  }
+
+  if (existing.status !== "pending" && existing.status !== "rejected") {
+    throw new ApiError(
+      "لا يمكن تعديل هذا السجل.",
+      409,
+      "ATTENDANCE_NOT_EDITABLE",
+    );
+  }
+
+  let clockInAt: string;
+  let clockOutAt: string;
+  try {
+    clockInAt = orgLocalDateTimeIso(existing.date, input.clockIn);
+    clockOutAt = orgLocalDateTimeIso(existing.date, input.clockOut);
+  } catch {
+    throw new ApiError("وقت غير صالح.", 400, "INVALID_TIME");
+  }
+
+  const totalHours = recomputeOrThrow(
+    clockInAt,
+    clockOutAt,
+    input.breakMinutes,
+  );
+
+  assertAllocationsEqualNet(input.allocations, totalHours);
+  await assertAllocatedSubtasks(
+    viewer,
+    taskIdsFromAllocations(input.allocations),
+  );
+
+  const wasRejected = existing.status === "rejected";
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("attendance_records")
+    .update({
+      clock_in: clockInAt,
+      clock_out: clockOutAt,
+      break_minutes: input.breakMinutes,
+      total_hours: totalHours,
+      status: "pending",
+      approved_by: null,
+      approved_at: null,
+      rejection_reason: null,
+      updated_at: nowIso(),
+    })
+    .eq("id", id)
+    .select(ATTENDANCE_SELECT)
+    .single();
+
+  if (error) {
+    throw new ApiError("تعذر تحديث سجل الحضور.", 500, "UPDATE_ATTENDANCE_FAILED");
+  }
+
+  await replaceDayWorkLogs(viewer.id, existing.date, input.allocations);
+
+  const record = mapRow(data);
+  if (wasRejected) {
+    const approvers = await listApproverUserIdsForRequester(viewer.id);
+    await notifySafe(approvers, {
+      type: "approval_request",
+      title: "حضور بانتظار الاعتماد",
+      message: `${viewer.fullName} · ${record.date}`,
+      entityType: "attendance_record",
+      entityId: record.id,
+    });
+  }
+
+  return record;
+}
+
+/**
+ * Employee: own pending/rejected only; rejected/pending correction requires clock_out.
  * Manager: cannot edit timestamps/break.
  * Admin: may correct any including approved.
  */
@@ -272,9 +480,9 @@ export async function updateAttendance(
         "ATTENDANCE_APPROVED_LOCKED",
       );
     }
-    if (existing.status !== "rejected") {
+    if (existing.status !== "rejected" && existing.status !== "pending") {
       throw new ApiError(
-        "يمكن تصحيح السجلات المرفوضة فقط.",
+        "لا يمكن تعديل هذا السجل.",
         409,
         "ATTENDANCE_NOT_EDITABLE",
       );
@@ -309,7 +517,10 @@ export async function updateAttendance(
     totalHours = null;
   }
 
-  const resubmitRejected = isOwner && !isAdmin && existing.status === "rejected";
+  const employeeResubmit =
+    isOwner &&
+    !isAdmin &&
+    (existing.status === "rejected" || existing.status === "pending");
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -319,10 +530,10 @@ export async function updateAttendance(
       clock_out: nextClockOut,
       break_minutes: nextBreak,
       total_hours: totalHours,
-      status: resubmitRejected ? "pending" : existing.status,
-      approved_by: resubmitRejected ? null : existing.approved_by,
-      approved_at: resubmitRejected ? null : existing.approved_at,
-      rejection_reason: resubmitRejected ? null : existing.rejection_reason,
+      status: employeeResubmit ? "pending" : existing.status,
+      approved_by: employeeResubmit ? null : existing.approved_by,
+      approved_at: employeeResubmit ? null : existing.approved_at,
+      rejection_reason: employeeResubmit ? null : existing.rejection_reason,
       updated_at: nowIso(),
     })
     .eq("id", id)
@@ -334,7 +545,7 @@ export async function updateAttendance(
   }
 
   const record = mapRow(data);
-  if (resubmitRejected) {
+  if (employeeResubmit && existing.status === "rejected") {
     const approvers = await listApproverUserIdsForRequester(actor.id);
     await notifySafe(approvers, {
       type: "approval_request",

@@ -522,7 +522,7 @@ RLS: SELECT via `can_access_task(task_id)`. Writes use service role.
 
 # Attendance
 
-Tracks employee clock-in and clock-out.
+Tracks employee daily attendance (manual time entry).
 
 Table:
 
@@ -556,15 +556,16 @@ approved
 rejected
 ```
 
-Constraints / rules (Milestone 5):
+Constraints / rules (Milestone 5+):
 
 - `UNIQUE (user_id, date)` — one record per employee per calendar day.
-- Open session: `clock_out IS NULL` while `status = pending` (no separate open status).
-- `total_hours` computed on clock-out / correction: `(clock_out - clock_in) - break_minutes`, rounded to 2 decimals.
+- Employees **submit** a full day in one step (`clock_in` + `clock_out` + `break_minutes`); interactive punch in/out is not used.
+- `total_hours` computed on submit / correction: `(clock_out - clock_in) - break_minutes`, rounded to 2 decimals.
+- Submit requires explicit time allocations: each row is either a **task** (assigned subtask) or **general** work with a required reason. Sum of allocation hours must equal `total_hours` exactly. Task rows and general rows are stored as `work_logs` (`task_id` null for general; `description` holds the reason).
 - Calendar `date` uses organization timezone `Asia/Riyadh`.
 - Approve/reject only when `clock_out` is set; actors cannot act on their own records.
 - Department managers approve/reject department members only; they cannot edit timestamps/break.
-- Employees may correct **rejected** records (same row): edit `clock_in` / `clock_out` / `break_minutes` (clock_out required) → resubmit as `pending` and clear approval fields.
+- Employees may edit **pending** or **rejected** records (same row): times + same-day work-log allocations → status stays/returns to `pending` and approval fields clear on rejected resubmit. **Approved** records are locked for employees.
 - Approved records are locked for employees/managers; admins may correct.
 - Writes via service role; RLS SELECT: own / admin / `shares_managed_department_with(user_id)`.
 
@@ -572,9 +573,9 @@ Constraints / rules (Milestone 5):
 
 # Work Logs
 
-Tracks time spent on tasks.
+Tracks time spent on tasks and explicit general (non-task) attendance time.
 
-Different from attendance. **Independent** of attendance hours in Milestone 5 (no requirement that work-log hours ≤ attendance hours).
+Standalone work logs remain creatable against tasks. When created from attendance submit, allocations must sum exactly to that day's net attendance hours. General attendance time is stored as `work_logs` with `task_id` null and a required `description` reason.
 
 Table:
 
@@ -587,21 +588,21 @@ Fields:
 ```
 id
 user_id
-task_id
+task_id          -- nullable; null = general attendance time
 date
 hours
-description
+description      -- required when task_id is null (general reason)
 approved_by
 created_at
 updated_at
 ```
 
-Notes (Milestone 5):
+Notes (Milestone 5+):
 
-- Employees create/edit/delete **own** logs on tasks they can access.
+- Employees create/edit/delete **own** logs on tasks they can access (standalone create still requires `task_id`).
 - Managers/admins review via scoped lists (no approve/reject workflow in M5).
 - `approved_by` exists for future use; **unused in M5 UI**.
-- Writes via service role; RLS SELECT: own / admin / managed department / `can_access_task(task_id)`.
+- Writes via service role; RLS SELECT: own / admin / managed department / `can_access_task(task_id)` when `task_id` is set.
 
 ---
 # Leave Management

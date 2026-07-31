@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 
+import type { EmployeeRequest } from "@/features/employee-requests/types/employee-request.types";
 import {
   createTaskSchema,
   updateTaskSchema,
@@ -227,7 +228,7 @@ export function TaskDetailClient({
       });
       const response = await fetch(`/api/employee-requests?${params}`);
       const payload = (await response.json()) as {
-        data?: { items: { type: string }[] };
+        data?: { items: EmployeeRequest[] };
         error?: { message: string };
       };
       if (!response.ok) {
@@ -237,15 +238,43 @@ export function TaskDetailClient({
     },
   });
 
-  const hasPendingExtension = (pendingRequestsQuery.data ?? []).some(
+  const pendingExtensionRequest = (pendingRequestsQuery.data ?? []).find(
     (r) => r.type === "extension",
   );
-  const hasPendingExcusal = (pendingRequestsQuery.data ?? []).some(
+  const pendingExcusalRequest = (pendingRequestsQuery.data ?? []).find(
     (r) => r.type === "excusal",
   );
+  const hasPendingExtension = Boolean(pendingExtensionRequest);
+  const hasPendingExcusal = Boolean(pendingExcusalRequest);
 
   const extensionMutation = useMutation({
     mutationFn: async () => {
+      const trimmedReason = requestReason.trim();
+      if (!trimmedReason) {
+        throw new Error(tReq("reasonRequired"));
+      }
+
+      if (pendingExtensionRequest) {
+        const response = await fetch(
+          `/api/employee-requests/${pendingExtensionRequest.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              requestedDate,
+              reason: trimmedReason,
+            }),
+          },
+        );
+        const payload = (await response.json()) as {
+          error?: { message: string };
+        };
+        if (!response.ok) {
+          throw new Error(payload.error?.message ?? tReq("updateRequest"));
+        }
+        return;
+      }
+
       const response = await fetch("/api/employee-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -253,7 +282,7 @@ export function TaskDetailClient({
           taskId,
           type: "extension",
           requestedDate,
-          reason: requestReason || null,
+          reason: trimmedReason,
         }),
       });
       const payload = (await response.json()) as {
@@ -278,13 +307,38 @@ export function TaskDetailClient({
 
   const excusalMutation = useMutation({
     mutationFn: async () => {
+      const trimmedReason = requestReason.trim();
+      if (!trimmedReason) {
+        throw new Error(tReq("reasonRequired"));
+      }
+
+      if (pendingExcusalRequest) {
+        const response = await fetch(
+          `/api/employee-requests/${pendingExcusalRequest.id}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              reason: trimmedReason,
+            }),
+          },
+        );
+        const payload = (await response.json()) as {
+          error?: { message: string };
+        };
+        if (!response.ok) {
+          throw new Error(payload.error?.message ?? tReq("updateRequest"));
+        }
+        return;
+      }
+
       const response = await fetch("/api/employee-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           taskId,
           type: "excusal",
-          reason: requestReason || null,
+          reason: trimmedReason,
         }),
       });
       const payload = (await response.json()) as {
@@ -490,7 +544,20 @@ export function TaskDetailClient({
                 </Button>
               ) : null}
               {isAssignee && hasPendingExtension ? (
-                <Badge variant="secondary">{tReq("pendingExtension")}</Badge>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setRequestError(null);
+                    setRequestedDate(
+                      pendingExtensionRequest?.requestedDate ?? "",
+                    );
+                    setRequestReason(pendingExtensionRequest?.reason ?? "");
+                    setExtensionOpen(true);
+                  }}
+                >
+                  {tReq("pendingExtension")}
+                </Button>
               ) : null}
               {isAssignee && !hasPendingExcusal ? (
                 <Button
@@ -506,7 +573,17 @@ export function TaskDetailClient({
                 </Button>
               ) : null}
               {isAssignee && hasPendingExcusal ? (
-                <Badge variant="secondary">{tReq("pendingExcusal")}</Badge>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setRequestError(null);
+                    setRequestReason(pendingExcusalRequest?.reason ?? "");
+                    setExcusalOpen(true);
+                  }}
+                >
+                  {tReq("pendingExcusal")}
+                </Button>
               ) : null}
               {canCreate && isRoot ? (
                 <Button
@@ -1069,6 +1146,13 @@ export function TaskDetailClient({
             <DialogTitle>{tReq("extensionTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {hasPendingExtension ? (
+              <Alert>
+                <AlertDescription>
+                  {tReq("editingPendingRequest")}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <div className="space-y-2">
               <Label htmlFor="extension-date">{tReq("requestedDate")}</Label>
               <Input
@@ -1079,11 +1163,17 @@ export function TaskDetailClient({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="extension-reason">{tReq("reason")}</Label>
+              <Label htmlFor="extension-reason">
+                {tReq("reason")}
+                <span className="text-destructive ms-0.5" aria-hidden>
+                  *
+                </span>
+              </Label>
               <Input
                 id="extension-reason"
                 value={requestReason}
                 onChange={(e) => setRequestReason(e.target.value)}
+                required
               />
             </div>
             {requestError ? (
@@ -1102,10 +1192,18 @@ export function TaskDetailClient({
             </Button>
             <Button
               type="button"
-              disabled={!requestedDate || extensionMutation.isPending}
+              disabled={
+                !requestedDate ||
+                !requestReason.trim() ||
+                extensionMutation.isPending
+              }
               onClick={() => extensionMutation.mutate()}
             >
-              {tReq("submit")}
+              {extensionMutation.isPending
+                ? tCommon("saving")
+                : hasPendingExtension
+                  ? tReq("updateRequest")
+                  : tReq("submit")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1117,12 +1215,25 @@ export function TaskDetailClient({
             <DialogTitle>{tReq("excusalTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {hasPendingExcusal ? (
+              <Alert>
+                <AlertDescription>
+                  {tReq("editingPendingRequest")}
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <div className="space-y-2">
-              <Label htmlFor="excusal-reason">{tReq("reason")}</Label>
+              <Label htmlFor="excusal-reason">
+                {tReq("reason")}
+                <span className="text-destructive ms-0.5" aria-hidden>
+                  *
+                </span>
+              </Label>
               <Input
                 id="excusal-reason"
                 value={requestReason}
                 onChange={(e) => setRequestReason(e.target.value)}
+                required
               />
             </div>
             {requestError ? (
@@ -1141,10 +1252,14 @@ export function TaskDetailClient({
             </Button>
             <Button
               type="button"
-              disabled={excusalMutation.isPending}
+              disabled={!requestReason.trim() || excusalMutation.isPending}
               onClick={() => excusalMutation.mutate()}
             >
-              {tReq("submit")}
+              {excusalMutation.isPending
+                ? tCommon("saving")
+                : hasPendingExcusal
+                  ? tReq("updateRequest")
+                  : tReq("submit")}
             </Button>
           </DialogFooter>
         </DialogContent>

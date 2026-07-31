@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 
 import { AttendancePageClient } from "@/features/attendance/components/attendance-page-client";
+import { EmployeeAttendancePageClient } from "@/features/attendance/components/employee-attendance-page-client";
 import { getCurrentUser } from "@/lib/auth/session";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
@@ -37,6 +38,10 @@ export default async function AttendancePage() {
     PERMISSIONS.WORK_LOG_CREATE,
     permissions,
   );
+
+  if (user.role === "employee") {
+    return <EmployeeAttendancePageClient viewerId={user.id} />;
+  }
 
   return (
     <AttendancePageClient
