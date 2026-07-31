@@ -13,7 +13,11 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
   const t = await getTranslations("tasks");
-  return { title: t("title") };
+  const user = await getCurrentUser();
+  return {
+    title:
+      user?.role === "employee" ? t("myTasksTitle") : t("title"),
+  };
 }
 
 export default async function TasksPage() {
@@ -35,8 +39,10 @@ export default async function TasksPage() {
 
   const mineOnly = user.role === "employee";
   const defaultQuery = listTasksQuerySchema.parse({
-    parentTaskId: "null",
-    ...(mineOnly ? { assignee: user.id } : {}),
+    // Employees see assigned root tasks and subtasks; managers keep root-only list.
+    ...(mineOnly
+      ? { assignee: user.id, pageSize: 100, sortBy: "dueDate", sortDir: "asc" }
+      : { parentTaskId: "null" }),
   });
   const initialTasks = await listTasksForViewer(user, defaultQuery);
 

@@ -23,6 +23,7 @@ import {
 } from "@/features/dashboard/types/dashboard.types";
 import {
   calendarDateOnly,
+  countEmployeeTaskMetrics,
   isIncludedInTodayList,
   sortTodayListTasks,
 } from "@/features/dashboard/lib/actionable-tasks";
@@ -504,6 +505,7 @@ function mapTaskRow(row: {
   due_date: unknown;
   priority: unknown;
   parent_task_id: unknown;
+  parent?: unknown;
   project: unknown;
 }): DashboardTaskItem {
   const project = row.project as
@@ -513,6 +515,14 @@ function mapTaskRow(row: {
   const projectName = Array.isArray(project)
     ? (project[0]?.name ?? null)
     : (project?.name ?? null);
+  const parent = row.parent as
+    | { id: string; title: string }
+    | { id: string; title: string }[]
+    | null
+    | undefined;
+  const parentTitle = Array.isArray(parent)
+    ? (parent[0]?.title ?? null)
+    : (parent?.title ?? null);
   return {
     id: row.id as string,
     title: row.title as string,
@@ -520,6 +530,7 @@ function mapTaskRow(row: {
     dueDate: calendarDateOnly(row.due_date as string | null),
     priority: row.priority as string,
     parentTaskId: (row.parent_task_id as string | null) ?? null,
+    parentTitle,
     projectName,
     href: `/tasks/${row.id}`,
     incompleteDependencyCount: 0,
@@ -536,7 +547,7 @@ async function getEmployeeMetrics(
   const [tasksRes, weekAttRes] = await Promise.all([
     admin
       .from("tasks")
-      .select("id, status, due_date, parent_task_id")
+      .select("id, status, due_date")
       .eq("assigned_to", userId),
     admin
       .from("attendance_records")
@@ -561,23 +572,13 @@ async function getEmployeeMetrics(
     );
   }
 
-  let todo = 0;
-  let inProgress = 0;
-  let blocked = 0;
-  let completed = 0;
-  let overdue = 0;
-  let dueToday = 0;
-
-  for (const row of tasksRes.data ?? []) {
-    const status = row.status as string;
-    const dueDate = (row.due_date as string | null) ?? null;
-    if (status === "todo") todo += 1;
-    if (status === "in_progress") inProgress += 1;
-    if (status === "blocked") blocked += 1;
-    if (status === "completed") completed += 1;
-    if (status !== "completed" && dueDate && dueDate < today) overdue += 1;
-    if (status !== "completed" && dueDate === today) dueToday += 1;
-  }
+  const counts = countEmployeeTaskMetrics(
+    (tasksRes.data ?? []).map((row) => ({
+      status: row.status as string,
+      due_date: (row.due_date as string | null) ?? null,
+    })),
+    today,
+  );
 
   let weekHours = 0;
   for (const row of weekAttRes.data ?? []) {
@@ -586,13 +587,8 @@ async function getEmployeeMetrics(
   }
 
   return {
-    todo,
-    inProgress,
-    blocked,
-    completed,
-    overdue,
+    ...counts,
     weekHours: Math.round(weekHours * 100) / 100,
-    dueToday,
   };
 }
 
@@ -604,7 +600,7 @@ async function listTodayTasks(
   const { data, error } = await admin
     .from("tasks")
     .select(
-      "id, title, status, due_date, priority, parent_task_id, project:projects!project_id(id, name)",
+      "id, title, status, due_date, priority, parent_task_id, parent:tasks!parent_task_id(id, title), project:projects!project_id(id, name)",
     )
     .eq("assigned_to", userId)
     .lte("due_date", today)

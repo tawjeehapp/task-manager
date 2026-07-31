@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
+import { List } from "lucide-react";
 
 import { featureFlags } from "@/config/feature-flags";
 import {
@@ -21,6 +22,7 @@ import type {
   ProjectMember,
 } from "@/features/projects/types/project.types";
 import type { Task } from "@/features/tasks/types/task.types";
+import { EmployeeProjectTasksTable } from "@/features/projects/components/employee-project-tasks-table";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -52,6 +54,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { cn } from "@/lib/utils";
 
 type ProjectDetailClientProps = {
   projectId: string;
@@ -60,6 +63,7 @@ type ProjectDetailClientProps = {
   canCreateTask: boolean;
   managedDepartmentId: string | null;
   viewerId: string;
+  isEmployee?: boolean;
 };
 
 type DepartmentMemberOption = {
@@ -135,6 +139,7 @@ export function ProjectDetailClient({
   canCreateTask,
   managedDepartmentId,
   viewerId,
+  isEmployee = false,
 }: ProjectDetailClientProps) {
   const t = useTranslations("projects");
   const tTasks = useTranslations("tasks");
@@ -342,6 +347,13 @@ export function ProjectDetailClient({
         managedDepartmentId === project.departmentId));
   const allowProjectEdit = canManageProject;
 
+  const completedTaskCount = tasks.filter(
+    (task) => task.status === "completed",
+  ).length;
+  const taskCount = tasks.length;
+  const progressPercent =
+    taskCount === 0 ? 0 : Math.round((completedTaskCount / taskCount) * 100);
+
   const createTaskAssigneeOptions: AssigneeOption[] = (() => {
     const byId = new Map<string, AssigneeOption>();
     for (const member of departmentMembersQuery.data ?? []) {
@@ -381,7 +393,10 @@ export function ProjectDetailClient({
       <div>
         <Breadcrumbs
           items={[
-            { label: t("title"), href: "/projects" },
+            {
+              label: isEmployee ? t("myDepartmentAndProjects") : t("title"),
+              href: "/projects",
+            },
             ...(project.department
               ? [
                   {
@@ -395,53 +410,89 @@ export function ProjectDetailClient({
         />
         <PageHeader
           title={project.name}
-          description={project.department?.name ?? t("detailsTitle")}
+          description={
+            isEmployee
+              ? (project.description ?? undefined)
+              : (project.department?.name ?? t("detailsTitle"))
+          }
           actions={
-            <div className="flex flex-wrap gap-2">
-              {featureFlags.kanban ? (
-                <Link
-                  href={`/projects/${projectId}/board`}
-                  className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
-                >
-                  {t("kanban")}
-                </Link>
-              ) : null}
-              {featureFlags.gantt ? (
-                <Link
-                  href={`/projects/${projectId}/gantt`}
-                  className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
-                >
-                  {t("gantt")}
-                </Link>
-              ) : null}
-              {allowProjectEdit ? (
+            <div className="flex flex-wrap items-center gap-3">
+              {isEmployee ? (
                 <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setEditOpen(true)}
+                  <div className="min-w-[140px] space-y-1 text-end">
+                    <p className="text-sm font-medium tabular-nums">
+                      {t("progressOfTasks", {
+                        percent: progressPercent,
+                        completed: completedTaskCount,
+                        total: taskCount,
+                      })}
+                    </p>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 px-2.5 text-sm font-medium text-primary",
+                    )}
                   >
-                    {t("edit")}
-                  </Button>
-                  {project.status !== "archived" ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setArchiveOpen(true)}
-                    >
-                      {t("archive")}
-                    </Button>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => patchMutation.mutate({ status: "active" })}
-                    >
-                      {t("unarchive")}
-                    </Button>
-                  )}
+                    <List className="size-4" aria-hidden />
+                    {t("listView")}
+                  </span>
                 </>
-              ) : null}
+              ) : (
+                <>
+                  {featureFlags.kanban ? (
+                    <Link
+                      href={`/projects/${projectId}/board`}
+                      className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
+                    >
+                      {t("kanban")}
+                    </Link>
+                  ) : null}
+                  {featureFlags.gantt ? (
+                    <Link
+                      href={`/projects/${projectId}/gantt`}
+                      className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
+                    >
+                      {t("gantt")}
+                    </Link>
+                  ) : null}
+                  {allowProjectEdit ? (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setEditOpen(true)}
+                      >
+                        {t("edit")}
+                      </Button>
+                      {project.status !== "archived" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setArchiveOpen(true)}
+                        >
+                          {t("archive")}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            patchMutation.mutate({ status: "active" })
+                          }
+                        >
+                          {t("unarchive")}
+                        </Button>
+                      )}
+                    </>
+                  ) : null}
+                </>
+              )}
             </div>
           }
         />
@@ -453,28 +504,32 @@ export function ProjectDetailClient({
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border p-4">
-          <p className="text-muted-foreground text-sm">{t("status")}</p>
-          <Badge className="mt-2" variant="secondary">
-            {statusLabel(project.status)}
-          </Badge>
+      {!isEmployee ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg border p-4">
+            <p className="text-muted-foreground text-sm">{t("status")}</p>
+            <Badge className="mt-2" variant="secondary">
+              {statusLabel(project.status)}
+            </Badge>
+          </div>
+          <div className="rounded-lg border p-4">
+            <p className="text-muted-foreground text-sm">{t("priority")}</p>
+            <p className="mt-2 font-medium">
+              {priorityLabel(project.priority)}
+            </p>
+          </div>
+          <div className="rounded-lg border p-4">
+            <p className="text-muted-foreground text-sm">{t("startDate")}</p>
+            <p className="mt-2 font-medium">{project.startDate ?? "—"}</p>
+          </div>
+          <div className="rounded-lg border p-4">
+            <p className="text-muted-foreground text-sm">{t("endDate")}</p>
+            <p className="mt-2 font-medium">{project.endDate ?? "—"}</p>
+          </div>
         </div>
-        <div className="rounded-lg border p-4">
-          <p className="text-muted-foreground text-sm">{t("priority")}</p>
-          <p className="mt-2 font-medium">{priorityLabel(project.priority)}</p>
-        </div>
-        <div className="rounded-lg border p-4">
-          <p className="text-muted-foreground text-sm">{t("startDate")}</p>
-          <p className="mt-2 font-medium">{project.startDate ?? "—"}</p>
-        </div>
-        <div className="rounded-lg border p-4">
-          <p className="text-muted-foreground text-sm">{t("endDate")}</p>
-          <p className="mt-2 font-medium">{project.endDate ?? "—"}</p>
-        </div>
-      </div>
+      ) : null}
 
-      {project.description ? (
+      {!isEmployee && project.description ? (
         <p className="text-muted-foreground text-sm whitespace-pre-wrap">
           {project.description}
         </p>
@@ -497,7 +552,9 @@ export function ProjectDetailClient({
         ]}
         actions={
           activeTab === "tasks" ? (
-            canCreateTask && project.status !== "archived" ? (
+            !isEmployee &&
+            canCreateTask &&
+            project.status !== "archived" ? (
               <Button
                 type="button"
                 size="sm"
@@ -518,18 +575,29 @@ export function ProjectDetailClient({
         }
       >
         <TabPanel when="tasks" active={activeTab} className="space-y-3">
-          {tasksQuery.isLoading ? <LoadingState /> : null}
-          {tasks.length === 0 && !tasksQuery.isLoading ? (
-            <EmptyState
-              title={tTasks("emptyTitle")}
-              description={tTasks("emptyDescription")}
+          {isEmployee ? (
+            <EmployeeProjectTasksTable
+              tasks={tasks}
+              members={members}
+              viewerId={viewerId}
+              isLoading={tasksQuery.isLoading}
             />
           ) : (
-            <TasksListTable
-              tasks={tasks}
-              canEdit={canCreateTask}
-              viewerId={viewerId}
-            />
+            <>
+              {tasksQuery.isLoading ? <LoadingState /> : null}
+              {tasks.length === 0 && !tasksQuery.isLoading ? (
+                <EmptyState
+                  title={tTasks("emptyTitle")}
+                  description={tTasks("emptyDescription")}
+                />
+              ) : (
+                <TasksListTable
+                  tasks={tasks}
+                  canEdit={canCreateTask}
+                  viewerId={viewerId}
+                />
+              )}
+            </>
           )}
         </TabPanel>
 

@@ -190,6 +190,12 @@ export function TaskDetailClient({
     queryFn: () => fetchTask(taskId),
   });
 
+  const parentTaskQuery = useQuery({
+    queryKey: ["tasks", taskQuery.data?.parentTaskId],
+    queryFn: () => fetchTask(taskQuery.data!.parentTaskId!),
+    enabled: Boolean(taskQuery.data?.parentTaskId),
+  });
+
   const subtasksQuery = useQuery({
     queryKey: ["tasks", { parentTaskId: taskId }],
     queryFn: () => fetchSubtasks(taskId),
@@ -510,6 +516,15 @@ export function TaskDetailClient({
                   {
                     label: task.project.name,
                     href: `/projects/${task.projectId}`,
+                  },
+                ]
+              : []),
+            ...(task.parentTaskId
+              ? [
+                  {
+                    label:
+                      parentTaskQuery.data?.title ?? t("viewParent"),
+                    href: `/tasks/${task.parentTaskId}`,
                   },
                 ]
               : []),

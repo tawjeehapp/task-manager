@@ -87,6 +87,10 @@ export const listProjectsQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((v) => v === "true"),
+  includeStats: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce
     .number()

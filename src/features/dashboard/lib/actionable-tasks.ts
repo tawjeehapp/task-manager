@@ -31,3 +31,38 @@ export function sortTodayListTasks<T extends { dueDate: string | null; status: s
     return 0;
   });
 }
+
+export type EmployeeTaskMetricCounts = {
+  todo: number;
+  inProgress: number;
+  blocked: number;
+  completed: number;
+  overdue: number;
+  dueToday: number;
+};
+
+/** Counts assigned root tasks and subtasks for employee dashboard metrics. */
+export function countEmployeeTaskMetrics(
+  rows: Array<{ status: string; due_date: string | null }>,
+  today: string,
+): EmployeeTaskMetricCounts {
+  let todo = 0;
+  let inProgress = 0;
+  let blocked = 0;
+  let completed = 0;
+  let overdue = 0;
+  let dueToday = 0;
+
+  for (const row of rows) {
+    const status = row.status;
+    const dueDate = calendarDateOnly(row.due_date);
+    if (status === "todo") todo += 1;
+    if (status === "in_progress") inProgress += 1;
+    if (status === "blocked") blocked += 1;
+    if (status === "completed") completed += 1;
+    if (status !== "completed" && dueDate && dueDate < today) overdue += 1;
+    if (status !== "completed" && dueDate === today) dueToday += 1;
+  }
+
+  return { todo, inProgress, blocked, completed, overdue, dueToday };
+}

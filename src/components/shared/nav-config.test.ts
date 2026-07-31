@@ -24,13 +24,14 @@ function allItems() {
 }
 
 describe("navItemIsVisible", () => {
-  it("shows employees Dashboard, Tasks, Attendance, Leave, and Notifications", () => {
+  it("shows employees Dashboard, Projects, Tasks, Attendance, Leave, and Notifications", () => {
     const visible = allItems()
       .filter((item) => navItemIsVisible(item, EMPLOYEE_PERMS, "employee"))
       .map((item) => item.key);
 
     expect(visible).toEqual([
       "dashboard",
+      "projects",
       "tasks",
       "attendance",
       "leave",
@@ -38,13 +39,8 @@ describe("navItemIsVisible", () => {
     ]);
   });
 
-  it("hides Projects, Departments, Announcements, and Reports from employees", () => {
-    for (const key of [
-      "projects",
-      "departments",
-      "announcements",
-      "reports",
-    ]) {
+  it("hides Departments, Announcements, and Reports from employees", () => {
+    for (const key of ["departments", "announcements", "reports"]) {
       const item = allItems().find((entry) => entry.key === key);
       expect(item).toBeDefined();
       expect(navItemIsVisible(item!, EMPLOYEE_PERMS, "employee")).toBe(false);

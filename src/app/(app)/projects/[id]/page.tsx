@@ -59,6 +59,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       canCreateTask={canCreateTask}
       managedDepartmentId={managedDepartmentId}
       viewerId={user.id}
+      isEmployee={user.role === "employee"}
     />
   );
 }

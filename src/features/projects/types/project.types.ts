@@ -29,6 +29,15 @@ export type Project = {
   updatedAt: string;
 };
 
+/** Task/progress aggregates for employee project cards. */
+export type ProjectWithStats = Project & {
+  progressPercent: number;
+  taskCount: number;
+  completedTaskCount: number;
+  overdueCount: number;
+  departmentMemberCount: number;
+};
+
 export type ProjectMember = {
   id: string;
   projectId: string;

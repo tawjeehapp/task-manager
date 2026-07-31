@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   filterEmployeeBoardTasks,
+  formatCardDate,
+  formatTaskDateRange,
+  isDueTodayTask,
   isLateTask,
 } from "@/features/tasks/components/employee-tasks-board";
 import type { Task } from "@/features/tasks/types/task.types";
@@ -44,6 +47,37 @@ describe("isLateTask", () => {
     expect(
       isLateTask(makeTask({ dueDate: "2026-07-26" }), "2026-07-26"),
     ).toBe(false);
+  });
+});
+
+describe("isDueTodayTask", () => {
+  it("marks incomplete tasks due today", () => {
+    expect(
+      isDueTodayTask(makeTask({ dueDate: "2026-07-26" }), "2026-07-26"),
+    ).toBe(true);
+    expect(isDueTodayTask(makeTask(), "2026-07-26")).toBe(false);
+    expect(
+      isDueTodayTask(
+        makeTask({ dueDate: "2026-07-26", status: "completed" }),
+        "2026-07-26",
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("formatTaskDateRange", () => {
+  it("returns due date only", () => {
+    expect(
+      formatTaskDateRange(
+        makeTask({ startDate: "2026-07-20", dueDate: "2026-07-26" }),
+      ),
+    ).toBe(formatCardDate("2026-07-26"));
+    expect(
+      formatTaskDateRange(makeTask({ startDate: "2026-07-20", dueDate: null })),
+    ).toBeNull();
+    expect(
+      formatTaskDateRange(makeTask({ startDate: null, dueDate: null })),
+    ).toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@ import {
 } from "@/features/projects/schemas/project.schema";
 import {
   createProject,
+  listEmployeeProjectsWithStats,
   listProjectsForViewer,
 } from "@/features/projects/services/projects";
 
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
       departmentId: url.searchParams.get("departmentId") ?? undefined,
       memberUserId: url.searchParams.get("memberUserId") ?? undefined,
       includeArchived: url.searchParams.get("includeArchived") ?? undefined,
+      includeStats: url.searchParams.get("includeStats") ?? undefined,
       page: url.searchParams.get("page") ?? undefined,
       pageSize: url.searchParams.get("pageSize") ?? undefined,
       sortBy: url.searchParams.get("sortBy") ?? undefined,
@@ -35,6 +37,18 @@ export async function GET(request: Request) {
         400,
         "VALIDATION_ERROR",
       );
+    }
+
+    if (parsed.data.includeStats) {
+      if (user.role !== "employee") {
+        throw new ApiError(
+          "إحصاءات المشاريع متاحة للموظفين فقط.",
+          403,
+          "FORBIDDEN",
+        );
+      }
+      const result = await listEmployeeProjectsWithStats(user);
+      return apiSuccess(result);
     }
 
     const result = await listProjectsForViewer(user, parsed.data);

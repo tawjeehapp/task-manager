@@ -50,6 +50,7 @@ function toDashboardItem(task: Task): DashboardTaskItem {
     dueDate: calendarDateOnly(task.dueDate),
     priority: task.priority,
     parentTaskId: task.parentTaskId,
+    parentTitle: task.parentTitle ?? null,
     projectName: task.project?.name ?? null,
     href: `/tasks/${task.id}`,
     incompleteDependencyCount: task.incompleteDependencyCount ?? 0,

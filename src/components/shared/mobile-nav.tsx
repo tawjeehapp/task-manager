@@ -2,14 +2,34 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { mobileNavItems } from "@/components/shared/nav-config";
 import { cn } from "@/lib/utils";
 
+type MeResponse = {
+  user: { role: string };
+};
+
+async function fetchMe(): Promise<MeResponse | null> {
+  const response = await fetch("/api/auth/me");
+  if (!response.ok) {
+    return null;
+  }
+  const payload = (await response.json()) as { data?: MeResponse };
+  return payload.data ?? null;
+}
+
 export function MobileNav() {
   const t = useTranslations("nav");
   const pathname = usePathname();
+  const meQuery = useQuery({
+    queryKey: ["auth", "me"],
+    queryFn: fetchMe,
+    staleTime: 60_000,
+  });
+  const isEmployee = meQuery.data?.user.role === "employee";
 
   return (
     <nav
@@ -19,7 +39,9 @@ export function MobileNav() {
       <ul className="grid grid-cols-3">
         {mobileNavItems.map((item) => {
           const Icon = item.icon;
-          const label = t(item.key);
+          const labelKey =
+            isEmployee && item.key === "tasks" ? "myTasks" : item.key;
+          const label = t(labelKey);
           const isActive = item.enabled && pathname === item.href;
 
           if (!item.enabled) {

@@ -39,6 +39,7 @@ function toDashboardItem(task: Task): DashboardTaskItem {
     dueDate: task.dueDate,
     priority: task.priority,
     parentTaskId: task.parentTaskId,
+    parentTitle: task.parentTitle ?? null,
     projectName: task.project?.name ?? null,
     href: `/tasks/${task.id}`,
   };
@@ -177,6 +178,13 @@ export function EmployeeStatusTasksDialog({
                               </Badge>
                             ) : null}
                           </Link>
+                          {task.parentTaskId ? (
+                            <p className="text-muted-foreground mt-1 text-xs">
+                              {tTasks("boardUnderParent", {
+                                title: task.parentTitle ?? "—",
+                              })}
+                            </p>
+                          ) : null}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           {task.projectName ?? "—"}

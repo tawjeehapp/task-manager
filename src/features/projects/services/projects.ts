@@ -18,8 +18,11 @@ import type {
   ProjectDepartmentSummary,
   ProjectRow,
   ProjectUserSummary,
+  ProjectWithStats,
 } from "@/features/projects/types/project.types";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isOverdueTask } from "@/features/dashboard/services/leadership-aggregates";
+import { todayInOrgTimezone } from "@/lib/org-calendar";
 
 export type ProjectsListResult = {
   items: Project[];
@@ -27,6 +30,11 @@ export type ProjectsListResult = {
   page: number;
   pageSize: number;
   totalPages: number;
+};
+
+export type EmployeeProjectsListResult = {
+  items: ProjectWithStats[];
+  total: number;
 };
 
 type ProjectMemberCountEmbed = { count: number }[];
@@ -393,4 +401,208 @@ function emptyResult(query: ListProjectsQuery): ProjectsListResult {
     pageSize: query.pageSize,
     totalPages: 1,
   };
+}
+
+type TaskStatRow = {
+  id: string;
+  project_id: string;
+  parent_task_id: string | null;
+  status: string;
+  due_date: string | null;
+};
+
+async function loadDepartmentMemberCounts(
+  departmentIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (departmentIds.length === 0) {
+    return counts;
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("department_memberships")
+    .select("department_id")
+    .in("department_id", departmentIds)
+    .eq("is_current", true);
+
+  if (error) {
+    throw new ApiError(
+      "تعذر حساب أعضاء الأقسام.",
+      500,
+      "DEPARTMENT_MEMBER_COUNT_FAILED",
+    );
+  }
+
+  for (const row of data ?? []) {
+    const id = row.department_id as string;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+async function loadProjectTaskStats(
+  projectIds: string[],
+  today: string,
+): Promise<
+  Map<
+    string,
+    {
+      progressPercent: number;
+      taskCount: number;
+      completedTaskCount: number;
+      overdueCount: number;
+    }
+  >
+> {
+  const stats = new Map<
+    string,
+    {
+      progressPercent: number;
+      taskCount: number;
+      completedTaskCount: number;
+      overdueCount: number;
+    }
+  >();
+
+  for (const id of projectIds) {
+    stats.set(id, {
+      progressPercent: 0,
+      taskCount: 0,
+      completedTaskCount: 0,
+      overdueCount: 0,
+    });
+  }
+
+  if (projectIds.length === 0) {
+    return stats;
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("tasks")
+    .select("id, project_id, parent_task_id, status, due_date")
+    .in("project_id", projectIds);
+
+  if (error) {
+    throw new ApiError(
+      "تعذر حساب إحصاءات المهام.",
+      500,
+      "PROJECT_TASK_STATS_FAILED",
+    );
+  }
+
+  const rootsByProject = new Map<string, TaskStatRow[]>();
+  const allByProject = new Map<string, TaskStatRow[]>();
+
+  for (const row of (data ?? []) as TaskStatRow[]) {
+    const all = allByProject.get(row.project_id) ?? [];
+    all.push(row);
+    allByProject.set(row.project_id, all);
+
+    if (row.parent_task_id == null) {
+      const roots = rootsByProject.get(row.project_id) ?? [];
+      roots.push(row);
+      rootsByProject.set(row.project_id, roots);
+    }
+  }
+
+  for (const projectId of projectIds) {
+    const roots = rootsByProject.get(projectId) ?? [];
+    const all = allByProject.get(projectId) ?? [];
+    const completedTaskCount = roots.filter(
+      (task) => task.status === "completed",
+    ).length;
+    const taskCount = roots.length;
+    const progressPercent =
+      taskCount === 0
+        ? 0
+        : Math.round((completedTaskCount / taskCount) * 100);
+    const overdueCount = all.filter((task) =>
+      isOverdueTask(
+        {
+          status: task.status,
+          dueDate: task.due_date ? String(task.due_date).slice(0, 10) : null,
+        },
+        today,
+      ),
+    ).length;
+
+    stats.set(projectId, {
+      progressPercent,
+      taskCount,
+      completedTaskCount,
+      overdueCount,
+    });
+  }
+
+  return stats;
+}
+
+/**
+ * Membership-scoped projects with progress / task / overdue stats for the
+ * employee card list. Returns all matching projects (no pagination).
+ */
+export async function listEmployeeProjectsWithStats(
+  viewer: AppUser,
+): Promise<EmployeeProjectsListResult> {
+  if (viewer.role !== "employee") {
+    throw new ApiError(
+      "هذه الواجهة مخصصة للموظفين.",
+      403,
+      "FORBIDDEN",
+    );
+  }
+
+  const base = await listProjectsForViewer(viewer, {
+    page: 1,
+    pageSize: 100,
+    includeArchived: false,
+    includeStats: false,
+    sortBy: "name",
+    sortDir: "asc",
+  });
+
+  // If the employee has more than one page, fetch remaining pages.
+  let items = [...base.items];
+  if (base.totalPages > 1) {
+    for (let page = 2; page <= base.totalPages; page += 1) {
+      const next = await listProjectsForViewer(viewer, {
+        page,
+        pageSize: 100,
+        includeArchived: false,
+        includeStats: false,
+        sortBy: "name",
+        sortDir: "asc",
+      });
+      items = items.concat(next.items);
+    }
+  }
+
+  const projectIds = items.map((item) => item.id);
+  const departmentIds = [
+    ...new Set(items.map((item) => item.departmentId).filter(Boolean)),
+  ];
+  const today = todayInOrgTimezone();
+
+  const [taskStats, departmentMemberCounts] = await Promise.all([
+    loadProjectTaskStats(projectIds, today),
+    loadDepartmentMemberCounts(departmentIds),
+  ]);
+
+  const withStats: ProjectWithStats[] = items.map((item) => {
+    const stats = taskStats.get(item.id) ?? {
+      progressPercent: 0,
+      taskCount: 0,
+      completedTaskCount: 0,
+      overdueCount: 0,
+    };
+    return {
+      ...item,
+      ...stats,
+      departmentMemberCount: departmentMemberCounts.get(item.departmentId) ?? 0,
+    };
+  });
+
+  return { items: withStats, total: withStats.length };
 }

@@ -72,7 +72,6 @@ export const navSections: NavSection[] = [
         icon: FolderKanban,
         enabled: true,
         permission: "project.view",
-        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "tasks",

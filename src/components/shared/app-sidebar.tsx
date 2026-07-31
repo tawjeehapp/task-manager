@@ -73,8 +73,18 @@ export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
                 <ul className="space-y-1.5">
                   {visibleItems.map((item) => {
                     const Icon = item.icon;
-                    const label = t(item.key);
-                    const isActive = item.enabled && pathname === item.href;
+                    const labelKey =
+                      role === "employee" && item.key === "projects"
+                        ? "myProjects"
+                        : role === "employee" && item.key === "tasks"
+                          ? "myTasks"
+                          : item.key;
+                    const label = t(labelKey);
+                    const isActive =
+                      item.enabled &&
+                      (pathname === item.href ||
+                        (item.href !== "/" &&
+                          pathname.startsWith(`${item.href}/`)));
 
                     if (!item.enabled) {
                       return (

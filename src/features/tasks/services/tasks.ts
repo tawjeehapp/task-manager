@@ -59,10 +59,20 @@ type TaskWithRelations = TaskRow & {
     full_name: string;
     employee_number: string;
   } | null;
+  parent?:
+    | {
+        id: string;
+        title: string;
+      }
+    | {
+        id: string;
+        title: string;
+      }[]
+    | null;
 };
 
 const TASK_SELECT =
-  "id, project_id, parent_task_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, progress_percentage, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number)";
+  "id, project_id, parent_task_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, progress_percentage, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number), parent:tasks!parent_task_id(id, title)";
 
 const SORT_COLUMN_MAP: Record<ListTasksQuery["sortBy"], string> = {
   title: "title",
@@ -114,6 +124,7 @@ export function mapTask(
     subtaskCount?: number;
     dependencyCount?: number;
     incompleteDependencyCount?: number;
+    incompleteDependencyTitles?: string[];
   },
 ): Task {
   return {
@@ -121,6 +132,9 @@ export function mapTask(
     projectId: row.project_id,
     project: mapProject(row.project),
     parentTaskId: row.parent_task_id,
+    parentTitle: Array.isArray(row.parent)
+      ? (row.parent[0]?.title ?? null)
+      : (row.parent?.title ?? null),
     title: row.title,
     description: row.description,
     status: row.status,
@@ -141,6 +155,7 @@ export function mapTask(
     subtaskCount: extras?.subtaskCount,
     dependencyCount: extras?.dependencyCount,
     incompleteDependencyCount: extras?.incompleteDependencyCount,
+    incompleteDependencyTitles: extras?.incompleteDependencyTitles,
   };
 }
 
@@ -179,8 +194,16 @@ async function getSubtaskAggregates(
 
 async function getDependencyAggregates(
   taskIds: string[],
-): Promise<Map<string, { count: number; incompleteCount: number }>> {
-  const aggregates = new Map<string, { count: number; incompleteCount: number }>();
+): Promise<
+  Map<
+    string,
+    { count: number; incompleteCount: number; incompleteTitles: string[] }
+  >
+> {
+  const aggregates = new Map<
+    string,
+    { count: number; incompleteCount: number; incompleteTitles: string[] }
+  >();
   if (taskIds.length === 0) {
     return aggregates;
   }
@@ -188,7 +211,9 @@ async function getDependencyAggregates(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("task_dependencies")
-    .select("task_id, depends_on_task:tasks!depends_on_task_id(status)")
+    .select(
+      "task_id, depends_on_task:tasks!depends_on_task_id(status, title)",
+    )
     .in("task_id", taskIds);
 
   if (error) {
@@ -201,11 +226,21 @@ async function getDependencyAggregates(
 
   for (const row of data ?? []) {
     const id = row.task_id as string;
-    const dep = row.depends_on_task as unknown as { status: string } | null;
-    const current = aggregates.get(id) ?? { count: 0, incompleteCount: 0 };
+    const dep = row.depends_on_task as unknown as {
+      status: string;
+      title: string;
+    } | null;
+    const current = aggregates.get(id) ?? {
+      count: 0,
+      incompleteCount: 0,
+      incompleteTitles: [],
+    };
     current.count += 1;
     if (dep?.status !== "completed") {
       current.incompleteCount += 1;
+      if (dep?.title) {
+        current.incompleteTitles.push(dep.title);
+      }
     }
     aggregates.set(id, current);
   }
@@ -302,6 +337,7 @@ async function loadTaskById(id: string): Promise<Task> {
     return mapTask(row, {
       dependencyCount: deps?.count ?? 0,
       incompleteDependencyCount: deps?.incompleteCount ?? 0,
+      incompleteDependencyTitles: deps?.incompleteTitles ?? [],
     });
   }
 
@@ -311,6 +347,7 @@ async function loadTaskById(id: string): Promise<Task> {
     subtaskCount: aggregate?.count ?? 0,
     dependencyCount: deps?.count ?? 0,
     incompleteDependencyCount: deps?.incompleteCount ?? 0,
+    incompleteDependencyTitles: deps?.incompleteTitles ?? [],
   });
   return {
     ...mapped,
@@ -929,6 +966,7 @@ export async function listTasksForViewer(
       const depExtras = {
         dependencyCount: deps?.count ?? 0,
         incompleteDependencyCount: deps?.incompleteCount ?? 0,
+        incompleteDependencyTitles: deps?.incompleteTitles ?? [],
       };
 
       if (row.parent_task_id) {

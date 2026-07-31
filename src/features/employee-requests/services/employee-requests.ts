@@ -423,8 +423,8 @@ export async function approveEmployeeRequest(
     type: "approval_result",
     title: `تم اعتماد طلب ${typeLabel}`,
     message: "تمت الموافقة على طلبك",
-    entityType: "employee_request",
-    entityId: id,
+    entityType: "task",
+    entityId: existing.task_id,
   });
 
   return getEmployeeRequestById(actor, id);
@@ -481,8 +481,8 @@ export async function rejectEmployeeRequest(
     type: "approval_result",
     title: `تم رفض طلب ${typeLabel}`,
     message: input.reason,
-    entityType: "employee_request",
-    entityId: id,
+    entityType: "task",
+    entityId: existing.task_id,
   });
 
   return mapEmployeeRequestRow(data as unknown as EmployeeRequestRow);

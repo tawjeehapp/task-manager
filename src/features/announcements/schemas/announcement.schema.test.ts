@@ -58,6 +58,8 @@ describe("notificationHref", () => {
     );
     expect(notificationHref("announcement", "x")).toBe("/announcements");
     expect(notificationHref("leave_request", "x")).toBe("/leave");
+    expect(notificationHref("attendance_record", "x")).toBe("/attendance");
+    expect(notificationHref("employee_request", "x")).toBe("/approvals");
     expect(notificationHref(null, null)).toBeNull();
   });
 });

@@ -23,6 +23,8 @@ export type Task = {
   projectId: string;
   project: TaskProjectSummary | null;
   parentTaskId: string | null;
+  /** Parent task title when this row is a subtask. */
+  parentTitle?: string | null;
   title: string;
   description: string | null;
   status: TaskStatus;
@@ -43,6 +45,8 @@ export type Task = {
   dependencyCount?: number;
   /** Prerequisites that are not yet completed. */
   incompleteDependencyCount?: number;
+  /** Titles of incomplete finish-to-start prerequisites. */
+  incompleteDependencyTitles?: string[];
 };
 
 export type TaskRow = {

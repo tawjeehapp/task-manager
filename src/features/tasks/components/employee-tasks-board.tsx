@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search } from "lucide-react";
+import { Calendar, Lock, Search, TriangleAlert } from "lucide-react";
 
 import type { Task, TaskStatus } from "@/features/tasks/types/task.types";
 import { TASK_STATUSES } from "@/features/tasks/types/task.types";
 import type { TasksListResult } from "@/features/tasks/services/tasks";
+import { TaskRequestDialog } from "@/features/dashboard/components/task-request-dialog";
 import { todayInOrgTimezone } from "@/lib/org-calendar";
 import { formatDate } from "@/lib/dates";
 import { withInitialData } from "@/lib/query/initial-data";
@@ -16,6 +17,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -26,10 +28,19 @@ type EmployeeTasksBoardProps = {
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  todo: "border-t-4 border-t-muted-foreground/40 bg-muted/20",
-  in_progress: "border-t-4 border-t-sky-500 bg-sky-500/5",
-  blocked: "border-t-4 border-t-orange-500 bg-orange-500/5",
+  todo: "border-t-4 border-t-violet-500 bg-violet-500/5",
+  in_progress: "border-t-4 border-t-amber-500 bg-amber-500/5",
+  blocked: "border-t-4 border-t-muted-foreground/40 bg-muted/20",
   completed: "border-t-4 border-t-emerald-500 bg-emerald-500/5",
+};
+
+const STATUS_BADGE_COLORS: Record<TaskStatus, string> = {
+  todo: "border-violet-500/30 bg-violet-500/15 text-violet-700 dark:text-violet-300",
+  in_progress:
+    "border-amber-500/30 bg-amber-500/15 text-amber-800 dark:text-amber-300",
+  blocked: "border-muted-foreground/30 bg-muted text-muted-foreground",
+  completed:
+    "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
 };
 
 async function fetchMyTasks(viewerId: string): Promise<Task[]> {
@@ -38,7 +49,6 @@ async function fetchMyTasks(viewerId: string): Promise<Task[]> {
     pageSize: "100",
     sortBy: "dueDate",
     sortDir: "asc",
-    parentTaskId: "null",
     assignee: viewerId,
   });
   const response = await fetch(`/api/tasks?${params.toString()}`);
@@ -58,6 +68,25 @@ export function isLateTask(task: Task, today: string): boolean {
     task.dueDate != null &&
     task.dueDate < today
   );
+}
+
+export function isDueTodayTask(task: Task, today: string): boolean {
+  return (
+    task.status !== "completed" &&
+    task.dueDate != null &&
+    task.dueDate === today
+  );
+}
+
+const CARD_DATE_FORMAT = "D MMMM";
+
+export function formatCardDate(value: string): string {
+  return formatDate(value, CARD_DATE_FORMAT);
+}
+
+export function formatTaskDateRange(task: Task): string | null {
+  if (task.dueDate) return formatCardDate(task.dueDate);
+  return null;
 }
 
 export function filterEmployeeBoardTasks(
@@ -83,11 +112,36 @@ export function filterEmployeeBoardTasks(
   });
 }
 
+function PriorityPill({
+  priority,
+  label,
+}: {
+  priority: string;
+  label: string;
+}) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "font-normal",
+        priority === "high" &&
+          "border-destructive/30 bg-destructive/10 text-destructive",
+        priority === "medium" &&
+          "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+        priority === "low" && "text-muted-foreground",
+      )}
+    >
+      {label}
+    </Badge>
+  );
+}
+
 export function EmployeeTasksBoard({
   viewerId,
   initialTasks,
 }: EmployeeTasksBoardProps) {
   const t = useTranslations("tasks");
+  const tDashboard = useTranslations("dashboard");
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -96,6 +150,10 @@ export function EmployeeTasksBoard({
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [lateOnly, setLateOnly] = useState(false);
+  const [requestTask, setRequestTask] = useState<Pick<
+    Task,
+    "id" | "title" | "dueDate"
+  > | null>(null);
   const today = todayInOrgTimezone();
 
   const tasksQuery = useQuery({
@@ -158,6 +216,10 @@ export function EmployeeTasksBoard({
 
   function statusLabel(status: TaskStatus) {
     return t(`status_${status}` as "status_todo");
+  }
+
+  function priorityLabel(priority: string) {
+    return t(`priority_${priority}` as "priority_low");
   }
 
   if (tasksQuery.isLoading) {
@@ -230,13 +292,28 @@ export function EmployeeTasksBoard({
           <option value="medium">{t("priority_medium")}</option>
           <option value="high">{t("priority_high")}</option>
         </select>
-        <label className="flex items-center gap-2 text-sm">
+        <label
+          className={cn(
+            "flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm",
+            lateOnly && "border-destructive/40 bg-destructive/5",
+          )}
+        >
           <input
             type="checkbox"
+            className="sr-only"
             checked={lateOnly}
             onChange={(e) => setLateOnly(e.target.checked)}
           />
-          {t("lateOnly")}
+          <TriangleAlert
+            className={cn(
+              "size-3.5 shrink-0",
+              lateOnly ? "text-destructive" : "text-muted-foreground",
+            )}
+            aria-hidden
+          />
+          <span className={cn(lateOnly && "text-destructive")}>
+            {t("lateOnly")}
+          </span>
         </label>
       </div>
 
@@ -245,7 +322,7 @@ export function EmployeeTasksBoard({
           <div
             key={column.status}
             className={cn(
-              "min-w-[220px] flex-1 rounded-lg border p-3",
+              "min-w-[260px] flex-1 rounded-lg border p-3",
               STATUS_COLORS[column.status],
             )}
             onDragOver={(event) => {
@@ -272,7 +349,15 @@ export function EmployeeTasksBoard({
               <h3 className="text-sm font-semibold">
                 {statusLabel(column.status)}
               </h3>
-              <Badge variant="secondary">{column.tasks.length}</Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "min-w-6 justify-center tabular-nums",
+                  STATUS_BADGE_COLORS[column.status],
+                )}
+              >
+                {column.tasks.length}
+              </Badge>
             </div>
             <div className="space-y-2">
               {column.tasks.length === 0 ? (
@@ -283,6 +368,11 @@ export function EmployeeTasksBoard({
               {column.tasks.map((task) => {
                 const statusLocked = (task.incompleteDependencyCount ?? 0) > 0;
                 const late = isLateTask(task, today);
+                const dueToday = isDueTodayTask(task, today);
+                const isCompleted = task.status === "completed";
+                const isSubtask = Boolean(task.parentTaskId);
+                const parentTitle = task.parentTitle ?? null;
+
                 return (
                   <div
                     key={task.id}
@@ -298,29 +388,99 @@ export function EmployeeTasksBoard({
                     }
                     className={cn(
                       "rounded-md border bg-background p-3 shadow-sm",
+                      isSubtask && "border-dashed",
                       !statusLocked && "cursor-grab active:cursor-grabbing",
                       statusLocked && "opacity-80",
                       draggingId === task.id && "opacity-60",
                       late && "border-destructive/40",
                     )}
                   >
+                    {isSubtask ? (
+                      <p className="mb-1 text-[11px] leading-tight text-muted-foreground">
+                        {t("boardUnderParent", {
+                          title: parentTitle ?? "—",
+                        })}
+                      </p>
+                    ) : null}
+                    {task.project?.name ? (
+                      <p className="text-xs text-muted-foreground">
+                        {task.project.name}
+                      </p>
+                    ) : null}
                     <Link
                       href={`/tasks/${task.id}`}
-                      className="font-medium underline-offset-4 hover:underline"
+                      className="mt-0.5 block font-medium underline-offset-4 hover:underline"
                       onClick={(event) => {
                         if (draggingId) event.preventDefault();
                       }}
                     >
                       {task.title}
                     </Link>
-                    <div className="mt-1.5 space-y-1 text-xs text-muted-foreground">
-                      {task.project?.name ? <p>{task.project.name}</p> : null}
-                      {task.dueDate ? (
-                        <p className={cn(late && "text-destructive")}>
-                          {formatDate(task.dueDate)}
-                        </p>
+
+                    <p
+                      className={cn(
+                        "mt-1.5 flex items-center gap-1.5 text-xs",
+                        (late || dueToday) && "font-medium text-destructive",
+                        !late && !dueToday && "text-muted-foreground",
+                      )}
+                    >
+                      <Calendar className="size-3.5 shrink-0" aria-hidden />
+                      <span>
+                        {task.dueDate ? formatCardDate(task.dueDate) : "—"}
+                      </span>
+                    </p>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {statusLocked ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Lock className="size-3 shrink-0" aria-hidden />
+                          {t("boardWaitingOnDependencies")}
+                        </span>
+                      ) : null}
+                      <PriorityPill
+                        priority={task.priority}
+                        label={priorityLabel(task.priority)}
+                      />
+                      {isCompleted ? (
+                        <Badge
+                          variant="outline"
+                          className="border-emerald-500/30 bg-emerald-500/10 font-normal text-emerald-700 dark:text-emerald-300"
+                        >
+                          {t("status_completed")}
+                        </Badge>
+                      ) : null}
+                      {late && task.dueDate ? (
+                        <span className="text-xs font-medium text-destructive">
+                          {t("boardLateWithDate", {
+                            date: formatCardDate(task.dueDate),
+                          })}
+                        </span>
+                      ) : null}
+                      {dueToday ? (
+                        <span className="text-xs font-medium text-destructive">
+                          {tDashboard("dueTodayLabel")}
+                        </span>
                       ) : null}
                     </div>
+
+                    {!isCompleted ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-3 w-full"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setRequestTask({
+                            id: task.id,
+                            title: task.title,
+                            dueDate: task.dueDate,
+                          });
+                        }}
+                      >
+                        {t("boardRequestExtensionOrExcusal")}
+                      </Button>
+                    ) : null}
                   </div>
                 );
               })}
@@ -328,6 +488,14 @@ export function EmployeeTasksBoard({
           </div>
         ))}
       </div>
+
+      <TaskRequestDialog
+        open={requestTask != null}
+        onOpenChange={(open) => {
+          if (!open) setRequestTask(null);
+        }}
+        task={requestTask}
+      />
     </div>
   );
 }

@@ -16,6 +16,7 @@ export type DashboardTaskItem = {
   dueDate: string | null;
   priority: string;
   parentTaskId: string | null;
+  parentTitle?: string | null;
   projectName: string | null;
   href: string;
   incompleteDependencyCount?: number;

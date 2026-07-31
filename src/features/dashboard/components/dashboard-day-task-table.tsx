@@ -175,6 +175,13 @@ export function DashboardDayTaskTable({
                         </Badge>
                       ) : null}
                     </Link>
+                    {task.parentTaskId ? (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {tTasks("boardUnderParent", {
+                          title: task.parentTitle ?? "—",
+                        })}
+                      </p>
+                    ) : null}
                     {statusLocked ? (
                       <p className="text-muted-foreground mt-1 text-xs">
                         {tTasks("statusLockedByDependencies")}
