@@ -1,13 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BarChart3,
   Bell,
   Building2,
-  CalendarCheck,
-  CalendarDays,
   CheckSquare,
   ClipboardList,
+  Clock3,
   FileText,
   FolderKanban,
+  Home,
   LayoutDashboard,
   Megaphone,
   Users,
@@ -26,6 +27,8 @@ export type NavItem = {
   anyOfPermissions?: string[];
   /** When set, item is hidden from these roles (e.g. employees). */
   hideForRoles?: Role[];
+  /** When set, item is shown only for these roles. */
+  showForRoles?: Role[];
 };
 
 export type NavSection = {
@@ -40,6 +43,11 @@ export function navItemIsVisible(
 ): boolean {
   if (role && item.hideForRoles?.includes(role)) {
     return false;
+  }
+  if (item.showForRoles && item.showForRoles.length > 0) {
+    if (!role || !item.showForRoles.includes(role)) {
+      return false;
+    }
   }
   if (!item.enabled) {
     return true;
@@ -61,10 +69,25 @@ export const navSections: NavSection[] = [
     key: "main",
     items: [
       {
+        key: "departmentDashboard",
+        href: "/",
+        icon: BarChart3,
+        enabled: true,
+        showForRoles: ["department_manager"],
+      },
+      {
+        key: "myDashboard",
+        href: "/me",
+        icon: Home,
+        enabled: true,
+        showForRoles: ["department_manager"],
+      },
+      {
         key: "dashboard",
         href: "/",
         icon: LayoutDashboard,
         enabled: true,
+        hideForRoles: ["department_manager"],
       },
       {
         key: "projects",
@@ -79,6 +102,14 @@ export const navSections: NavSection[] = [
         icon: ClipboardList,
         enabled: true,
         permission: "project.view",
+      },
+      {
+        key: "teamTasks",
+        href: "/tasks/team",
+        icon: ClipboardList,
+        enabled: true,
+        permission: "project.view",
+        showForRoles: ["department_manager"],
       },
     ],
   },
@@ -106,25 +137,22 @@ export const navSections: NavSection[] = [
     key: "operations",
     items: [
       {
-        key: "attendance",
+        key: "attendanceLeave",
         href: "/attendance",
-        icon: CalendarCheck,
+        icon: Clock3,
         enabled: true,
-        permission: "attendance.view",
+        anyOfPermissions: ["attendance.view", "leave.view"],
       },
       {
-        key: "leave",
-        href: "/leave",
-        icon: CalendarDays,
-        enabled: true,
-        permission: "leave.view",
-      },
-      {
-        key: "approvals",
+        key: "requests",
         href: "/approvals",
         icon: CheckSquare,
         enabled: true,
-        anyOfPermissions: ["leave.approve", "employee_request.approve"],
+        anyOfPermissions: [
+          "leave.approve",
+          "employee_request.approve",
+          "attendance.approve",
+        ],
       },
     ],
   },
@@ -163,7 +191,7 @@ export const navSections: NavSection[] = [
   },
 ];
 
-/** Mobile bottom nav: Dashboard, Tasks, Notifications (employee-simplified). */
+/** Mobile bottom nav: Dashboard, Tasks, Notifications. */
 export const mobileNavItems: NavItem[] = [
   {
     key: "dashboard",

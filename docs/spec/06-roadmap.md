@@ -562,8 +562,8 @@ Simplify the employee shell and primary workspace: Dashboard + Tasks + Notificat
 | Employee dashboard redesign | **Completed** | Greeting, metrics, calendar, attendance widget |
 | Day/week/month calendar | **Completed** | Client range fetch via `GET /api/tasks` |
 | Dashboard attendance submit | **Completed** | Manual form via `POST /api/attendance/submit` + explicit task/general time breakdown |
-| Employee personal Kanban | **Completed** | `/tasks` for employees only |
-| Admin/manager UX | Unchanged | List tasks + full nav |
+| Employee personal Kanban | **Completed** | `/tasks` for employees; managers share personal Kanban (see follow-up) |
+| Admin/manager UX | **Superseded for managers** | Managers now have personal + managerial tracks (see follow-up) |
 
 ## Differences / notes
 
@@ -584,8 +584,8 @@ Redesign admin and department-manager home dashboards into an operational leader
 
 ## Scope
 
-- Admin: company-wide active users and non-archived projects
-- Department manager: managed-department members and projects
+- Admin: company-wide active users and non-archived projects on `/`
+- Department manager: managed-department members and projects on `/` (Department dashboard); personal view at `/me` (My dashboard)
 - Team / week hours from `attendance_records.total_hours`
 - Project progress = average root-task `progress_percentage`; health derived from overdue tasks
 - Estimated hours column = sum of root-task `estimated_hours` (not a budget field)
@@ -607,6 +607,36 @@ Redesign admin and department-manager home dashboards into an operational leader
 - Pending “task requests” on the attention row = extension + excusal counts.
 
 ---
+
+# Follow-up — Department manager personal workspace
+
+**Status: Completed**
+
+## Goal
+
+Treat department managers as employees who also lead a department: personal employee-style views plus the existing managerial track.
+
+## Scope
+
+- `/` → department (leadership) dashboard for `department_manager`; personal for `employee`; leadership for `admin`
+- `/me` → personal “My dashboard” for `department_manager`
+- `/team` → redirects to `/` (legacy)
+- `/tasks` → personal Kanban for managers; `/tasks/team` → department task list + create/assign
+- `/projects` → employee-style “My department & projects” cards for managers and employees
+- `/attendance` → combined Attendance & vacations hub (managers: approve / team / mine; employees: attendance / leave tabs); `/leave` redirects into the hub
+- `/approvals` → Requests card inbox (task requests, leave, hours)
+- Nav: Department dashboard, My dashboard, My Tasks, My department & projects, Attendance & vacations, Requests
+
+## Implementation status
+
+| Area | Status | Notes |
+|---|---|---|
+| Department dashboard as manager home | **Completed** | `/` |
+| My dashboard route | **Completed** | `/me` |
+| Personal + team tasks | **Completed** | `/tasks` + `/tasks/team` |
+| Department projects cards for managers | **Completed** | Same UI as employees |
+| Attendance & vacations hub | **Completed** | Combined `/attendance` |
+| Requests inbox | **Completed** | Card layout on `/approvals` |
 
 ---
 
@@ -654,3 +684,4 @@ Redesign admin and department-manager home dashboards into an operational leader
 11. Gantt — **Completed (Milestone 9; comments/attachments included)**
 12. Employee UX simplification — **Completed (Milestone 10)**
 13. Leadership dashboards — **Completed (Milestone 11)**
+14. Department manager personal workspace — **Completed** (follow-up after M11)

@@ -753,7 +753,7 @@ async function getAdminDashboard(): Promise<AdminDashboard> {
   };
 }
 
-async function getManagerDashboard(
+export async function getManagerDashboard(
   viewer: AppUser,
 ): Promise<ManagerDashboard> {
   const today = calendarDateInOrgTimezone(new Date(), ATTENDANCE_TIMEZONE);
@@ -797,7 +797,8 @@ async function getManagerDashboard(
   };
 }
 
-async function getEmployeeDashboard(
+/** Personal employee-style dashboard for any authenticated user (by viewer.id). */
+export async function getPersonalDashboard(
   viewer: AppUser,
 ): Promise<EmployeeDashboard> {
   const today = calendarDateInOrgTimezone(new Date(), ATTENDANCE_TIMEZONE);
@@ -830,7 +831,7 @@ export async function getDashboardSummary(
   if (viewer.role === "department_manager") {
     return getManagerDashboard(viewer);
   }
-  return getEmployeeDashboard(viewer);
+  return getPersonalDashboard(viewer);
 }
 
 export { addCalendarDays, currentMonthBounds, currentWeekBounds };

@@ -19,12 +19,32 @@ const EMPLOYEE_PERMS = [
   "work_log.view",
 ];
 
+const MANAGER_PERMS = [
+  "department.view",
+  "project.view",
+  "attendance.view",
+  "attendance.approve",
+  "leave.view",
+  "leave.approve",
+  "employee_request.view",
+  "employee_request.create",
+  "employee_request.approve",
+  "announcement.view",
+  "notification.view",
+  "report.view",
+  "user.reset_password",
+  "task.create",
+  "task.assign",
+  "work_log.create",
+  "work_log.view",
+];
+
 function allItems() {
   return navSections.flatMap((section) => section.items);
 }
 
 describe("navItemIsVisible", () => {
-  it("shows employees Dashboard, Projects, Tasks, Attendance, Leave, and Notifications", () => {
+  it("shows employees Dashboard, Projects, Tasks, Attendance & vacations, and Notifications", () => {
     const visible = allItems()
       .filter((item) => navItemIsVisible(item, EMPLOYEE_PERMS, "employee"))
       .map((item) => item.key);
@@ -33,42 +53,64 @@ describe("navItemIsVisible", () => {
       "dashboard",
       "projects",
       "tasks",
-      "attendance",
-      "leave",
+      "attendanceLeave",
       "notifications",
     ]);
   });
 
-  it("hides Departments, Announcements, and Reports from employees", () => {
-    for (const key of ["departments", "announcements", "reports"]) {
+  it("hides Departments, Announcements, Reports, manager dashboards, team tasks, and requests from employees", () => {
+    for (const key of [
+      "departments",
+      "announcements",
+      "reports",
+      "departmentDashboard",
+      "myDashboard",
+      "teamTasks",
+      "requests",
+    ]) {
       const item = allItems().find((entry) => entry.key === key);
       expect(item).toBeDefined();
       expect(navItemIsVisible(item!, EMPLOYEE_PERMS, "employee")).toBe(false);
     }
   });
 
-  it("still shows Projects and Attendance to managers with permissions", () => {
-    const managerPerms = [
-      "project.view",
-      "attendance.view",
-      "leave.view",
-      "leave.approve",
-      "department.view",
-      "announcement.view",
-      "notification.view",
-      "report.view",
-    ];
+  it("shows managers department dashboard first, then my dashboard, plus managerial items", () => {
+    const visible = allItems()
+      .filter((item) =>
+        navItemIsVisible(item, MANAGER_PERMS, "department_manager"),
+      )
+      .map((item) => item.key);
+
+    expect(visible).toEqual([
+      "departmentDashboard",
+      "myDashboard",
+      "projects",
+      "tasks",
+      "teamTasks",
+      "departments",
+      "employees",
+      "attendanceLeave",
+      "requests",
+      "announcements",
+      "notifications",
+      "reports",
+    ]);
+  });
+
+  it("still shows Projects and Attendance & vacations to managers with permissions", () => {
     const projects = allItems().find((item) => item.key === "projects");
-    const attendance = allItems().find((item) => item.key === "attendance");
+    const attendanceLeave = allItems().find(
+      (item) => item.key === "attendanceLeave",
+    );
     const reports = allItems().find((item) => item.key === "reports");
 
-    expect(navItemIsVisible(projects!, managerPerms, "department_manager")).toBe(
-      true,
-    );
     expect(
-      navItemIsVisible(attendance!, managerPerms, "department_manager"),
+      navItemIsVisible(projects!, MANAGER_PERMS, "department_manager"),
     ).toBe(true);
-    expect(navItemIsVisible(reports!, managerPerms, "department_manager")).toBe(
+    expect(
+      navItemIsVisible(attendanceLeave!, MANAGER_PERMS, "department_manager"),
+    ).toBe(true);
+    expect(navItemIsVisible(reports!, MANAGER_PERMS, "department_manager")).toBe(
       true,
     );
   });

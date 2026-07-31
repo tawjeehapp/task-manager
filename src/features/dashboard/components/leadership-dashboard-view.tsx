@@ -198,7 +198,7 @@ export async function LeadershipDashboardView({
                 </Link>
                 {attention.pendingApprovals.attendance > 0 ? (
                   <Link
-                    href="/attendance"
+                    href="/approvals"
                     className={cn(
                       buttonVariants({ size: "sm", variant: "outline" }),
                     )}

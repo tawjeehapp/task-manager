@@ -28,3 +28,4 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 export type Role = "admin" | "department_manager" | "employee";
 
 export { hasPermission } from "@/lib/permissions/has-permission";
+export { isPersonalWorkspaceRole } from "@/lib/permissions/is-personal-workspace-role";

@@ -540,15 +540,16 @@ async function loadProjectTaskStats(
 }
 
 /**
- * Membership-scoped projects with progress / task / overdue stats for the
- * employee card list. Returns all matching projects (no pagination).
+ * Viewer-scoped projects with progress / task / overdue stats for the
+ * department card list (employees + department managers). Returns all
+ * matching projects (no pagination).
  */
 export async function listEmployeeProjectsWithStats(
   viewer: AppUser,
 ): Promise<EmployeeProjectsListResult> {
-  if (viewer.role !== "employee") {
+  if (viewer.role !== "employee" && viewer.role !== "department_manager") {
     throw new ApiError(
-      "هذه الواجهة مخصصة للموظفين.",
+      "هذه الواجهة مخصصة للموظفين ومديري الأقسام.",
       403,
       "FORBIDDEN",
     );

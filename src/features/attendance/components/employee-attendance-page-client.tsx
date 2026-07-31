@@ -57,6 +57,8 @@ import { formatDate } from "@/lib/dates";
 
 type EmployeeAttendancePageClientProps = {
   viewerId: string;
+  /** When true, omit the page header (used inside the combined hub). */
+  embedded?: boolean;
 };
 
 type AttendanceListResult = {
@@ -84,6 +86,7 @@ async function readApi<T>(response: Response): Promise<T> {
 
 export function EmployeeAttendancePageClient({
   viewerId,
+  embedded = false,
 }: EmployeeAttendancePageClientProps) {
   const t = useTranslations("attendance");
   const tCommon = useTranslations("common");
@@ -100,11 +103,18 @@ export function EmployeeAttendancePageClient({
   const weekBounds = currentWeekBounds(todayDate);
 
   const weekStatsQuery = useQuery({
-    queryKey: ["attendance", "week-stats", weekBounds.start, weekBounds.end],
+    queryKey: [
+      "attendance",
+      "week-stats",
+      viewerId,
+      weekBounds.start,
+      weekBounds.end,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: "1",
         pageSize: "100",
+        userId: viewerId,
         dateFrom: weekBounds.start,
         dateTo: weekBounds.end,
         sortBy: "date",
@@ -126,11 +136,12 @@ export function EmployeeAttendancePageClient({
   });
 
   const recordsQuery = useQuery({
-    queryKey: ["attendance", "employee-records", page, pageSize],
+    queryKey: ["attendance", "employee-records", viewerId, page, pageSize],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
+        userId: viewerId,
         sortBy: "date",
         sortDir: "desc",
       });
@@ -186,15 +197,24 @@ export function EmployeeAttendancePageClient({
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t("employeeTitle")}
-        description={t("employeeDescription")}
-        actions={
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">{t("employeeTitle")}</h2>
           <Button type="button" onClick={() => setSubmitOpen(true)}>
             {t("newAttendance")}
           </Button>
-        }
-      />
+        </div>
+      ) : (
+        <PageHeader
+          title={t("employeeTitle")}
+          description={t("employeeDescription")}
+          actions={
+            <Button type="button" onClick={() => setSubmitOpen(true)}>
+              {t("newAttendance")}
+            </Button>
+          }
+        />
+      )}
 
       {successMessage ? (
         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">

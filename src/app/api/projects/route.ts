@@ -40,9 +40,12 @@ export async function GET(request: Request) {
     }
 
     if (parsed.data.includeStats) {
-      if (user.role !== "employee") {
+      if (
+        user.role !== "employee" &&
+        user.role !== "department_manager"
+      ) {
         throw new ApiError(
-          "إحصاءات المشاريع متاحة للموظفين فقط.",
+          "إحصاءات المشاريع متاحة للموظفين ومديري الأقسام.",
           403,
           "FORBIDDEN",
         );

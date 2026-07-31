@@ -9,7 +9,11 @@ import {
   listProjectsForViewer,
 } from "@/features/projects/services/projects";
 import { getCurrentUser } from "@/lib/auth/session";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import {
+  hasPermission,
+  isPersonalWorkspaceRole,
+  PERMISSIONS,
+} from "@/lib/permissions";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
 import { routing } from "@/i18n/routing";
 
@@ -18,7 +22,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata() {
   const t = await getTranslations("projects");
   const user = await getCurrentUser();
-  if (user?.role === "employee") {
+  if (isPersonalWorkspaceRole(user?.role)) {
     return { title: t("myDepartmentAndProjects") };
   }
   return { title: t("title") };
@@ -37,7 +41,7 @@ export default async function ProjectsPage() {
     redirect("/");
   }
 
-  if (user.role === "employee") {
+  if (isPersonalWorkspaceRole(user.role)) {
     const initialProjects = await listEmployeeProjectsWithStats(user);
     return <EmployeeProjectsPageClient initialProjects={initialProjects} />;
   }

@@ -64,7 +64,16 @@ function statusBadgeVariant(
   return "secondary";
 }
 
-export function EmployeeLeavePageClient() {
+type EmployeeLeavePageClientProps = {
+  viewerId: string;
+  /** When true, omit the page header (used inside the combined hub). */
+  embedded?: boolean;
+};
+
+export function EmployeeLeavePageClient({
+  viewerId,
+  embedded = false,
+}: EmployeeLeavePageClientProps) {
   const t = useTranslations("leave");
   const tCommon = useTranslations("common");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -81,11 +90,12 @@ export function EmployeeLeavePageClient() {
   });
 
   const requestsQuery = useQuery({
-    queryKey: ["leave-requests", "employee-all"],
+    queryKey: ["leave-requests", "employee-all", viewerId],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: "1",
         pageSize: "100",
+        userId: viewerId,
         sortBy: "created_at",
         sortDir: "desc",
       });
@@ -108,15 +118,24 @@ export function EmployeeLeavePageClient() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t("employeeTitle")}
-        description={t("employeeDescription")}
-        actions={
+      {embedded ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">{t("employeeTitle")}</h2>
           <Button type="button" onClick={() => setDialogOpen(true)}>
             {t("newRequest")}
           </Button>
-        }
-      />
+        </div>
+      ) : (
+        <PageHeader
+          title={t("employeeTitle")}
+          description={t("employeeDescription")}
+          actions={
+            <Button type="button" onClick={() => setDialogOpen(true)}>
+              {t("newRequest")}
+            </Button>
+          }
+        />
+      )}
 
       {successMessage ? (
         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">

@@ -48,6 +48,8 @@ type TasksPageClientProps = {
   viewerRole: Role;
   viewerId: string;
   initialTasks: TasksListResult;
+  /** When true, show the personal Kanban (employees + managers on /tasks). */
+  personalBoard?: boolean;
 };
 
 async function fetchTasks(params: {
@@ -146,8 +148,9 @@ export function TasksPageClient({
   viewerRole,
   viewerId,
   initialTasks,
+  personalBoard = false,
 }: TasksPageClientProps) {
-  if (viewerRole === "employee") {
+  if (personalBoard || viewerRole === "employee") {
     return (
       <EmployeeTasksBoard viewerId={viewerId} initialTasks={initialTasks} />
     );

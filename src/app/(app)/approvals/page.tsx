@@ -33,15 +33,26 @@ export default async function ApprovalsPage() {
     PERMISSIONS.EMPLOYEE_REQUEST_APPROVE,
     permissions,
   );
+  const canApproveAttendance = hasPermission(
+    user.role,
+    PERMISSIONS.ATTENDANCE_APPROVE,
+    permissions,
+  );
 
-  if (!canApproveLeave && !canApproveEmployeeRequest) {
+  if (
+    !canApproveLeave &&
+    !canApproveEmployeeRequest &&
+    !canApproveAttendance
+  ) {
     redirect("/");
   }
 
   return (
     <ApprovalsPageClient
+      viewerId={user.id}
       canApproveLeave={canApproveLeave}
       canApproveEmployeeRequest={canApproveEmployeeRequest}
+      canApproveAttendance={canApproveAttendance}
     />
   );
 }

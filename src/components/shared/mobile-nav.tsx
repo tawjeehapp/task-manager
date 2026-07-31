@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { mobileNavItems } from "@/components/shared/nav-config";
+import { isPersonalWorkspaceRole } from "@/lib/permissions";
+import type { Role } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 type MeResponse = {
@@ -29,7 +31,9 @@ export function MobileNav() {
     queryFn: fetchMe,
     staleTime: 60_000,
   });
-  const isEmployee = meQuery.data?.user.role === "employee";
+  const role = (meQuery.data?.user.role ?? null) as Role | null;
+  const useMyTasksLabel = isPersonalWorkspaceRole(role);
+  const isManager = role === "department_manager";
 
   return (
     <nav
@@ -40,7 +44,11 @@ export function MobileNav() {
         {mobileNavItems.map((item) => {
           const Icon = item.icon;
           const labelKey =
-            isEmployee && item.key === "tasks" ? "myTasks" : item.key;
+            item.key === "dashboard" && isManager
+              ? "departmentDashboard"
+              : useMyTasksLabel && item.key === "tasks"
+                ? "myTasks"
+                : item.key;
           const label = t(labelKey);
           const isActive = item.enabled && pathname === item.href;
 

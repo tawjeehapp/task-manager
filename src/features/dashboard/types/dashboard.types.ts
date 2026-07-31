@@ -145,6 +145,7 @@ export type ManagerDashboard = LeadershipDashboardBase & {
   managedDepartmentId: string | null;
 };
 
+/** Personal (employee-style) dashboard payload. `role` is a view discriminant, not the viewer’s auth role. */
 export type EmployeeDashboard = {
   role: "employee";
   today: string;

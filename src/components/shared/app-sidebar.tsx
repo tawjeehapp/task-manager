@@ -10,6 +10,7 @@ import {
   navSections,
 } from "@/components/shared/nav-config";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { isPersonalWorkspaceRole } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
@@ -74,16 +75,18 @@ export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
                   {visibleItems.map((item) => {
                     const Icon = item.icon;
                     const labelKey =
-                      role === "employee" && item.key === "projects"
-                        ? "myProjects"
-                        : role === "employee" && item.key === "tasks"
+                      isPersonalWorkspaceRole(role) && item.key === "projects"
+                        ? "myDepartmentAndProjects"
+                        : isPersonalWorkspaceRole(role) && item.key === "tasks"
                           ? "myTasks"
                           : item.key;
                     const label = t(labelKey);
+                    // Prefer exact match; avoid `/tasks` matching `/tasks/team`.
                     const isActive =
                       item.enabled &&
                       (pathname === item.href ||
                         (item.href !== "/" &&
+                          item.href !== "/tasks" &&
                           pathname.startsWith(`${item.href}/`)));
 
                     if (!item.enabled) {
