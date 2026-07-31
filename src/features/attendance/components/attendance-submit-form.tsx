@@ -406,8 +406,14 @@ export function AttendanceSubmitForm({
 
         <div className="space-y-2">
           {rows.map((row) => (
-            <div key={row.key} className="space-y-2 rounded-md border p-2">
-              <div className="grid gap-2 sm:grid-cols-[8rem_1fr_6.5rem_auto]">
+            <div key={row.key} className="space-y-2 rounded-md border p-3">
+              <div
+                className={
+                  row.type === "general"
+                    ? "grid gap-2 sm:grid-cols-[7.5rem_5.5rem_auto]"
+                    : "grid gap-2 sm:grid-cols-[7.5rem_1fr_5.5rem_auto]"
+                }
+              >
                 <select
                   className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
                   value={row.type}
@@ -447,16 +453,7 @@ export function AttendanceSubmitForm({
                       </option>
                     ))}
                   </select>
-                ) : (
-                  <Input
-                    value={row.reason}
-                    onChange={(e) =>
-                      updateRow(row.key, { reason: e.target.value })
-                    }
-                    placeholder={t("generalReasonPlaceholder")}
-                    aria-label={t("generalReason")}
-                  />
-                )}
+                ) : null}
 
                 <Input
                   type="number"
@@ -479,6 +476,24 @@ export function AttendanceSubmitForm({
                   <Trash2 className="size-4" />
                 </Button>
               </div>
+
+              {row.type === "general" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`general-reason-${row.key}`}>
+                    {t("generalReason")}
+                  </Label>
+                  <Input
+                    id={`general-reason-${row.key}`}
+                    value={row.reason}
+                    onChange={(e) =>
+                      updateRow(row.key, { reason: e.target.value })
+                    }
+                    placeholder={t("generalReasonPlaceholder")}
+                    aria-label={t("generalReason")}
+                    className="w-full"
+                  />
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

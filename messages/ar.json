@@ -736,7 +736,7 @@
     "entryType": "نوع البند",
     "entryTypeTask": "مهمة",
     "entryTypeGeneral": "دوام عام",
-    "generalReason": "السبب",
+    "generalReason": "السبب (مطلوب)",
     "generalReasonPlaceholder": "لماذا لم يُسجَّل على مهمة مسندة؟",
     "subtaskAllocations": "المهام الفرعية",
     "addSubtaskRow": "إضافة مهمة",

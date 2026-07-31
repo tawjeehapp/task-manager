@@ -736,7 +736,7 @@
     "entryType": "Entry type",
     "entryTypeTask": "Task",
     "entryTypeGeneral": "General",
-    "generalReason": "Reason",
+    "generalReason": "Reason (required)",
     "generalReasonPlaceholder": "Why wasn't this on an assigned task?",
     "subtaskAllocations": "Subtasks",
     "addSubtaskRow": "Add subtask",

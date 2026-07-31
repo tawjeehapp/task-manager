@@ -302,7 +302,9 @@ export async function submitAttendance(
   if (workLogError) {
     await admin.from("attendance_records").delete().eq("id", record.id);
     throw new ApiError(
-      "تعذر حفظ توزيع ساعات الدوام.",
+      workLogError.message
+        ? `تعذر حفظ توزيع ساعات الدوام: ${workLogError.message}`
+        : "تعذر حفظ توزيع ساعات الدوام.",
       500,
       "CREATE_WORK_LOGS_FAILED",
     );
@@ -346,7 +348,9 @@ async function replaceDayWorkLogs(
 
   if (insertError) {
     throw new ApiError(
-      "تعذر حفظ توزيع ساعات الدوام.",
+      insertError.message
+        ? `تعذر حفظ توزيع ساعات الدوام: ${insertError.message}`
+        : "تعذر حفظ توزيع ساعات الدوام.",
       500,
       "CREATE_WORK_LOGS_FAILED",
     );
