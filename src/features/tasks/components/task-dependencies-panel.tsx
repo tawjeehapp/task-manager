@@ -248,12 +248,18 @@ export function TaskDependenciesPanel({
                   <TableRow key={item.id}>
                     <TableCell>
                       {item.dependsOnTask ? (
-                        <Link
-                          href={`/tasks/${item.dependsOnTaskId}`}
-                          className="font-medium underline-offset-4 hover:underline"
-                        >
-                          {item.dependsOnTask.title}
-                        </Link>
+                        canManage ? (
+                          <Link
+                            href={`/tasks/${item.dependsOnTaskId}`}
+                            className="font-medium underline-offset-4 hover:underline"
+                          >
+                            {item.dependsOnTask.title}
+                          </Link>
+                        ) : (
+                          <span className="font-medium">
+                            {item.dependsOnTask.title}
+                          </span>
+                        )
                       ) : (
                         item.dependsOnTaskId
                       )}

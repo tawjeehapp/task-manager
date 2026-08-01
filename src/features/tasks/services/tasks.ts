@@ -34,6 +34,8 @@ import type {
   TaskStatus,
   TaskUserSummary,
 } from "@/features/tasks/types/task.types";
+import type { TaskAttachmentSummary } from "@/features/tasks/types/comment-attachment.types";
+import { getAttachmentSummariesByTaskIds } from "@/features/tasks/services/attachments";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type TasksListResult = {
@@ -78,6 +80,7 @@ function mapUserSummary(
   row:
     | TaskWithRelations["assignee"]
     | TaskWithRelations["created_by_user"],
+  includeEmployeeNumber = true,
 ): TaskUserSummary | null {
   if (!row) {
     return null;
@@ -85,7 +88,9 @@ function mapUserSummary(
   return {
     id: row.id,
     fullName: row.full_name,
-    employeeNumber: row.employee_number,
+    ...(includeEmployeeNumber
+      ? { employeeNumber: row.employee_number }
+      : {}),
   };
 }
 
@@ -135,8 +140,11 @@ export function mapTask(
     incompleteDependencyCount?: number;
     incompleteDependencyTitles?: string[];
     incompleteDependencies?: IncompleteDependencySummary[];
+    attachments?: TaskAttachmentSummary[];
+    includeEmployeeNumber?: boolean;
   },
 ): Task {
+  const includeEmployeeNumber = extras?.includeEmployeeNumber !== false;
   return {
     id: row.id,
     projectId: row.project_id,
@@ -146,9 +154,9 @@ export function mapTask(
     status: row.status,
     priority: row.priority,
     assignedTo: row.assigned_to,
-    assignee: mapUserSummary(row.assignee),
+    assignee: mapUserSummary(row.assignee, includeEmployeeNumber),
     createdBy: row.created_by,
-    createdByUser: mapUserSummary(row.created_by_user),
+    createdByUser: mapUserSummary(row.created_by_user, includeEmployeeNumber),
     startDate: row.start_date
       ? String(row.start_date).slice(0, 10)
       : null,
@@ -161,7 +169,20 @@ export function mapTask(
     dependencyCount: extras?.dependencyCount,
     incompleteDependencyCount: extras?.incompleteDependencyCount,
     incompleteDependencyTitles: extras?.incompleteDependencyTitles,
-    incompleteDependencies: extras?.incompleteDependencies,
+    incompleteDependencies: extras?.incompleteDependencies?.map((dep) =>
+      includeEmployeeNumber
+        ? dep
+        : {
+            ...dep,
+            assignee: dep.assignee
+              ? {
+                  id: dep.assignee.id,
+                  fullName: dep.assignee.fullName,
+                }
+              : null,
+          },
+    ),
+    attachments: extras?.attachments,
   };
 }
 
@@ -283,7 +304,35 @@ export async function getTaskForViewer(
   taskId: string,
 ): Promise<Task> {
   await assertCanAccessTask(viewer, taskId);
-  return loadTaskById(taskId);
+  return loadTaskForViewer(viewer, taskId);
+}
+
+function redactTaskEmployeeNumbers(task: Task): Task {
+  return {
+    ...task,
+    assignee: task.assignee
+      ? { id: task.assignee.id, fullName: task.assignee.fullName }
+      : null,
+    createdByUser: task.createdByUser
+      ? { id: task.createdByUser.id, fullName: task.createdByUser.fullName }
+      : null,
+    incompleteDependencies: task.incompleteDependencies?.map((dep) => ({
+      ...dep,
+      assignee: dep.assignee
+        ? { id: dep.assignee.id, fullName: dep.assignee.fullName }
+        : null,
+    })),
+  };
+}
+
+async function loadTaskForViewer(
+  viewer: AppUser,
+  taskId: string,
+): Promise<Task> {
+  const task = await loadTaskById(taskId);
+  return viewer.role === "employee"
+    ? redactTaskEmployeeNumbers(task)
+    : task;
 }
 
 export async function createTask(
@@ -538,7 +587,7 @@ export async function updateTask(
   }
 
   if (Object.keys(patch).length === 0) {
-    return loadTaskById(taskId);
+    return loadTaskForViewer(viewer, taskId);
   }
 
   const { error } = await admin.from("tasks").update(patch).eq("id", taskId);
@@ -635,7 +684,7 @@ export async function updateTask(
     });
   }
 
-  return loadTaskById(taskId);
+  return loadTaskForViewer(viewer, taskId);
 }
 
 export async function deleteTask(
@@ -811,7 +860,9 @@ export async function listTasksForViewer(
   const rows = (data ?? []) as unknown as TaskWithRelations[];
   const allIds = rows.map((r) => r.id);
   const depAggregates = await getDependencyAggregates(allIds);
+  const attachmentAggregates = await getAttachmentSummariesByTaskIds(allIds);
   const total = count ?? 0;
+  const includeEmployeeNumber = viewer.role !== "employee";
 
   return {
     items: rows.map((row) => {
@@ -821,6 +872,8 @@ export async function listTasksForViewer(
         incompleteDependencyCount: deps?.incompleteCount ?? 0,
         incompleteDependencyTitles: deps?.incompleteTitles ?? [],
         incompleteDependencies: deps?.incompleteDependencies ?? [],
+        attachments: attachmentAggregates.get(row.id) ?? [],
+        includeEmployeeNumber,
       });
     }),
     total,

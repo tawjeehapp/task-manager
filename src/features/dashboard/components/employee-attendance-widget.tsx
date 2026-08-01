@@ -7,7 +7,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Clock, Link2 } from "lucide-react";
 
-import type { DashboardAttendanceItem } from "@/features/dashboard/types/dashboard.types";
+import type { DashboardAttendanceItem, DashboardRejectedLeaveItem } from "@/features/dashboard/types/dashboard.types";
 import { deriveAttendanceActions } from "@/features/dashboard/lib/derive-attendance-actions";
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import {
@@ -20,7 +20,7 @@ import { calendarDateInOrgTimezone } from "@/features/attendance/services/comput
 import { formatDate } from "@/lib/dates";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -35,10 +35,12 @@ import {
 } from "@/components/ui/dialog";
 import { LoadingState } from "@/components/shared/loading-state";
 import { ErrorState } from "@/components/shared/error-state";
+import { cn } from "@/lib/utils";
 
 type EmployeeAttendanceWidgetProps = {
   viewerId: string;
   weekAttendance: DashboardAttendanceItem[];
+  rejectedLeave: DashboardRejectedLeaveItem[];
 };
 
 async function readApi<T>(response: Response): Promise<T> {
@@ -64,9 +66,11 @@ function uiStateBadgeVariant(
 export function EmployeeAttendanceWidget({
   viewerId,
   weekAttendance,
+  rejectedLeave,
 }: EmployeeAttendanceWidgetProps) {
   const t = useTranslations("dashboard");
   const tAtt = useTranslations("attendance");
+  const tLeave = useTranslations("leave");
   const tCommon = useTranslations("common");
   const router = useRouter();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -84,7 +88,10 @@ export function EmployeeAttendanceWidget({
       }),
     [todayDate, weekAttendance],
   );
-  const actionCount = actions.rejected.length + actions.missingDates.length;
+  const actionCount =
+    actions.rejected.length +
+    actions.missingDates.length +
+    rejectedLeave.length;
 
   const todayQuery = useQuery({
     queryKey: ["attendance", "today"],
@@ -115,8 +122,8 @@ export function EmployeeAttendanceWidget({
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
+    <div className="grid gap-4 xl:grid-cols-5">
+      <Card className="min-w-0 xl:col-span-3">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock className="size-4 text-muted-foreground" />
@@ -165,17 +172,27 @@ export function EmployeeAttendanceWidget({
                   </div>
 
                   <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                    <div>
-                      <dt className="text-muted-foreground">
-                        {tAtt("clockInOutColumn")}
-                      </dt>
-                      <dd className="font-medium tabular-nums">
-                        {timeRangeLabel(
-                          today.clockIn,
-                          today.clockOut,
-                          today.breakMinutes,
-                        )}
-                      </dd>
+                    <div className="space-y-2">
+                      <div>
+                        <dt className="text-muted-foreground">
+                          {tAtt("clockInOutColumn")}
+                        </dt>
+                        <dd className="font-medium tabular-nums">
+                          {timeRangeLabel(today.clockIn, today.clockOut)}
+                        </dd>
+                      </div>
+                      {today.breakMinutes > 0 ? (
+                        <div>
+                          <dt className="text-muted-foreground">
+                            {tAtt("breakLabel")}
+                          </dt>
+                          <dd className="text-muted-foreground tabular-nums">
+                            {tAtt("breakMinutesValue", {
+                              minutes: today.breakMinutes,
+                            })}
+                          </dd>
+                        </div>
+                      ) : null}
                     </div>
                     <div>
                       <dt className="text-muted-foreground">
@@ -246,7 +263,7 @@ export function EmployeeAttendanceWidget({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="min-w-0 xl:col-span-2">
         <CardHeader className="flex flex-row items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="size-4 text-muted-foreground" />
@@ -319,14 +336,64 @@ export function EmployeeAttendanceWidget({
                   </Button>
                 </li>
               ))}
+              {rejectedLeave.map((row) => {
+                const dateLabel =
+                  row.startDate === row.endDate
+                    ? formatDate(row.startDate, "dddd D MMMM")
+                    : `${formatDate(row.startDate, "D MMMM")} – ${formatDate(row.endDate, "D MMMM")}`;
+                return (
+                  <li
+                    key={`leave-rejected-${row.id}`}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"
+                  >
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {row.leaveTypeName}
+                          <span className="text-muted-foreground font-normal">
+                            {" "}
+                            · {dateLabel}
+                          </span>
+                        </span>
+                        <Badge variant="destructive">
+                          {tLeave("status_rejected")}
+                        </Badge>
+                      </div>
+                      {row.rejectionReason ? (
+                        <p className="text-destructive text-xs">
+                          {tLeave("rejectionReason", {
+                            reason: row.rejectionReason,
+                          })}
+                        </p>
+                      ) : null}
+                    </div>
+                    <Link
+                      href={row.href}
+                      className={cn(
+                        buttonVariants({ size: "sm", variant: "outline" }),
+                      )}
+                    >
+                      {t("viewLeave")}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
-          <Link
-            href="/attendance"
-            className="mt-3 inline-block text-sm text-primary underline-offset-4 hover:underline"
-          >
-            {t("viewAttendance")}
-          </Link>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+            <Link
+              href="/attendance"
+              className="inline-block text-sm text-primary underline-offset-4 hover:underline"
+            >
+              {t("viewAttendance")}
+            </Link>
+            <Link
+              href="/attendance?tab=leave"
+              className="inline-block text-sm text-primary underline-offset-4 hover:underline"
+            >
+              {t("viewLeave")}
+            </Link>
+          </div>
         </CardContent>
       </Card>
 

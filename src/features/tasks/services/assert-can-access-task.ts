@@ -60,6 +60,20 @@ export async function assertCanAccessTask(
     };
   }
 
+  // Employees may list project tasks, but full detail (comments, activity)
+  // is limited to tasks assigned to them. Attachments use
+  // assertCanViewTaskAttachments instead.
+  if (viewer.role === "employee") {
+    if (task.assigned_to === viewer.id) {
+      return {
+        projectId: task.project_id,
+        assignedTo: task.assigned_to,
+        departmentId,
+      };
+    }
+    throw new ApiError("ليس لديك صلاحية لعرض هذه المهمة.", 403, "FORBIDDEN");
+  }
+
   if (await isProjectMember(task.project_id, viewer.id)) {
     return {
       projectId: task.project_id,
@@ -77,6 +91,69 @@ export async function assertCanAccessTask(
   }
 
   throw new ApiError("ليس لديك صلاحية لعرض هذه المهمة.", 403, "FORBIDDEN");
+}
+
+/**
+ * List/download attachments: same as full task access, plus project members
+ * (so employees can pull deliverables from peer/blocking tasks).
+ */
+export async function assertCanViewTaskAttachments(
+  viewer: AppUser,
+  taskId: string,
+): Promise<{
+  projectId: string;
+  assignedTo: string | null;
+  departmentId: string;
+}> {
+  const admin = createAdminClient();
+  const { data: task, error } = await admin
+    .from("tasks")
+    .select("id, project_id, assigned_to, project:projects!project_id(department_id)")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (error) {
+    throw new ApiError(
+      "تعذر التحقق من صلاحية المهمة.",
+      500,
+      "ACCESS_CHECK_FAILED",
+    );
+  }
+
+  if (!task) {
+    throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+  }
+
+  const project = task.project as unknown as { department_id: string } | null;
+  const departmentId = project?.department_id;
+  if (!departmentId) {
+    throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+  }
+
+  const access = {
+    projectId: task.project_id as string,
+    assignedTo: task.assigned_to as string | null,
+    departmentId,
+  };
+
+  if (viewer.role === "admin") {
+    return access;
+  }
+
+  const managedId = await getManagedDepartmentId(viewer.id);
+  if (managedId === departmentId) {
+    return access;
+  }
+
+  if (task.assigned_to === viewer.id) {
+    return access;
+  }
+
+  if (await isProjectMember(task.project_id, viewer.id)) {
+    return access;
+  }
+
+  throw new ApiError("ليس لديك صلاحية لعرض مرفقات هذه المهمة.", 403, "FORBIDDEN");
 }
 
 export async function assertCanCreateTaskInProject(

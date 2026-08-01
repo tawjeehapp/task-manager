@@ -12,6 +12,7 @@ import {
   type AdminDashboard,
   type DashboardAttendanceItem,
   type DashboardAttendanceSummary,
+  type DashboardRejectedLeaveItem,
   type DashboardRequestItem,
   type DashboardSummary,
   type DashboardTaskItem,
@@ -425,6 +426,48 @@ async function getAttendanceSummary(
     rejectedDays,
     href: "/attendance",
   };
+}
+
+async function listRejectedLeave(
+  userId: string,
+): Promise<DashboardRejectedLeaveItem[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("leave_requests")
+    .select(
+      "id, start_date, end_date, days, rejection_reason, leave_type:leave_types!leave_type_id(name)",
+    )
+    .eq("user_id", userId)
+    .eq("status", "rejected")
+    .order("updated_at", { ascending: false })
+    .limit(DASHBOARD_LIST_LIMIT);
+
+  if (error) {
+    throw new ApiError(
+      "تعذر جلب الإجازات المرفوضة.",
+      500,
+      "DASHBOARD_REJECTED_LEAVE_FAILED",
+    );
+  }
+
+  return (data ?? []).map((row) => {
+    const leaveType = row.leave_type as
+      | { name: string }
+      | { name: string }[]
+      | null;
+    const leaveTypeName = Array.isArray(leaveType)
+      ? (leaveType[0]?.name ?? "إجازة")
+      : (leaveType?.name ?? "إجازة");
+    return {
+      id: row.id as string,
+      leaveTypeName,
+      startDate: row.start_date as string,
+      endDate: row.end_date as string,
+      days: Number(row.days ?? 0),
+      rejectionReason: (row.rejection_reason as string | null) ?? null,
+      href: "/attendance?tab=leave",
+    };
+  });
 }
 
 async function listMyRequests(userId: string): Promise<DashboardRequestItem[]> {
@@ -873,6 +916,7 @@ export async function getPersonalDashboard(
     todayTasks,
     openTasks,
     weekAttendance,
+    rejectedLeave,
     attendanceSummary,
     myRequests,
   ] = await Promise.all([
@@ -880,6 +924,7 @@ export async function getPersonalDashboard(
     listTodayTasks(viewer.id, today),
     listOpenTasks(viewer.id, today),
     listWeekAttendance(viewer.id, today),
+    listRejectedLeave(viewer.id),
     getAttendanceSummary(viewer.id, today),
     listMyRequests(viewer.id),
   ]);
@@ -891,6 +936,7 @@ export async function getPersonalDashboard(
     todayTasks,
     openTasks,
     weekAttendance,
+    rejectedLeave,
     attendanceSummary,
     myRequests,
   };

@@ -4,18 +4,24 @@ import { randomUUID } from "crypto";
 
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
-import { assertCanAccessTask } from "@/features/tasks/services/assert-can-access-task";
+import {
+  assertCanAccessTask,
+  assertCanViewTaskAttachments,
+} from "@/features/tasks/services/assert-can-access-task";
 import {
   ALLOWED_ATTACHMENT_MIME_TYPES,
   MAX_ATTACHMENT_BYTES,
   attachmentFileMetaSchema,
 } from "@/features/tasks/schemas/attachment.schema";
-import type { TaskAttachment } from "@/features/tasks/types/comment-attachment.types";
+import type {
+  TaskAttachment,
+  TaskAttachmentSummary,
+} from "@/features/tasks/types/comment-attachment.types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const TASK_FILES_BUCKET = "task-files";
 
-export type { TaskAttachment };
+export type { TaskAttachment, TaskAttachmentSummary };
 
 type AttachmentRow = {
   id: string;
@@ -36,7 +42,10 @@ type AttachmentRow = {
 const ATTACHMENT_SELECT =
   "id, task_id, uploaded_by, file_name, storage_path, byte_size, content_type, created_at, uploader:users!uploaded_by(id, full_name, employee_number)";
 
-function mapAttachment(row: AttachmentRow): TaskAttachment {
+function mapAttachment(
+  row: AttachmentRow,
+  includeEmployeeNumber: boolean,
+): TaskAttachment {
   return {
     id: row.id,
     taskId: row.task_id,
@@ -50,7 +59,9 @@ function mapAttachment(row: AttachmentRow): TaskAttachment {
       ? {
           id: row.uploader.id,
           fullName: row.uploader.full_name,
-          employeeNumber: row.uploader.employee_number,
+          ...(includeEmployeeNumber
+            ? { employeeNumber: row.uploader.employee_number }
+            : {}),
         }
       : null,
   };
@@ -64,11 +75,46 @@ function sanitizeFileName(name: string): string {
   return name.replace(/[^\w.\-()\u0600-\u06FF ]+/g, "_").slice(0, 200);
 }
 
+/** Batch-load attachment summaries for task list / board rows. */
+export async function getAttachmentSummariesByTaskIds(
+  taskIds: string[],
+): Promise<Map<string, TaskAttachmentSummary[]>> {
+  const result = new Map<string, TaskAttachmentSummary[]>();
+  if (taskIds.length === 0) {
+    return result;
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("task_attachments")
+    .select("id, task_id, file_name, byte_size, content_type")
+    .in("task_id", taskIds)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new ApiError("تعذر جلب المرفقات.", 500, "LIST_ATTACHMENTS_FAILED");
+  }
+
+  for (const row of data ?? []) {
+    const taskId = row.task_id as string;
+    const list = result.get(taskId) ?? [];
+    list.push({
+      id: row.id as string,
+      fileName: row.file_name as string,
+      byteSize: Number(row.byte_size ?? 0),
+      contentType: (row.content_type as string | null) ?? null,
+    });
+    result.set(taskId, list);
+  }
+
+  return result;
+}
+
 export async function listTaskAttachments(
   viewer: AppUser,
   taskId: string,
 ): Promise<TaskAttachment[]> {
-  await assertCanAccessTask(viewer, taskId);
+  await assertCanViewTaskAttachments(viewer, taskId);
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("task_attachments")
@@ -80,7 +126,10 @@ export async function listTaskAttachments(
     throw new ApiError("تعذر جلب المرفقات.", 500, "LIST_ATTACHMENTS_FAILED");
   }
 
-  return ((data ?? []) as unknown as AttachmentRow[]).map(mapAttachment);
+  const includeEmployeeNumber = viewer.role !== "employee";
+  return ((data ?? []) as unknown as AttachmentRow[]).map((row) =>
+    mapAttachment(row, includeEmployeeNumber),
+  );
 }
 
 export async function uploadTaskAttachment(
@@ -154,7 +203,7 @@ export async function uploadTaskAttachment(
     );
   }
 
-  return mapAttachment(data as unknown as AttachmentRow);
+  return mapAttachment(data as unknown as AttachmentRow, true);
 }
 
 export async function deleteTaskAttachment(
@@ -203,7 +252,7 @@ export async function getAttachmentDownloadUrl(
   taskId: string,
   attachmentId: string,
 ): Promise<{ url: string; fileName: string }> {
-  await assertCanAccessTask(viewer, taskId);
+  await assertCanViewTaskAttachments(viewer, taskId);
   const admin = createAdminClient();
   const { data: existing, error: existingError } = await admin
     .from("task_attachments")

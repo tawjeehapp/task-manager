@@ -358,7 +358,7 @@ export function ProjectDetailClient({
         byId.set(member.userId, {
           id: member.user.id,
           fullName: member.user.fullName,
-          employeeNumber: member.user.employeeNumber,
+          employeeNumber: member.user.employeeNumber ?? "",
         });
       }
     }
@@ -367,7 +367,7 @@ export function ProjectDetailClient({
         byId.set(member.userId, {
           id: member.user.id,
           fullName: member.user.fullName,
-          employeeNumber: member.user.employeeNumber,
+          employeeNumber: member.user.employeeNumber ?? "",
         });
       }
     }
@@ -614,7 +614,9 @@ export function ProjectDetailClient({
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("memberName")}</TableHead>
-                    <TableHead>{t("employeeNumber")}</TableHead>
+                    {!isEmployee ? (
+                      <TableHead>{t("employeeNumber")}</TableHead>
+                    ) : null}
                     {allowMemberActions ? (
                       <TableHead>{t("actions")}</TableHead>
                     ) : null}
@@ -624,9 +626,11 @@ export function ProjectDetailClient({
                   {members.map((member) => (
                     <TableRow key={member.id}>
                       <TableCell>{member.user?.fullName ?? "—"}</TableCell>
-                      <TableCell>
-                        {member.user?.employeeNumber ?? "—"}
-                      </TableCell>
+                      {!isEmployee ? (
+                        <TableCell>
+                          {member.user?.employeeNumber ?? "—"}
+                        </TableCell>
+                      ) : null}
                       {allowMemberActions ? (
                         <TableCell>
                           <Button

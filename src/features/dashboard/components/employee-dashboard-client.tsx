@@ -207,6 +207,7 @@ export function EmployeeDashboardClient({
       <EmployeeAttendanceWidget
         viewerId={viewerId}
         weekAttendance={data.weekAttendance}
+        rejectedLeave={data.rejectedLeave}
       />
 
       {statusDialogOpen ? (

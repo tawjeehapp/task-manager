@@ -1,3 +1,7 @@
+import type { TaskAttachmentSummary } from "@/features/tasks/types/comment-attachment.types";
+
+export type { TaskAttachmentSummary } from "@/features/tasks/types/comment-attachment.types";
+
 export type TaskStatus =
   | "todo"
   | "in_progress"
@@ -9,7 +13,8 @@ export type TaskPriority = "low" | "medium" | "high";
 export type TaskUserSummary = {
   id: string;
   fullName: string;
-  employeeNumber: string;
+  /** Omitted for employees viewing others' profiles in shared project context. */
+  employeeNumber?: string;
 };
 
 export type TaskProjectSummary = {
@@ -54,6 +59,8 @@ export type Task = {
   incompleteDependencyTitles?: string[];
   /** Structured incomplete finish-to-start prerequisites. */
   incompleteDependencies?: IncompleteDependencySummary[];
+  /** Attachments available for download from list/summary views. */
+  attachments?: TaskAttachmentSummary[];
 };
 
 export type TaskRow = {

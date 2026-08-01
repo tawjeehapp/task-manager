@@ -21,16 +21,11 @@ export function uiStateBadgeVariant(
 export function timeRangeLabel(
   clockIn: string,
   clockOut: string | null,
-  breakMinutes?: number,
 ): string {
   try {
     const start = orgLocalTimeOfDay(clockIn);
     if (!clockOut) return start;
-    const range = `${start} - ${orgLocalTimeOfDay(clockOut)}`;
-    if (breakMinutes && breakMinutes > 0) {
-      return `${range} (${breakMinutes}m)`;
-    }
-    return range;
+    return `${start} - ${orgLocalTimeOfDay(clockOut)}`;
   } catch {
     return "—";
   }

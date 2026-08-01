@@ -27,6 +27,7 @@ const MEMBER_SELECT =
 
 function mapUser(
   row: MemberWithUser["user"],
+  includeEmployeeNumber: boolean,
 ): ProjectUserSummary | null {
   if (!row) {
     return null;
@@ -34,17 +35,22 @@ function mapUser(
   return {
     id: row.id,
     fullName: row.full_name,
-    employeeNumber: row.employee_number,
+    ...(includeEmployeeNumber
+      ? { employeeNumber: row.employee_number }
+      : {}),
   };
 }
 
-function mapMember(row: MemberWithUser): ProjectMember {
+function mapMember(
+  row: MemberWithUser,
+  includeEmployeeNumber: boolean,
+): ProjectMember {
   return {
     id: row.id,
     projectId: row.project_id,
     userId: row.user_id,
     createdAt: row.created_at,
-    user: mapUser(row.user),
+    user: mapUser(row.user, includeEmployeeNumber),
   };
 }
 
@@ -69,7 +75,10 @@ export async function listProjectMembers(
     );
   }
 
-  return ((data ?? []) as unknown as MemberWithUser[]).map(mapMember);
+  const includeEmployeeNumber = viewer.role !== "employee";
+  return ((data ?? []) as unknown as MemberWithUser[]).map((row) =>
+    mapMember(row, includeEmployeeNumber),
+  );
 }
 
 export async function addProjectMember(
@@ -128,7 +137,7 @@ export async function addProjectMember(
     );
   }
 
-  return mapMember(data as unknown as MemberWithUser);
+  return mapMember(data as unknown as MemberWithUser, true);
 }
 
 export async function removeProjectMember(

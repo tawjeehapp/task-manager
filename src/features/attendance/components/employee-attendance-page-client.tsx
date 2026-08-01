@@ -290,11 +290,19 @@ export function EmployeeAttendancePageClient({
                           {formatDate(row.date, "dddd D MMMM")}
                         </TableCell>
                         <TableCell className="tabular-nums">
-                          {timeRangeLabel(
-                            row.clockIn,
-                            row.clockOut,
-                            row.breakMinutes,
-                          )}
+                          <div className="space-y-0.5">
+                            <div>
+                              {timeRangeLabel(row.clockIn, row.clockOut)}
+                            </div>
+                            {row.breakMinutes > 0 ? (
+                              <div className="text-muted-foreground text-xs">
+                                {t("breakLabel")}:{" "}
+                                {t("breakMinutesValue", {
+                                  minutes: row.breakMinutes,
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="tabular-nums">
                           {row.totalHours != null

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Lock, Search, TriangleAlert } from "lucide-react";
+import { Calendar, Lock, Search, TriangleAlert } from "lucide-react";
 
 import type {
   ProjectMember,
@@ -19,12 +19,21 @@ import {
   isLateTask,
 } from "@/features/tasks/components/employee-tasks-board";
 import { TaskRequestDialog } from "@/features/dashboard/components/task-request-dialog";
+import { TaskAttachmentDownloads } from "@/features/tasks/components/task-attachment-downloads";
+import { TaskBlockerChips } from "@/features/tasks/components/task-blocker-summary";
 import { todayInOrgTimezone } from "@/lib/org-calendar";
+import { formatDate } from "@/lib/dates";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -137,6 +146,11 @@ function filterProjectTasks(
 function WaitingBadge({ task }: { task: Task }) {
   const tProjects = useTranslations("projects");
   const tTasks = useTranslations("tasks");
+  const blockers = task.incompleteDependencies ?? [];
+  if (blockers.length > 0) {
+    return <TaskBlockerChips blockers={blockers} allowOpenTask={false} />;
+  }
+
   const incomplete = task.incompleteDependencyCount ?? 0;
   if (incomplete <= 0) return null;
 
@@ -153,14 +167,89 @@ function WaitingBadge({ task }: { task: Task }) {
   );
 }
 
+function PeerTaskSummaryDialog({
+  task,
+  open,
+  onOpenChange,
+}: {
+  task: Task | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const t = useTranslations("tasks");
+
+  function statusLabel(status: TaskStatus) {
+    return t(`status_${status}` as "status_todo");
+  }
+
+  function priorityLabel(priority: string) {
+    return t(`priority_${priority}` as "priority_low");
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{task?.title ?? t("blockerSummaryTitle")}</DialogTitle>
+        </DialogHeader>
+
+        {task ? (
+          <div className="space-y-4">
+            <dl className="grid gap-3 text-sm">
+              <div className="grid gap-0.5">
+                <dt className="text-xs text-muted-foreground">{t("status")}</dt>
+                <dd>{statusLabel(task.status)}</dd>
+              </div>
+              <div className="grid gap-0.5">
+                <dt className="text-xs text-muted-foreground">{t("assignee")}</dt>
+                <dd>{task.assignee?.fullName ?? t("unassigned")}</dd>
+              </div>
+              <div className="grid gap-0.5">
+                <dt className="text-xs text-muted-foreground">{t("priority")}</dt>
+                <dd>
+                  <PriorityPill
+                    priority={task.priority}
+                    label={priorityLabel(task.priority)}
+                  />
+                </dd>
+              </div>
+              <div className="grid gap-0.5">
+                <dt className="text-xs text-muted-foreground">{t("dueDate")}</dt>
+                <dd className="inline-flex items-center gap-1.5">
+                  <Calendar
+                    className="size-3.5 shrink-0 text-muted-foreground"
+                    aria-hidden
+                  />
+                  {task.dueDate ? formatDate(task.dueDate, "D MMMM") : "—"}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="grid gap-2">
+              <p className="text-xs text-muted-foreground">{t("tabAttachments")}</p>
+              <TaskAttachmentDownloads
+                taskId={task.id}
+                attachments={task.attachments ?? []}
+                emptyLabel={t("attachmentsEmptyTitle")}
+              />
+            </div>
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function EmployeeTaskRow({
   task,
   viewerId,
   onRequest,
+  onOpenSummary,
 }: {
   task: Task;
   viewerId: string;
   onRequest: (task: Pick<Task, "id" | "title" | "dueDate">) => void;
+  onOpenSummary: (task: Task) => void;
 }) {
   const t = useTranslations("tasks");
   const tDashboard = useTranslations("dashboard");
@@ -169,6 +258,7 @@ function EmployeeTaskRow({
   const canEditStatus = task.assignedTo === viewerId;
   const statusLocked = (task.incompleteDependencyCount ?? 0) > 0;
   const duration = formatTaskDateRange(task);
+  const attachments = task.attachments ?? [];
 
   const statusMutation = useMutation({
     mutationFn: (status: TaskStatus) => patchTaskStatus(task.id, status),
@@ -190,12 +280,22 @@ function EmployeeTaskRow({
       <TableCell>
         <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex min-w-0 items-center gap-1.5">
-            <Link
-              href={`/tasks/${task.id}`}
-              className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
-            >
-              {task.title}
-            </Link>
+            {canEditStatus ? (
+              <Link
+                href={`/tasks/${task.id}`}
+                className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
+              >
+                {task.title}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="min-w-0 truncate text-start font-medium underline-offset-4 hover:underline"
+                onClick={() => onOpenSummary(task)}
+              >
+                {task.title}
+              </button>
+            )}
           </div>
           <WaitingBadge task={task} />
         </div>
@@ -227,6 +327,17 @@ function EmployeeTaskRow({
           priority={task.priority}
           label={priorityLabel(task.priority)}
         />
+      </TableCell>
+      <TableCell className="min-w-[8rem]">
+        {attachments.length > 0 ? (
+          <TaskAttachmentDownloads
+            taskId={task.id}
+            attachments={attachments}
+            variant="chips"
+          />
+        ) : (
+          <span className="text-sm text-muted-foreground">—</span>
+        )}
       </TableCell>
       <TableCell>
         <div className="flex flex-wrap items-center gap-2">
@@ -296,6 +407,7 @@ export function EmployeeProjectTasksTable({
     Task,
     "id" | "title" | "dueDate"
   > | null>(null);
+  const [summaryTask, setSummaryTask] = useState<Task | null>(null);
   const today = todayInOrgTimezone();
 
   const filtered = useMemo(
@@ -404,6 +516,7 @@ export function EmployeeProjectTasksTable({
                 <TableHead>{t("assignee")}</TableHead>
                 <TableHead>{tProjects("duration")}</TableHead>
                 <TableHead>{t("priority")}</TableHead>
+                <TableHead>{t("tabAttachments")}</TableHead>
                 <TableHead>{t("status")}</TableHead>
               </TableRow>
             </TableHeader>
@@ -414,6 +527,7 @@ export function EmployeeProjectTasksTable({
                   task={task}
                   viewerId={viewerId}
                   onRequest={setRequestTask}
+                  onOpenSummary={setSummaryTask}
                 />
               ))}
             </TableBody>
@@ -427,6 +541,14 @@ export function EmployeeProjectTasksTable({
           if (!open) setRequestTask(null);
         }}
         task={requestTask}
+      />
+
+      <PeerTaskSummaryDialog
+        task={summaryTask}
+        open={summaryTask != null}
+        onOpenChange={(open) => {
+          if (!open) setSummaryTask(null);
+        }}
       />
     </div>
   );

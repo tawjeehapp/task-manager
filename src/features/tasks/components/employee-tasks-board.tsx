@@ -466,6 +466,7 @@ export function EmployeeTasksBoard({
 
                     <TaskBlockerChips
                       blockers={task.incompleteDependencies ?? []}
+                      allowOpenTask={false}
                     />
 
                     {!isCompleted ? (

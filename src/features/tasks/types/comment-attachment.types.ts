@@ -24,6 +24,14 @@ export type TaskAttachment = {
   uploader: {
     id: string;
     fullName: string;
-    employeeNumber: string;
+    employeeNumber?: string;
   } | null;
+};
+
+/** Lightweight attachment info for list/summary views (no storage path). */
+export type TaskAttachmentSummary = {
+  id: string;
+  fileName: string;
+  byteSize: number;
+  contentType: string | null;
 };

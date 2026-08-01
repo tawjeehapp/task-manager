@@ -71,6 +71,16 @@ export type DashboardAttendanceItem = {
   allocations: DashboardAttendanceAllocation[];
 };
 
+export type DashboardRejectedLeaveItem = {
+  id: string;
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  rejectionReason: string | null;
+  href: string;
+};
+
 export type LeadershipTodayStatus = "missing" | "working" | "recorded";
 
 export type LeadershipProjectHealth = "on_track" | "overdue";
@@ -156,6 +166,7 @@ export type EmployeeDashboard = {
   /** Open tasks (todo / in_progress / blocked), sorted for a compact dashboard snippet. */
   openTasks: DashboardTaskItem[];
   weekAttendance: DashboardAttendanceItem[];
+  rejectedLeave: DashboardRejectedLeaveItem[];
   attendanceSummary: DashboardAttendanceSummary;
   myRequests: DashboardRequestItem[];
 };

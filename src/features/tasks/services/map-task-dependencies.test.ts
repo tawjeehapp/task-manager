@@ -70,4 +70,31 @@ describe("mapTask dependency aggregates", () => {
     const task = mapTask(baseRow);
     expect(task.incompleteDependencies).toBeUndefined();
   });
+
+  it("omits employee numbers when includeEmployeeNumber is false", () => {
+    const incompleteDependencies: IncompleteDependencySummary[] = [
+      {
+        id: "blocker-1",
+        title: "Prerequisite design",
+        status: "in_progress",
+        dueDate: "2026-08-02",
+        assignee: {
+          id: "u3",
+          fullName: "Blocker Owner",
+          employeeNumber: "1003",
+        },
+      },
+    ];
+
+    const task = mapTask(baseRow, {
+      incompleteDependencies,
+      includeEmployeeNumber: false,
+    });
+
+    expect(task.assignee).toEqual({ id: "u1", fullName: "Assignee" });
+    expect(task.incompleteDependencies?.[0]?.assignee).toEqual({
+      id: "u3",
+      fullName: "Blocker Owner",
+    });
+  });
 });

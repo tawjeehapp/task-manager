@@ -9,7 +9,8 @@ export type ProjectDepartmentSummary = {
 export type ProjectUserSummary = {
   id: string;
   fullName: string;
-  employeeNumber: string;
+  /** Omitted when the viewer is an employee. */
+  employeeNumber?: string;
 };
 
 export type Project = {

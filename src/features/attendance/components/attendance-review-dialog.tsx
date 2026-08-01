@@ -66,13 +66,17 @@ export function AttendanceReviewDialog({
               <div>
                 <dt className="text-muted-foreground">{t("clockInOutColumn")}</dt>
                 <dd className="font-medium">
-                  {timeRangeLabel(
-                    record.clockIn,
-                    record.clockOut,
-                    record.breakMinutes,
-                  )}
+                  {timeRangeLabel(record.clockIn, record.clockOut)}
                 </dd>
               </div>
+              {record.breakMinutes > 0 ? (
+                <div>
+                  <dt className="text-muted-foreground">{t("breakLabel")}</dt>
+                  <dd className="text-muted-foreground">
+                    {t("breakMinutesValue", { minutes: record.breakMinutes })}
+                  </dd>
+                </div>
+              ) : null}
               <div>
                 <dt className="text-muted-foreground">{t("netHoursColumn")}</dt>
                 <dd className="font-medium">
