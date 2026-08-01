@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
@@ -23,7 +23,6 @@ import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
-import { TabPanel, Tabs } from "@/components/shared/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,6 +128,23 @@ async function fetchAssigneeOptions(
   );
 }
 
+function PropertyRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1 border-b border-border py-2.5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+      <dt className="text-muted-foreground shrink-0 text-xs font-medium">
+        {label}
+      </dt>
+      <dd className="min-w-0 text-sm sm:text-end">{children}</dd>
+    </div>
+  );
+}
+
 export function TaskDetailClient({
   taskId,
   canAssign,
@@ -140,7 +156,6 @@ export function TaskDetailClient({
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("overview");
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [excusalOpen, setExcusalOpen] = useState(false);
   const [requestedDate, setRequestedDate] = useState("");
@@ -155,11 +170,7 @@ export function TaskDetailClient({
 
   const departmentId = taskQuery.data?.project?.departmentId;
   const assigneesQuery = useQuery({
-    queryKey: [
-      "task-assignees",
-      taskQuery.data?.projectId,
-      departmentId,
-    ],
+    queryKey: ["task-assignees", taskQuery.data?.projectId, departmentId],
     queryFn: () =>
       fetchAssigneeOptions(taskQuery.data!.projectId, departmentId!),
     enabled: Boolean(
@@ -336,15 +347,16 @@ export function TaskDetailClient({
 
   const patchMutation = useMutation({
     mutationFn: async (values: UpdateTaskInput) => {
+      const { status: _status, ...rest } = values;
       const response = await fetch(`/api/tasks/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...values,
-          assignedTo: values.assignedTo || null,
-          startDate: values.startDate || null,
-          dueDate: values.dueDate || null,
-          description: values.description || null,
+          ...rest,
+          assignedTo: rest.assignedTo || null,
+          startDate: rest.startDate || null,
+          dueDate: rest.dueDate || null,
+          description: rest.description || null,
         }),
       });
       const payload = (await response.json()) as {
@@ -373,8 +385,10 @@ export function TaskDetailClient({
       if (!response.ok) {
         throw new Error(payload.error?.message ?? t("updateFailed"));
       }
+      return status;
     },
-    onSuccess: async () => {
+    onSuccess: async (status) => {
+      editForm.setValue("status", status as UpdateTaskInput["status"]);
       setSuccessMessage(t("statusUpdateSuccess"));
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
@@ -406,6 +420,14 @@ export function TaskDetailClient({
     return t(`priority_${priority}` as "priority_low");
   }
 
+  const asideClassName =
+    "min-w-0 space-y-4 rounded-xl bg-muted p-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto";
+  const mainPanelClassName =
+    "space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm";
+  const sidePanelClassName =
+    "space-y-3 rounded-lg border border-border/80 bg-card p-3 shadow-sm";
+  const sectionTitleClassName = "text-sm font-semibold tracking-tight text-primary";
+
   return (
     <div className="space-y-6">
       <div>
@@ -425,72 +447,90 @@ export function TaskDetailClient({
         />
         <PageHeader
           title={task.title}
-          description={task.project?.name ?? undefined}
+          description={
+            task.projectId && task.project?.name ? (
+              <Link
+                href={`/projects/${task.projectId}`}
+                className="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+              >
+                {task.project.name}
+              </Link>
+            ) : undefined
+          }
           actions={
-            <div className="flex flex-wrap gap-2">
-              {task.projectId ? (
-                <Link
-                  href={`/projects/${task.projectId}`}
-                  className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
+            <div className="flex flex-wrap items-center gap-2">
+              {canChangeStatus ? (
+                <select
+                  aria-label={t("status")}
+                  className="border-input bg-background h-8 rounded-md border px-2 text-sm"
+                  value={task.status}
+                  disabled={statusMutation.isPending}
+                  onChange={(event) =>
+                    statusMutation.mutate(event.target.value)
+                  }
                 >
-                  {t("viewProject")}
-                </Link>
-              ) : null}
-              {isAssignee && !hasPendingExtension ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setRequestError(null);
-                    setRequestedDate("");
-                    setRequestReason("");
-                    setExtensionOpen(true);
-                  }}
-                >
-                  {tReq("requestExtension")}
-                </Button>
-              ) : null}
-              {isAssignee && hasPendingExtension ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setRequestError(null);
-                    setRequestedDate(
-                      pendingExtensionRequest?.requestedDate ?? "",
-                    );
-                    setRequestReason(pendingExtensionRequest?.reason ?? "");
-                    setExtensionOpen(true);
-                  }}
-                >
-                  {tReq("pendingExtension")}
-                </Button>
-              ) : null}
-              {isAssignee && !hasPendingExcusal ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setRequestError(null);
-                    setRequestReason("");
-                    setExcusalOpen(true);
-                  }}
-                >
-                  {tReq("requestExcusal")}
-                </Button>
-              ) : null}
-              {isAssignee && hasPendingExcusal ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setRequestError(null);
-                    setRequestReason(pendingExcusalRequest?.reason ?? "");
-                    setExcusalOpen(true);
-                  }}
-                >
-                  {tReq("pendingExcusal")}
-                </Button>
+                  {selectableTaskStatuses(task.status).map((status) => (
+                    <option key={status} value={status}>
+                      {statusLabel(status)}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex flex-col items-end gap-1">
+                  <Badge variant="secondary">{statusLabel(task.status)}</Badge>
+                  {statusLockedByDeps ? (
+                    <p className="text-muted-foreground max-w-48 text-end text-xs">
+                      {t("statusLockedByDependencies")}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+
+              {isAssignee ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRequestError(null);
+                      if (hasPendingExtension) {
+                        setRequestedDate(
+                          pendingExtensionRequest?.requestedDate ?? "",
+                        );
+                        setRequestReason(
+                          pendingExtensionRequest?.reason ?? "",
+                        );
+                      } else {
+                        setRequestedDate("");
+                        setRequestReason("");
+                      }
+                      setExtensionOpen(true);
+                    }}
+                  >
+                    {hasPendingExtension
+                      ? tReq("pendingExtension")
+                      : tReq("requestExtension")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRequestError(null);
+                      setRequestReason(
+                        hasPendingExcusal
+                          ? (pendingExcusalRequest?.reason ?? "")
+                          : "",
+                      );
+                      setExcusalOpen(true);
+                    }}
+                  >
+                    {hasPendingExcusal
+                      ? tReq("pendingExcusal")
+                      : tReq("requestExcusal")}
+                  </Button>
+                </>
               ) : null}
             </div>
           }
@@ -511,282 +551,217 @@ export function TaskDetailClient({
         </Alert>
       ) : null}
 
-      <Tabs
-        items={[
-          { id: "overview", label: t("tabOverview") },
-          { id: "dependencies", label: t("tabDependencies") },
-          { id: "comments", label: t("tabComments") },
-          { id: "attachments", label: t("tabAttachments") },
-          { id: "activity", label: t("tabActivity") },
-        ]}
-        value={activeTab}
-        onValueChange={setActiveTab}
-      >
-        <TabPanel when="overview" active={activeTab}>
-          <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[1fr_28rem] lg:items-start">
+        <section className={`min-w-0 ${mainPanelClassName}`}>
+          {canEditFull ? (
+            <div className="space-y-3">
+              <h2 className={sectionTitleClassName}>{t("detailsTitle")}</h2>
+              <div className="space-y-2">
+                <Label htmlFor="edit-title">{t("titleLabel")}</Label>
+                <Input
+                  id="edit-title"
+                  form="task-edit-form"
+                  {...editForm.register("title")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-description">{t("descriptionLabel")}</Label>
+                <textarea
+                  id="edit-description"
+                  form="task-edit-form"
+                  className="border-input bg-background min-h-28 w-full rounded-md border px-3 py-2 text-sm"
+                  {...editForm.register("description")}
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              <h2 className={sectionTitleClassName}>{t("descriptionLabel")}</h2>
+              {task.description ? (
+                <p className="text-sm whitespace-pre-wrap text-foreground">
+                  {task.description}
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  {t("noDescription")}
+                </p>
+              )}
+            </>
+          )}
+        </section>
+
+        <aside className={asideClassName}>
+          <section className={sidePanelClassName}>
+            <h2 className={sectionTitleClassName}>{t("properties")}</h2>
             {canEditFull ? (
-              <section className="space-y-4 rounded-lg border p-4">
-                <h2 className="text-lg font-semibold">{t("editTitle")}</h2>
-                <form
-                  className="space-y-4"
-                  onSubmit={editForm.handleSubmit((values) => {
-                    patchMutation.mutate(values);
-                  })}
-                >
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-title">{t("titleLabel")}</Label>
-                    <Input id="edit-title" {...editForm.register("title")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-description">
-                      {t("descriptionLabel")}
-                    </Label>
-                    <textarea
-                      id="edit-description"
-                      className="border-input bg-background min-h-24 w-full rounded-md border px-3 py-2 text-sm"
-                      {...editForm.register("description")}
+              <form
+                id="task-edit-form"
+                className="space-y-1"
+                onSubmit={editForm.handleSubmit((values) => {
+                  patchMutation.mutate(values);
+                })}
+              >
+                <dl>
+                  <PropertyRow label={t("priority")}>
+                    <select
+                      id="edit-priority"
+                      className="border-input bg-background h-8 w-full rounded-md border px-2 text-sm sm:max-w-40"
+                      {...editForm.register("priority")}
+                    >
+                      <option value="low">{priorityLabel("low")}</option>
+                      <option value="medium">{priorityLabel("medium")}</option>
+                      <option value="high">{priorityLabel("high")}</option>
+                    </select>
+                  </PropertyRow>
+                  <PropertyRow label={t("assignee")}>
+                    <AssigneeSelect
+                      id="edit-assignee"
+                      value={
+                        typeof watchedAssignee === "string"
+                          ? watchedAssignee
+                          : null
+                      }
+                      options={assignees}
+                      showEmployeeNumber
+                      showSelectedHint
+                      disabled={!canAssign}
+                      onChange={(userId) =>
+                        editForm.setValue("assignedTo", userId, {
+                          shouldDirty: true,
+                        })
+                      }
                     />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-status">{t("status")}</Label>
-                      <select
-                        id="edit-status"
-                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                        disabled={statusLockedByDeps}
-                        title={
-                          statusLockedByDeps
-                            ? t("statusLockedByDependencies")
-                            : undefined
-                        }
-                        {...editForm.register("status")}
-                      >
-                        {selectableTaskStatuses(editForm.watch("status") ?? task.status).map((status) => (
-                          <option key={status} value={status}>
-                            {statusLabel(status)}
-                          </option>
-                        ))}
-                      </select>
-                      {statusLockedByDeps ? (
-                        <p className="text-muted-foreground text-xs">
-                          {t("statusLockedByDependencies")}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-priority">{t("priority")}</Label>
-                      <select
-                        id="edit-priority"
-                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                        {...editForm.register("priority")}
-                      >
-                        <option value="low">{priorityLabel("low")}</option>
-                        <option value="medium">{priorityLabel("medium")}</option>
-                        <option value="high">{priorityLabel("high")}</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-assignee">{t("assignee")}</Label>
-                      <AssigneeSelect
-                        id="edit-assignee"
-                        value={
-                          typeof watchedAssignee === "string"
-                            ? watchedAssignee
-                            : null
-                        }
-                        options={assignees}
-                        showEmployeeNumber
-                        showSelectedHint
-                        disabled={!canAssign}
-                        onChange={(userId) =>
-                          editForm.setValue("assignedTo", userId, {
-                            shouldDirty: true,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-start">{t("startDate")}</Label>
-                      <Input
-                        id="edit-start"
-                        type="date"
-                        {...editForm.register("startDate")}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-due">{t("dueDate")}</Label>
-                      <Input
-                        id="edit-due"
-                        type="date"
-                        {...editForm.register("dueDate")}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-hours">{t("estimatedHours")}</Label>
-                      <Input
-                        id="edit-hours"
-                        type="number"
-                        step="0.5"
-                        min="0"
-                        {...editForm.register("estimatedHours", {
-                          setValueAs: (value) =>
-                            value === "" || value == null
-                              ? null
-                              : Number(value),
-                        })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-progress">
-                        {t("progressPercentage")}
-                      </Label>
-                      <Input
-                        id="edit-progress"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        {...editForm.register("progressPercentage", {
-                          setValueAs: (value) =>
-                            value === "" || value == null
-                              ? undefined
-                              : Number(value),
-                        })}
-                      />
-                    </div>
-                  </div>
-                  {patchMutation.isError ? (
-                    <Alert variant="destructive">
-                      <AlertDescription>
-                        {(patchMutation.error as Error).message}
-                      </AlertDescription>
-                    </Alert>
-                  ) : null}
-                  <Button type="submit" disabled={patchMutation.isPending}>
-                    {patchMutation.isPending
-                      ? tCommon("saving")
-                      : tCommon("save")}
-                  </Button>
-                </form>
-              </section>
-            ) : (
-              <>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="rounded-lg border p-4">
-                    <p className="text-muted-foreground text-sm">
-                      {t("status")}
-                    </p>
-                    {canChangeStatus ? (
-                      <select
-                        className="border-input bg-background mt-2 h-9 w-full rounded-md border px-3 text-sm"
-                        value={task.status}
-                        disabled={statusMutation.isPending}
-                        onChange={(event) =>
-                          statusMutation.mutate(event.target.value)
-                        }
-                      >
-                        {selectableTaskStatuses(task.status).map((status) => (
-                          <option key={status} value={status}>
-                            {statusLabel(status)}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <>
-                        <Badge className="mt-2" variant="secondary">
-                          {statusLabel(task.status)}
-                        </Badge>
-                        {statusLockedByDeps ? (
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            {t("statusLockedByDependencies")}
-                          </p>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-muted-foreground text-sm">
-                      {t("priority")}
-                    </p>
-                    <p className="mt-2 font-medium">
-                      {priorityLabel(task.priority)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-muted-foreground text-sm">
-                      {t("assignee")}
-                    </p>
-                    <p className="mt-2 font-medium">
-                      {task.assignee?.fullName ?? "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-muted-foreground text-sm">
-                      {t("startDate")}
-                    </p>
-                    <p className="mt-2 font-medium">{task.startDate ?? "—"}</p>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-muted-foreground text-sm">
-                      {t("dueDate")}
-                    </p>
-                    <p className="mt-2 font-medium">{task.dueDate ?? "—"}</p>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-muted-foreground text-sm">
-                      {t("estimatedHours")}
-                    </p>
-                    <p className="mt-2 font-medium">
-                      {task.estimatedHours != null ? task.estimatedHours : "—"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-4">
-                    <p className="text-muted-foreground text-sm">
-                      {t("progressPercentage")}
-                    </p>
-                    <p className="mt-2 font-medium">
-                      {task.progressPercentage ?? 0}%
-                    </p>
-                  </div>
-                </div>
-                {task.description ? (
-                  <p className="text-muted-foreground text-sm whitespace-pre-wrap">
-                    {task.description}
-                  </p>
+                  </PropertyRow>
+                  <PropertyRow label={t("startDate")}>
+                    <Input
+                      id="edit-start"
+                      type="date"
+                      className="h-8 sm:max-w-40"
+                      {...editForm.register("startDate")}
+                    />
+                  </PropertyRow>
+                  <PropertyRow label={t("dueDate")}>
+                    <Input
+                      id="edit-due"
+                      type="date"
+                      className="h-8 sm:max-w-40"
+                      {...editForm.register("dueDate")}
+                    />
+                  </PropertyRow>
+                  <PropertyRow label={t("estimatedHours")}>
+                    <Input
+                      id="edit-hours"
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      className="h-8 sm:max-w-40"
+                      {...editForm.register("estimatedHours", {
+                        setValueAs: (value) =>
+                          value === "" || value == null ? null : Number(value),
+                      })}
+                    />
+                  </PropertyRow>
+                  <PropertyRow label={t("progressPercentage")}>
+                    <Input
+                      id="edit-progress"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      className="h-8 sm:max-w-40"
+                      {...editForm.register("progressPercentage", {
+                        setValueAs: (value) =>
+                          value === "" || value == null
+                            ? undefined
+                            : Number(value),
+                      })}
+                    />
+                  </PropertyRow>
+                </dl>
+                {patchMutation.isError ? (
+                  <Alert variant="destructive" className="mt-3">
+                    <AlertDescription>
+                      {(patchMutation.error as Error).message}
+                    </AlertDescription>
+                  </Alert>
                 ) : null}
-              </>
+                <Button
+                  type="submit"
+                  className="mt-3 w-full"
+                  disabled={patchMutation.isPending}
+                >
+                  {patchMutation.isPending
+                    ? tCommon("saving")
+                    : tCommon("save")}
+                </Button>
+              </form>
+            ) : (
+              <dl>
+                <PropertyRow label={t("priority")}>
+                  <span className="font-medium">
+                    {priorityLabel(task.priority)}
+                  </span>
+                </PropertyRow>
+                <PropertyRow label={t("assignee")}>
+                  <span className="font-medium">
+                    {task.assignee?.fullName ?? "—"}
+                  </span>
+                </PropertyRow>
+                <PropertyRow label={t("startDate")}>
+                  <span className="font-medium">{task.startDate ?? "—"}</span>
+                </PropertyRow>
+                <PropertyRow label={t("dueDate")}>
+                  <span className="font-medium">{task.dueDate ?? "—"}</span>
+                </PropertyRow>
+                <PropertyRow label={t("estimatedHours")}>
+                  <span className="font-medium">
+                    {task.estimatedHours != null ? task.estimatedHours : "—"}
+                  </span>
+                </PropertyRow>
+                <PropertyRow label={t("progressPercentage")}>
+                  <span className="font-medium">
+                    {task.progressPercentage ?? 0}%
+                  </span>
+                </PropertyRow>
+              </dl>
             )}
-          </div>
-        </TabPanel>
+          </section>
 
-        <TabPanel when="dependencies" active={activeTab}>
-          <TaskDependenciesPanel
-            taskId={taskId}
-            projectId={task.projectId}
-            canManage={canEditFull}
-          />
-        </TabPanel>
+          <section className={sidePanelClassName}>
+            <h2 className={sectionTitleClassName}>{t("tabDependencies")}</h2>
+            <TaskDependenciesPanel
+              taskId={taskId}
+              projectId={task.projectId}
+              canManage={canEditFull}
+            />
+          </section>
 
-        <TabPanel when="comments" active={activeTab}>
-          <TaskCommentsPanel
-            taskId={taskId}
-            viewerId={viewerId}
-            canModerate={canEditFull}
-          />
-        </TabPanel>
+          <section className={sidePanelClassName}>
+            <h2 className={sectionTitleClassName}>{t("tabActivity")}</h2>
+            <TaskActivityPanel taskId={taskId} />
+          </section>
+        </aside>
 
-        <TabPanel when="attachments" active={activeTab}>
-          <TaskAttachmentsPanel
-            taskId={taskId}
-            viewerId={viewerId}
-            canModerate={canEditFull}
-          />
-        </TabPanel>
+        <div className="min-w-0 space-y-6">
+          <section className={mainPanelClassName}>
+            <h2 className={sectionTitleClassName}>{t("tabComments")}</h2>
+            <TaskCommentsPanel
+              taskId={taskId}
+              viewerId={viewerId}
+              canModerate={canEditFull}
+            />
+          </section>
 
-        <TabPanel when="activity" active={activeTab}>
-          <TaskActivityPanel taskId={taskId} />
-        </TabPanel>
-      </Tabs>
+          <section className={mainPanelClassName}>
+            <h2 className={sectionTitleClassName}>{t("tabAttachments")}</h2>
+            <TaskAttachmentsPanel
+              taskId={taskId}
+              viewerId={viewerId}
+              canModerate={canEditFull}
+            />
+          </section>
+        </div>
+      </div>
 
       <Dialog open={extensionOpen} onOpenChange={setExtensionOpen}>
         <DialogContent>

@@ -222,8 +222,13 @@ export function TaskDependenciesPanel({
 
       {items.length === 0 ? (
         <EmptyState
+          className="px-4 py-6"
           title={t("dependenciesEmptyTitle")}
-          description={t("dependenciesEmptyDescription")}
+          description={
+            canManage
+              ? t("dependenciesEmptyDescription")
+              : t("dependenciesEmptyDescriptionView")
+          }
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border">

@@ -202,7 +202,11 @@ export async function getTodayAttendance(
   if (error) {
     throw new ApiError("تعذر جلب حضور اليوم.", 500, "GET_ATTENDANCE_FAILED");
   }
-  return data ? mapRow(data) : null;
+  if (!data) {
+    return null;
+  }
+  const [withAllocations] = await attachDayAllocations([mapRow(data)]);
+  return withAllocations ?? mapRow(data);
 }
 
 async function assertAllocatedTasks(

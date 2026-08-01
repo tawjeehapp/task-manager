@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Clock, Link2 } from "lucide-react";
 
 import type { DashboardAttendanceItem } from "@/features/dashboard/types/dashboard.types";
 import { deriveAttendanceActions } from "@/features/dashboard/lib/derive-attendance-actions";
@@ -15,8 +15,9 @@ import {
   canEmployeeEditAttendance,
 } from "@/features/attendance/components/attendance-edit-dialog";
 import { AttendanceSubmitForm } from "@/features/attendance/components/attendance-submit-form";
+import { timeRangeLabel } from "@/features/attendance/components/attendance-display-utils";
 import { calendarDateInOrgTimezone } from "@/features/attendance/services/compute-hours";
-import { formatDate, formatDateTime } from "@/lib/dates";
+import { formatDate } from "@/lib/dates";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -156,22 +157,75 @@ export function EmployeeAttendanceWidget({
                   }}
                 />
               ) : today ? (
-                <div className="space-y-3">
-                  <Badge variant={uiStateBadgeVariant(today.uiState)}>
-                    {tAtt(`uiState_${today.uiState}`)}
-                  </Badge>
-                  <p className="text-sm">
-                    {tAtt("todaySummary", {
-                      in: formatDateTime(today.clockIn),
-                      out: today.clockOut
-                        ? formatDateTime(today.clockOut)
-                        : "—",
-                      hours:
-                        today.totalHours != null
-                          ? String(today.totalHours)
-                          : "—",
-                    })}
-                  </p>
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={uiStateBadgeVariant(today.uiState)}>
+                      {tAtt(`uiState_${today.uiState}`)}
+                    </Badge>
+                  </div>
+
+                  <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                    <div>
+                      <dt className="text-muted-foreground">
+                        {tAtt("clockInOutColumn")}
+                      </dt>
+                      <dd className="font-medium tabular-nums">
+                        {timeRangeLabel(
+                          today.clockIn,
+                          today.clockOut,
+                          today.breakMinutes,
+                        )}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-muted-foreground">
+                        {tAtt("netHoursColumn")}
+                      </dt>
+                      <dd className="font-medium tabular-nums">
+                        {today.totalHours != null
+                          ? tAtt("hoursValue", { hours: today.totalHours })
+                          : "—"}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">
+                      {tAtt("reviewAllocations")}
+                    </p>
+                    {today.allocations && today.allocations.length > 0 ? (
+                      <ul className="flex flex-col gap-1.5">
+                        {today.allocations.map((alloc, index) => (
+                          <li
+                            key={`${today.id}-${alloc.kind}-${alloc.taskId ?? index}`}
+                          >
+                            <span
+                              className={
+                                alloc.kind === "general"
+                                  ? "inline-flex max-w-full items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-950"
+                                  : "inline-flex max-w-full items-center gap-1 rounded-full bg-teal-50 px-2.5 py-1 text-xs text-teal-900"
+                              }
+                            >
+                              <Link2 className="size-3 shrink-0 opacity-70" />
+                              <span className="truncate">
+                                {alloc.kind === "general"
+                                  ? `${tAtt("entryTypeGeneral")}: ${alloc.reason ?? "—"}`
+                                  : alloc.title}
+                              </span>
+                              <span className="shrink-0 tabular-nums opacity-80">
+                                · {tAtt("hoursValue", { hours: alloc.hours })}
+                              </span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {tAtt("reviewAllocationsEmpty")}
+                      </p>
+                    )}
+                  </div>
+
                   {today.uiState === "rejected" && today.rejectionReason ? (
                     <p className="text-destructive text-sm">
                       {tAtt("rejectionReason", {
@@ -179,11 +233,9 @@ export function EmployeeAttendanceWidget({
                       })}
                     </p>
                   ) : null}
+
                   {canEditToday ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => setEditRecord(today)}
-                    >
+                    <Button onClick={() => setEditRecord(today)}>
                       {tAtt("editAttendance")}
                     </Button>
                   ) : null}

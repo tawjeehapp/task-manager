@@ -115,6 +115,10 @@ export function TaskAttachmentsPanel({
     window.open(payload.data.url, "_blank", "noopener,noreferrer");
   }
 
+  function openFilePicker() {
+    inputRef.current?.click();
+  }
+
   if (attachmentsQuery.isLoading) {
     return <LoadingState />;
   }
@@ -130,25 +134,34 @@ export function TaskAttachmentsPanel({
   }
 
   const items = attachmentsQuery.data ?? [];
+  const uploading = uploadMutation.isPending;
+
+  const uploadButton = (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={uploading}
+      onClick={openFilePicker}
+    >
+      {uploading ? tCommon("saving") : t("attachmentUpload")}
+    </Button>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          ref={inputRef}
-          type="file"
-          className="text-sm"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              uploadMutation.mutate(file);
-            }
-          }}
-        />
-        <p className="text-muted-foreground text-xs">
-          {t("attachmentHint")}
-        </p>
-      </div>
+    <div className="space-y-3">
+      <input
+        ref={inputRef}
+        type="file"
+        className="sr-only"
+        tabIndex={-1}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            uploadMutation.mutate(file);
+          }
+        }}
+      />
 
       {uploadMutation.isError || deleteMutation.isError ? (
         <Alert variant="destructive">
@@ -163,54 +176,60 @@ export function TaskAttachmentsPanel({
 
       {items.length === 0 ? (
         <EmptyState
+          className="px-4 py-6"
           title={t("attachmentsEmptyTitle")}
-          description={t("attachmentsEmptyDescription")}
+          description={t("attachmentHint")}
+          action={uploadButton}
         />
       ) : (
-        <ul className="divide-border divide-y rounded-lg border">
-          {items.map((item) => {
-            const canDelete =
-              item.uploadedBy === viewerId || canModerate;
-            return (
-              <li
-                key={item.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-              >
-                <div className="min-w-0 space-y-1">
-                  <p className="truncate text-sm font-medium">
-                    {item.fileName}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {item.uploader?.fullName ?? "—"} ·{" "}
-                    {formatBytes(item.byteSize)} ·{" "}
-                    {new Date(item.createdAt).toLocaleString()}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void downloadAttachment(item.id)}
-                  >
-                    {t("attachmentDownload")}
-                  </Button>
-                  {canDelete ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {uploadButton}
+            <p className="text-muted-foreground text-xs">{t("attachmentHint")}</p>
+          </div>
+          <ul className="divide-border divide-y rounded-lg border">
+            {items.map((item) => {
+              const canDelete = item.uploadedBy === viewerId || canModerate;
+              return (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5"
+                >
+                  <div className="min-w-0 space-y-0.5">
+                    <p className="truncate text-sm font-medium">
+                      {item.fileName}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {item.uploader?.fullName ?? "—"} ·{" "}
+                      {formatBytes(item.byteSize)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(item.id)}
+                      onClick={() => void downloadAttachment(item.id)}
                     >
-                      {t("attachmentDelete")}
+                      {t("attachmentDownload")}
                     </Button>
-                  ) : null}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                    {canDelete ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate(item.id)}
+                      >
+                        {t("attachmentDelete")}
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </div>
   );
