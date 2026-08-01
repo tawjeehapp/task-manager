@@ -142,19 +142,35 @@ This section explains the live business rules as implemented — useful when wal
 
 ---
 
-## Quick start
+## Environments
 
-1. Install [Node.js 22+](https://nodejs.org/)
+| Env | Frontend | Supabase | Migrations / seed |
+|---|---|---|---|
+| **Dev** | Local (`make dev`) | Remote **dev** project | `make db-push` / `make seed` locally |
+| **Prod** | [Vercel](docs/deploy.md) (deploys from `main`) | Remote **prod** project | GitHub Actions `db push` on `main`; **no** `seed:dev` |
+
+Project refs live in [`supabase/projects.env`](supabase/projects.env). Full prod checklist: [docs/deploy.md](docs/deploy.md).
+
+## Quick start (dev)
+
+1. Install [Node.js 22+](https://nodejs.org/) and the [Supabase CLI](https://supabase.com/docs/guides/cli)
 2. Install dependencies: `npm install`
-3. Copy env: `cp .env.example .env.local` and fill Supabase values for **your** project
-4. Log in to Supabase CLI: `npm run supabase:login`
-5. Link the project: `npm run supabase:link` (same project as `.env.local`)
-6. Push migrations: `npm run supabase:db:push`
-7. Seed admin: `npm run seed:admin` (employee `0000` / password `0000`)
-8. Optional QA dataset: `npm run seed:dev` (deterministic M1–M9 users and scenarios)
-9. Run: `npm run dev`
+3. Create a remote **dev** Supabase project; set `SUPABASE_DEV_PROJECT_REF` in `supabase/projects.env`
+4. `cp .env.dev.example .env.dev` and fill API keys + `SUPABASE_DB_PASSWORD` from the **dev** project
+5. Log in to Supabase CLI: `npm run supabase:login`
+6. Activate and migrate:
 
-See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for full setup details.
+```bash
+make use-dev
+make db-push
+make seed-admin   # employee 0000 / password 0000; forces password change
+make seed         # optional QA dataset (dev only)
+make dev
+```
+
+Day-to-day: `make use-dev` → `make db-push` → `make seed` as needed → `make dev`.
+
+See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for full setup details and [docs/deploy.md](docs/deploy.md) for Vercel + prod migrations.
 
 ## Documentation
 
@@ -168,6 +184,7 @@ See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for f
 | [Coding standards](docs/spec/05-coding-standards.md) | Code patterns |
 | [Roadmap](docs/spec/06-roadmap.md) | Milestones |
 | [Development setup](docs/spec/07-development-setup.md) | Local environment |
+| [Deploy](docs/deploy.md) | Dev/prod env, Vercel, GitHub Actions migrations |
 
 ## List pages and navigation performance
 
@@ -187,6 +204,18 @@ Also:
 
 See [Coding standards — Performance](docs/spec/05-coding-standards.md#performance) and `.cursor/rules/project-rules.md`.
 
+## Makefile (preferred for env / DB)
+
+```bash
+make use-dev       # .env.dev → .env.local + link Supabase dev
+make use-prod      # .env.prod → .env.local + link Supabase prod (no seed)
+make db-push       # Apply migrations to the linked project
+make seed          # seed:dev — refuses unless active env is dev
+make seed-admin    # Initial admin 0000; must_change_password=true
+make status        # Active env + project refs
+make dev           # use-dev then npm run dev
+```
+
 ## Scripts
 
 ```bash
@@ -200,5 +229,5 @@ npm run supabase:login   # Log in to Supabase CLI
 npm run supabase:link    # Link repo to remote project
 npm run supabase:db:push # Apply migrations to linked project
 npm run seed:admin       # Seed initial admin 0000
-npm run seed:dev         # Deterministic M1–M7 QA dataset (idempotent)
+npm run seed:dev         # Deterministic M1–M9 QA dataset (idempotent; local/dev only)
 ```

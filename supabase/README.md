@@ -2,48 +2,53 @@
 
 Migrations live in `supabase/migrations/`.
 
-## Link the remote project (required once)
+Day-to-day work uses the root **Makefile** against the remote **dev** Supabase project. Production migrations run on push to `main` via GitHub Actions — see [docs/deploy.md](../docs/deploy.md).
 
-Your CLI must be logged into the **same** Supabase org/account that owns the project in `.env` / `.env.local`.
+## Project refs
+
+Committed refs (no secrets) in [`projects.env`](projects.env):
+
+- `SUPABASE_DEV_PROJECT_REF` — fill after creating the remote dev project
+- `SUPABASE_PROD_PROJECT_REF` — production (`fvbmsviiijlmxyahezng`)
+
+## Local (dev)
 
 ```bash
-# 1. Log in (opens browser)
+# Once: login, fill .env.dev, set SUPABASE_DEV_PROJECT_REF
 npm run supabase:login
+cp .env.dev.example .env.dev   # from repo root; fill keys + SUPABASE_DB_PASSWORD
 
-# 2. Confirm you can see projects
-npm run supabase:status
-
-# 3. Link this repo to the remote project (pick the correct project ref)
-npm run supabase:link
+make use-dev    # copies .env.dev → .env.local and links the CLI to dev
+make db-push    # apply all migrations
+make seed-admin # initial admin 0000 / 0000; must_change_password=true
+make seed       # optional QA dataset — Makefile refuses if active env is not dev
 ```
 
-`supabase link` writes project linkage under `supabase/.temp/` (gitignored). Re-run link if you switch projects.
+`make use-dev` / `make use-prod` rewrite `supabase/.temp/` link state. Re-run `use-*` when switching projects.
 
-## Apply migrations
+**Do not seed before `db push`.** Seeding needs `public.users`.
 
-Only after login + link:
-
-```bash
-npm run supabase:db:push
-```
-
-Then seed the initial admin:
-
-```bash
-npm run seed:admin
-```
-
-Admin credentials after seed:
+Admin credentials after `seed-admin`:
 
 - Employee number: `0000`
 - Temporary password: `0000`
 - Forced password change on first login
 
-**Do not seed before `db push`.** Seeding needs `public.users`.
+### Alternative: npm / SQL Editor
 
-### Alternative: SQL Editor
+```bash
+npm run supabase:link
+npm run supabase:db:push
+npm run seed:admin
+```
 
-If you prefer not to use the CLI, paste and run the migration file in the Supabase Dashboard SQL Editor for the correct project, then run `npm run seed:admin`.
+Or paste migration SQL in the Supabase Dashboard SQL Editor for the correct project, then seed.
+
+## Production
+
+- Push to `main` → [`.github/workflows/deploy-prod.yml`](../.github/workflows/deploy-prod.yml) runs `supabase db push` against prod.
+- **Never** run `make seed` / `npm run seed:dev` against prod.
+- One-time prod admin bootstrap (if needed): `make use-prod && make seed-admin`.
 
 ## RLS note
 
