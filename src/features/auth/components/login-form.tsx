@@ -72,8 +72,12 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         <form
+          method="post"
           className="space-y-4"
-          onSubmit={form.handleSubmit(onSubmit)}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void form.handleSubmit(onSubmit)(event);
+          }}
           noValidate
         >
           <div className="space-y-2">

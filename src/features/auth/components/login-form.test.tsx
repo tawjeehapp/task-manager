@@ -17,11 +17,13 @@ describe("LoginForm", () => {
   it("shows validation error for invalid employee number", async () => {
     const user = userEvent.setup();
 
-    render(
+    const { container } = render(
       <NextIntlClientProvider locale="ar" messages={ar}>
         <LoginForm />
       </NextIntlClientProvider>,
     );
+
+    expect(container.querySelector("form")).toHaveAttribute("method", "post");
 
     await user.type(screen.getByLabelText("رقم الموظف"), "12");
     await user.type(screen.getByLabelText("كلمة المرور"), "secret");
