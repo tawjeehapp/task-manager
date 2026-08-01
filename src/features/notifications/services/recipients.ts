@@ -4,6 +4,8 @@ import {
   getCurrentDepartmentIdForUser,
   getManagedDepartmentId,
 } from "@/features/departments/services/membership-helpers";
+import { ApiError } from "@/lib/api/errors";
+import type { Role } from "@/lib/permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /** Active admin user IDs (excluding optional actor). */
@@ -51,12 +53,31 @@ export async function getDepartmentManagerUserId(
 }
 
 /**
- * Approvers for a requester: their department manager (if any) + admins.
+ * Notification recipients for approval requests.
+ * - Department managers → active admins
+ * - Everyone else → their department manager only (admins are not notified; they can still override)
  * Excludes the requester.
  */
 export async function listApproverUserIdsForRequester(
   requesterId: string,
+  requesterRole?: Role,
 ): Promise<string[]> {
+  const admin = createAdminClient();
+
+  let role = requesterRole;
+  if (!role) {
+    const { data } = await admin
+      .from("users")
+      .select("role")
+      .eq("id", requesterId)
+      .maybeSingle();
+    role = (data?.role as Role | undefined) ?? "employee";
+  }
+
+  if (role === "department_manager") {
+    return listAdminUserIds(requesterId);
+  }
+
   const ids = new Set<string>();
   const deptId = await getCurrentDepartmentIdForUser(requesterId);
   if (deptId) {
@@ -65,10 +86,26 @@ export async function listApproverUserIdsForRequester(
       ids.add(managerId);
     }
   }
-  for (const adminId of await listAdminUserIds(requesterId)) {
-    ids.add(adminId);
-  }
   return [...ids];
+}
+
+/**
+ * Resolves notification recipients and rejects employee submissions when no
+ * department manager is available to receive the request.
+ */
+export async function listApproverUserIdsOrThrow(
+  requesterId: string,
+  requesterRole: Role,
+): Promise<string[]> {
+  const ids = await listApproverUserIdsForRequester(requesterId, requesterRole);
+  if (requesterRole !== "department_manager" && ids.length === 0) {
+    throw new ApiError(
+      "لا يمكن تقديم الطلب: لا يوجد مدير قسم معيّن لقسمك.",
+      409,
+      "NO_DEPARTMENT_MANAGER",
+    );
+  }
+  return ids;
 }
 
 /** Current member user IDs of a department. */

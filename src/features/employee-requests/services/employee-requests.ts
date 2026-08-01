@@ -1,6 +1,7 @@
 import "server-only";
 
 import type {
+  ApproveEmployeeRequestInput,
   CreateEmployeeRequestInput,
   ListEmployeeRequestsQuery,
   RejectEmployeeRequestInput,
@@ -20,13 +21,14 @@ import {
   getManagedDepartmentId,
 } from "@/features/departments/services/membership-helpers";
 import { notifySafe } from "@/features/notifications/services/notifications";
-import { listApproverUserIdsForRequester } from "@/features/notifications/services/recipients";
+import { listApproverUserIdsOrThrow } from "@/features/notifications/services/recipients";
+import { assertAssigneeAllowed } from "@/features/tasks/services/assert-can-access-task";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SELECT =
-  "id, user_id, task_id, type, reason, requested_date, status, reviewed_by, reviewed_at, rejection_reason, created_at, updated_at, user:users!user_id(id, full_name, employee_number), reviewed_by_user:users!reviewed_by(id, full_name, employee_number), task:tasks!task_id(id, title)";
+  "id, user_id, task_id, type, reason, requested_date, status, reviewed_by, reviewed_at, rejection_reason, created_at, updated_at, user:users!user_id(id, full_name, employee_number), reviewed_by_user:users!reviewed_by(id, full_name, employee_number), task:tasks!task_id(id, title, project_id)";
 
 export type EmployeeRequestListResult = {
   items: EmployeeRequest[];
@@ -194,6 +196,8 @@ export async function createEmployeeRequest(
   actor: AppUser,
   input: CreateEmployeeRequestInput,
 ): Promise<EmployeeRequest> {
+  const approvers = await listApproverUserIdsOrThrow(actor.id, actor.role);
+
   const admin = createAdminClient();
   const { data: task, error: taskError } = await admin
     .from("tasks")
@@ -249,7 +253,6 @@ export async function createEmployeeRequest(
 
   const created = mapEmployeeRequestRow(data as unknown as EmployeeRequestRow);
   const typeLabel = input.type === "extension" ? "تمديد مهمة" : "إعفاء من مهمة";
-  const approvers = await listApproverUserIdsForRequester(actor.id);
   await notifySafe(approvers, {
     type: "approval_request",
     title: `طلب ${typeLabel} بانتظار الاعتماد`,
@@ -395,6 +398,7 @@ export async function updateEmployeeRequest(
 export async function approveEmployeeRequest(
   actor: AppUser,
   id: string,
+  input: ApproveEmployeeRequestInput = {},
 ): Promise<EmployeeRequest> {
   const existing = await getRow(id);
   await assertCanApproveEmployeeRequest(actor, existing.user_id);
@@ -407,10 +411,61 @@ export async function approveEmployeeRequest(
     );
   }
 
+  let newAssignee: string | null = null;
+
+  if (existing.type === "excusal") {
+    newAssignee =
+      input.assignedTo === undefined ? null : input.assignedTo;
+
+    if (newAssignee === existing.user_id) {
+      throw new ApiError(
+        "لا يمكن إعادة إسناد المهمة إلى نفس الموظف المعفى.",
+        409,
+        "CANNOT_REASSIGN_TO_EXCUSED",
+      );
+    }
+
+    if (newAssignee) {
+      const lookup = createAdminClient();
+      const { data: task, error: taskError } = await lookup
+        .from("tasks")
+        .select("id, project_id")
+        .eq("id", existing.task_id)
+        .maybeSingle();
+
+      if (taskError || !task) {
+        throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+      }
+
+      const { data: project, error: projectError } = await lookup
+        .from("projects")
+        .select("id, department_id")
+        .eq("id", task.project_id)
+        .maybeSingle();
+
+      if (projectError || !project) {
+        throw new ApiError("تعذر التحقق من المشروع.", 500, "PROJECT_LOOKUP_FAILED");
+      }
+
+      await assertAssigneeAllowed(
+        task.project_id as string,
+        project.department_id as string,
+        newAssignee,
+      );
+    }
+  } else if (input.assignedTo !== undefined && input.assignedTo !== null) {
+    throw new ApiError(
+      "إعادة الإسناد متاحة فقط عند اعتماد الإعفاء.",
+      400,
+      "ASSIGNEE_ONLY_FOR_EXCUSAL",
+    );
+  }
+
   const admin = createAdminClient();
   const { error } = await admin.rpc("approve_employee_request", {
     p_request_id: id,
     p_reviewer_id: actor.id,
+    p_new_assignee: existing.type === "excusal" ? newAssignee : null,
   });
 
   if (error) {
@@ -426,6 +481,16 @@ export async function approveEmployeeRequest(
     entityType: "task",
     entityId: existing.task_id,
   });
+
+  if (existing.type === "excusal" && newAssignee && newAssignee !== actor.id) {
+    await notifySafe(newAssignee, {
+      type: "task_assigned",
+      title: "تم إسناد مهمة إليك",
+      message: existing.task?.title ?? "مهمة",
+      entityType: "task",
+      entityId: existing.task_id,
+    });
+  }
 
   return getEmployeeRequestById(actor, id);
 }

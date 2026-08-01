@@ -42,6 +42,7 @@ vi.mock("@/features/notifications/services/notifications", () => ({
 }));
 
 vi.mock("@/features/notifications/services/recipients", () => ({
+  listApproverUserIdsOrThrow: vi.fn(async () => ["mgr-1"]),
   listApproverUserIdsForRequester: vi.fn(async () => ["mgr-1"]),
 }));
 

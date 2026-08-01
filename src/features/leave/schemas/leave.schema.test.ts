@@ -5,6 +5,7 @@ import {
   createLeaveTypeSchema,
 } from "@/features/leave/schemas/leave.schema";
 import {
+  approveEmployeeRequestSchema,
   createEmployeeRequestSchema,
 } from "@/features/employee-requests/schemas/employee-request.schema";
 
@@ -96,6 +97,18 @@ describe("createEmployeeRequestSchema", () => {
         taskId: "11111111-1111-4111-8111-111111111111",
         type: "excusal",
         reason: "conflict with other work",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts optional assignedTo on approve", () => {
+    expect(approveEmployeeRequestSchema.safeParse({}).success).toBe(true);
+    expect(
+      approveEmployeeRequestSchema.safeParse({ assignedTo: null }).success,
+    ).toBe(true);
+    expect(
+      approveEmployeeRequestSchema.safeParse({
+        assignedTo: "11111111-1111-4111-8111-111111111111",
       }).success,
     ).toBe(true);
   });

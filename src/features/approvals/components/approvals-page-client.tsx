@@ -7,6 +7,7 @@ import { CalendarDays, Clock3, ClipboardList } from "lucide-react";
 
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import { AttendanceReviewDialog } from "@/features/attendance/components/attendance-review-dialog";
+import type { ProjectMember } from "@/features/projects/types/project.types";
 import type { EmployeeRequest } from "@/features/employee-requests/types/employee-request.types";
 import type { LeaveRequest } from "@/features/leave/types/leave.types";
 import { formatDate } from "@/lib/dates";
@@ -28,6 +29,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -90,6 +92,10 @@ export function ApprovalsPageClient({
   );
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [excusalTarget, setExcusalTarget] = useState<EmployeeRequest | null>(
+    null,
+  );
+  const [excusalAssigneeId, setExcusalAssigneeId] = useState("");
 
   const leaveQuery = useQuery({
     queryKey: ["approvals-leave"],
@@ -172,6 +178,18 @@ export function ApprovalsPageClient({
     (canApproveAttendance ? attendanceItems.length : 0) +
     (canApproveEmployeeRequest ? taskItems.length : 0);
 
+  const projectMembersQuery = useQuery({
+    queryKey: ["project-members", excusalTarget?.projectId],
+    enabled: Boolean(excusalTarget?.projectId),
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/projects/${excusalTarget!.projectId}/members`,
+      );
+      const data = await readApi<{ items: ProjectMember[] }>(response);
+      return data.items;
+    },
+  });
+
   const approveLeaveMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await fetch(`/api/leave-requests/${id}/approve`, {
@@ -206,15 +224,29 @@ export function ApprovalsPageClient({
   });
 
   const approveEmployeeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/employee-requests/${id}/approve`, {
-        method: "POST",
-      });
+    mutationFn: async (payload: {
+      id: string;
+      assignedTo?: string | null;
+    }) => {
+      const response = await fetch(
+        `/api/employee-requests/${payload.id}/approve`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            payload.assignedTo !== undefined
+              ? { assignedTo: payload.assignedTo }
+              : {},
+          ),
+        },
+      );
       return readApi(response);
     },
     onSuccess: async () => {
       setSuccessMessage(t("approveSuccess"));
       setActionError(null);
+      setExcusalTarget(null);
+      setExcusalAssigneeId("");
       await queryClient.invalidateQueries({ queryKey: ["approvals-extensions"] });
       await queryClient.invalidateQueries({ queryKey: ["approvals-excusals"] });
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -335,9 +367,14 @@ export function ApprovalsPageClient({
                           <Button
                             type="button"
                             size="sm"
-                            onClick={() =>
-                              approveEmployeeMutation.mutate(row.id)
-                            }
+                            onClick={() => {
+                              if (row.type === "excusal") {
+                                setExcusalAssigneeId("");
+                                setExcusalTarget(row);
+                                return;
+                              }
+                              approveEmployeeMutation.mutate({ id: row.id });
+                            }}
                           >
                             {t("approve")}
                           </Button>
@@ -508,6 +545,69 @@ export function ApprovalsPageClient({
           setRejectReason("");
         }}
       />
+
+      <Dialog
+        open={!!excusalTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setExcusalTarget(null);
+            setExcusalAssigneeId("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("approveExcusalTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("approveExcusalDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="excusalAssignee">{t("reassignOptional")}</Label>
+            <select
+              id="excusalAssignee"
+              className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+              value={excusalAssigneeId}
+              onChange={(event) => setExcusalAssigneeId(event.target.value)}
+              disabled={projectMembersQuery.isLoading}
+            >
+              <option value="">{t("leaveUnassigned")}</option>
+              {(projectMembersQuery.data ?? [])
+                .filter((member) => member.userId !== excusalTarget?.userId)
+                .map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.user?.fullName ?? member.userId}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setExcusalTarget(null);
+                setExcusalAssigneeId("");
+              }}
+            >
+              {tCommon("cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={approveEmployeeMutation.isPending}
+              onClick={() => {
+                if (!excusalTarget) return;
+                approveEmployeeMutation.mutate({
+                  id: excusalTarget.id,
+                  assignedTo: excusalAssigneeId || null,
+                });
+              }}
+            >
+              {t("approve")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!rejectTarget}

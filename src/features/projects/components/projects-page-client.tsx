@@ -298,7 +298,9 @@ export function ProjectsPageClient({
                       >
                         <option value="">{t("selectDepartment")}</option>
                         {(departmentsQuery.data ?? [])
-                          .filter((d) => d.status === "active")
+                          .filter(
+                            (d) => d.status === "active" && Boolean(d.managerId),
+                          )
                           .map((department) => (
                             <option key={department.id} value={department.id}>
                               {department.name}

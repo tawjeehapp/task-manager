@@ -209,24 +209,11 @@ export async function assignDepartmentManager(
   }
 
   if (managerId === null) {
-    if (dept.manager_id === null) {
-      return loadDepartmentById(departmentId);
-    }
-
-    const { error: clearError } = await admin
-      .from("departments")
-      .update({ manager_id: null })
-      .eq("id", departmentId);
-
-    if (clearError) {
-      throw new ApiError(
-        "تعذر إزالة مدير القسم.",
-        500,
-        "CLEAR_MANAGER_FAILED",
-      );
-    }
-
-    return loadDepartmentById(departmentId);
+    throw new ApiError(
+      "لا يمكن إزالة مدير القسم. استبدله بمدير آخر.",
+      409,
+      "MANAGER_CLEAR_FORBIDDEN",
+    );
   }
 
   if (dept.manager_id === managerId) {
@@ -235,7 +222,7 @@ export async function assignDepartmentManager(
 
   if (dept.manager_id !== null && !replaceExistingManager) {
     throw new ApiError(
-      "القسم لديه مدير حالياً. يجب إزالة المدير الحالي أو تأكيد الاستبدال.",
+      "القسم لديه مدير حالياً. يجب تأكيد الاستبدال بمدير آخر.",
       409,
       "MANAGER_ALREADY_ASSIGNED",
     );

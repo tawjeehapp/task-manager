@@ -25,7 +25,7 @@ export const updateDepartmentSchema = z
         return value === "" ? null : value;
       }),
     status: departmentStatusSchema.optional(),
-    managerId: z.string().uuid().nullable().optional(),
+    managerId: z.string().uuid().optional(),
     replaceExistingManager: z.boolean().optional(),
   })
   .refine(

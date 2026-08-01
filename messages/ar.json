@@ -956,7 +956,11 @@
     "emptyExcusalsTitle": "لا توجد طلبات إعفاء",
     "emptyExcusalsDescription": "ستظهر طلبات الإعفاء من المهام هنا.",
     "actions": "إجراءات",
-    "reason": "السبب"
+    "reason": "السبب",
+    "approveExcusalTitle": "اعتماد الإعفاء",
+    "approveExcusalDescription": "يمكنك اختيارياً إسناد المهمة إلى عضو آخر في المشروع، أو تركها بدون إسناد.",
+    "reassignOptional": "إعادة الإسناد إلى (اختياري)",
+    "leaveUnassigned": "تركها بدون إسناد"
   },
   "employeeRequests": {
     "requestExtension": "طلب تمديد",

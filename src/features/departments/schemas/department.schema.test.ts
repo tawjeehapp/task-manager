@@ -26,6 +26,13 @@ describe("department schemas", () => {
     }
   });
 
+  it("rejects null managerId on update (replace-only)", () => {
+    const result = updateDepartmentSchema.safeParse({
+      managerId: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("requires replaceExistingManager optional on update with managerId", () => {
     const result = updateDepartmentSchema.safeParse({
       managerId: UUID_A,

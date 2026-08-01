@@ -146,7 +146,6 @@ export function DepartmentDetailClient({
   const [removeMember, setRemoveMember] = useState<DepartmentMembership | null>(
     null,
   );
-  const [clearManagerOpen, setClearManagerOpen] = useState(false);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -348,15 +347,6 @@ export function DepartmentDetailClient({
                     ? t("replaceManager")
                     : t("assignManager")}
                 </Button>
-                {department.managerId ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setClearManagerOpen(true)}
-                  >
-                    {t("clearManager")}
-                  </Button>
-                ) : null}
                 <Button
                   type="button"
                   variant="outline"
@@ -777,44 +767,6 @@ export function DepartmentDetailClient({
                   setReplaceConfirm(false);
                   setManagerOpen(false);
                   setSuccessMessage(t("assignManagerSuccess"));
-                } catch (error) {
-                  setActionError(
-                    error instanceof Error
-                      ? error.message
-                      : tCommon("unexpectedError"),
-                  );
-                }
-              }}
-            >
-              {tCommon("confirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={clearManagerOpen} onOpenChange={setClearManagerOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("confirmClearManagerTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("confirmClearManagerDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setClearManagerOpen(false)}
-            >
-              {tCommon("cancel")}
-            </Button>
-            <Button
-              type="button"
-              onClick={async () => {
-                try {
-                  await patchMutation.mutateAsync({ managerId: null });
-                  setClearManagerOpen(false);
-                  setSuccessMessage(t("clearManagerSuccess"));
                 } catch (error) {
                   setActionError(
                     error instanceof Error

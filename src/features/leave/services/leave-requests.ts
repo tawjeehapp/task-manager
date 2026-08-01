@@ -19,7 +19,7 @@ import {
   getManagedDepartmentId,
 } from "@/features/departments/services/membership-helpers";
 import { notifySafe } from "@/features/notifications/services/notifications";
-import { listApproverUserIdsForRequester } from "@/features/notifications/services/recipients";
+import { listApproverUserIdsOrThrow } from "@/features/notifications/services/recipients";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -211,6 +211,8 @@ export async function createLeaveRequest(
   actor: AppUser,
   input: CreateLeaveRequestInput,
 ): Promise<LeaveRequest> {
+  const approvers = await listApproverUserIdsOrThrow(actor.id, actor.role);
+
   let days: number;
   try {
     days = computeWorkingDays(input.startDate, input.endDate);
@@ -235,7 +237,6 @@ export async function createLeaveRequest(
 
   const inserted = data as LeaveRequestRow;
 
-  const approvers = await listApproverUserIdsForRequester(actor.id);
   await notifySafe(approvers, {
     type: "approval_request",
     title: "طلب إجازة بانتظار الاعتماد",

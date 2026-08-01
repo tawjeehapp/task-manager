@@ -91,4 +91,58 @@ describe("updateUser role demotion", () => {
       status: 409,
     });
   });
+
+  it("rejects deactivating a manager who still manages a department", async () => {
+    createAdminClientMock.mockImplementation(() => {
+      return {
+        from: (table: string) => {
+          if (table === "users") {
+            return {
+              select: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: {
+                      id: "mgr-1",
+                      auth_user_id: "auth-mgr",
+                      employee_number: "1001",
+                      full_name: "Manager",
+                      email: "1001@task-manager.com",
+                      phone: null,
+                      avatar_url: null,
+                      role: "department_manager",
+                      is_active: true,
+                      must_change_password: false,
+                      created_at: "",
+                      updated_at: "",
+                    },
+                    error: null,
+                  }),
+                }),
+              }),
+            };
+          }
+          if (table === "departments") {
+            return {
+              select: vi.fn().mockReturnValue({
+                eq: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: "dept-1" },
+                    error: null,
+                  }),
+                }),
+              }),
+            };
+          }
+          return {};
+        },
+      } as never;
+    });
+
+    await expect(
+      updateUser(makeActor(), "mgr-1", { isActive: false }),
+    ).rejects.toMatchObject({
+      code: "USER_MANAGES_DEPARTMENT",
+      status: 409,
+    });
+  });
 });

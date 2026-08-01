@@ -162,7 +162,7 @@ export async function createProject(
 
   const { data: department, error: deptError } = await admin
     .from("departments")
-    .select("id, status")
+    .select("id, status, manager_id")
     .eq("id", input.departmentId)
     .maybeSingle();
 
@@ -179,6 +179,14 @@ export async function createProject(
       "لا يمكن إنشاء مشروع في قسم مؤرشف.",
       409,
       "DEPARTMENT_ARCHIVED",
+    );
+  }
+
+  if (!department.manager_id) {
+    throw new ApiError(
+      "لا يمكن إنشاء مشروع في قسم بدون مدير معيّن.",
+      409,
+      "DEPARTMENT_HAS_NO_MANAGER",
     );
   }
 

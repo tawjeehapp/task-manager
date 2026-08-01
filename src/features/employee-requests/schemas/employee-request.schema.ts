@@ -53,6 +53,10 @@ export const rejectEmployeeRequestSchema = z.object({
   reason: z.string().trim().min(2, "سبب الرفض مطلوب"),
 });
 
+export const approveEmployeeRequestSchema = z.object({
+  assignedTo: z.string().uuid().nullable().optional(),
+});
+
 export const listEmployeeRequestsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce
@@ -77,6 +81,9 @@ export type UpdateEmployeeRequestInput = z.infer<
 >;
 export type RejectEmployeeRequestInput = z.infer<
   typeof rejectEmployeeRequestSchema
+>;
+export type ApproveEmployeeRequestInput = z.infer<
+  typeof approveEmployeeRequestSchema
 >;
 export type ListEmployeeRequestsQuery = z.infer<
   typeof listEmployeeRequestsQuerySchema

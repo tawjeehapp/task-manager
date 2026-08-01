@@ -62,12 +62,17 @@ export async function updateUser(
     );
   }
 
-  // Cannot demote a department manager while they still manage a department.
-  if (
+  // Cannot demote or deactivate a department manager while they still manage a department.
+  const demotingManager =
     input.role !== undefined &&
     current.role === "department_manager" &&
-    input.role !== "department_manager"
-  ) {
+    input.role !== "department_manager";
+  const deactivatingManager =
+    input.isActive === false &&
+    current.isActive &&
+    current.role === "department_manager";
+
+  if (demotingManager || deactivatingManager) {
     const { data: managedDept, error: managedError } = await admin
       .from("departments")
       .select("id")
@@ -80,7 +85,9 @@ export async function updateUser(
 
     if (managedDept) {
       throw new ApiError(
-        "لا يمكن تغيير دور مدير القسم قبل إزالة تعيينه كمدير للقسم.",
+        demotingManager
+          ? "لا يمكن تغيير دور مدير القسم قبل استبداله بمدير آخر."
+          : "لا يمكن تعطيل مدير القسم قبل استبداله بمدير آخر.",
         409,
         "USER_MANAGES_DEPARTMENT",
       );

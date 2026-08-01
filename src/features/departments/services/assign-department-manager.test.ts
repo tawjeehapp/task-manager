@@ -34,6 +34,33 @@ describe("assignDepartmentManager", () => {
     createAdminClientMock.mockReset();
   });
 
+  it("rejects clearing the department manager", async () => {
+    createAdminClientMock.mockImplementation(() => {
+      return {
+        from: () =>
+          chain({
+            data: {
+              id: "dept-1",
+              name: "A",
+              description: null,
+              manager_id: "mgr-old",
+              status: "active",
+              created_at: "",
+              updated_at: "",
+            },
+            error: null,
+          }),
+      } as never;
+    });
+
+    await expect(
+      assignDepartmentManager("dept-1", null, false),
+    ).rejects.toMatchObject({
+      code: "MANAGER_CLEAR_FORBIDDEN",
+      status: 409,
+    });
+  });
+
   it("rejects silent overwrite when manager already assigned", async () => {
     let call = 0;
     createAdminClientMock.mockImplementation(() => {

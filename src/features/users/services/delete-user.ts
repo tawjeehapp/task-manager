@@ -40,6 +40,24 @@ export async function deleteUser(actor: AppUser, id: string): Promise<void> {
     }
   }
 
+  const { data: managedDept, error: managedError } = await admin
+    .from("departments")
+    .select("id")
+    .eq("manager_id", id)
+    .maybeSingle();
+
+  if (managedError) {
+    throw new ApiError("تعذر التحقق من إدارة القسم.", 500, "GET_DEPARTMENT_FAILED");
+  }
+
+  if (managedDept) {
+    throw new ApiError(
+      "لا يمكن حذف مدير القسم قبل استبداله بمدير آخر.",
+      409,
+      "USER_MANAGES_DEPARTMENT",
+    );
+  }
+
   const { error: deleteProfileError } = await admin
     .from("users")
     .delete()

@@ -956,7 +956,11 @@
     "emptyExcusalsTitle": "No excusal requests",
     "emptyExcusalsDescription": "Pending task excusals will appear here.",
     "actions": "Actions",
-    "reason": "Reason"
+    "reason": "Reason",
+    "approveExcusalTitle": "Approve excusal",
+    "approveExcusalDescription": "Optionally assign the task to another project member, or leave it unassigned.",
+    "reassignOptional": "Reassign to (optional)",
+    "leaveUnassigned": "Leave unassigned"
   },
   "employeeRequests": {
     "requestExtension": "Request extension",

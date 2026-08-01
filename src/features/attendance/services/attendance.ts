@@ -28,7 +28,7 @@ import {
   getManagedDepartmentId,
 } from "@/features/departments/services/membership-helpers";
 import { notifySafe } from "@/features/notifications/services/notifications";
-import { listApproverUserIdsForRequester } from "@/features/notifications/services/recipients";
+import { listApproverUserIdsOrThrow } from "@/features/notifications/services/recipients";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -322,6 +322,8 @@ export async function submitAttendance(
   viewer: AppUser,
   input: SubmitAttendanceInput,
 ): Promise<AttendanceRecord> {
+  const approvers = await listApproverUserIdsOrThrow(viewer.id, viewer.role);
+
   let clockInAt: string;
   let clockOutAt: string;
   try {
@@ -404,7 +406,6 @@ export async function submitAttendance(
     );
   }
 
-  const approvers = await listApproverUserIdsForRequester(viewer.id);
   await notifySafe(approvers, {
     type: "approval_request",
     title: "حضور بانتظار الاعتماد",
@@ -533,7 +534,7 @@ export async function resubmitAttendance(
 
   const record = mapRow(data);
   if (wasRejected) {
-    const approvers = await listApproverUserIdsForRequester(viewer.id);
+    const approvers = await listApproverUserIdsOrThrow(viewer.id, viewer.role);
     await notifySafe(approvers, {
       type: "approval_request",
       title: "حضور بانتظار الاعتماد",
@@ -647,7 +648,7 @@ export async function updateAttendance(
 
   const record = mapRow(data);
   if (employeeResubmit && existing.status === "rejected") {
-    const approvers = await listApproverUserIdsForRequester(actor.id);
+    const approvers = await listApproverUserIdsOrThrow(actor.id, actor.role);
     await notifySafe(approvers, {
       type: "approval_request",
       title: "حضور بانتظار الاعتماد",
