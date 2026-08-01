@@ -37,7 +37,6 @@ describe("announcement schemas", () => {
     const query = listAnnouncementsQuerySchema.parse({});
     expect(query.page).toBe(1);
     expect(query.pageSize).toBe(25);
-    expect(query.status).toBe("active");
   });
 
   it("accepts mark-read id list", () => {

@@ -9,6 +9,21 @@ export type AttendanceUiState =
   | "approved"
   | "rejected";
 
+/** Assigned, non-blocked, non-completed task frozen at submit/resubmit. */
+export type EligibleTaskSnapshot = {
+  id: string;
+  title: string;
+  status: "todo" | "in_progress";
+};
+
+export type AttendanceAllocationSummary = {
+  kind: "task" | "general";
+  taskId: string | null;
+  title: string;
+  hours: number;
+  reason: string | null;
+};
+
 export type AttendanceRecord = {
   id: string;
   userId: string;
@@ -24,6 +39,9 @@ export type AttendanceRecord = {
   createdAt: string;
   updatedAt: string;
   uiState: AttendanceUiState;
+  eligibleTasksSnapshot: EligibleTaskSnapshot[];
+  /** Day work-log allocations; present when list/get attaches them for review. */
+  allocations?: AttendanceAllocationSummary[];
   user?: {
     id: string;
     fullName: string;
@@ -50,6 +68,7 @@ export type AttendanceRow = {
   rejection_reason: string | null;
   created_at: string;
   updated_at: string;
+  eligible_tasks_snapshot?: EligibleTaskSnapshot[] | null;
   user?: {
     id: string;
     full_name: string;
@@ -70,6 +89,28 @@ export function deriveAttendanceUiState(
   if (status === "rejected") return "rejected";
   if (clockOut == null) return "currently_working";
   return "awaiting_approval";
+}
+
+function mapEligibleTasksSnapshot(
+  value: AttendanceRow["eligible_tasks_snapshot"],
+): EligibleTaskSnapshot[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter(
+      (row): row is EligibleTaskSnapshot =>
+        row != null &&
+        typeof row === "object" &&
+        typeof row.id === "string" &&
+        typeof row.title === "string" &&
+        (row.status === "todo" || row.status === "in_progress"),
+    )
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      status: row.status,
+    }));
 }
 
 export function mapAttendanceRow(row: AttendanceRow): AttendanceRecord {
@@ -93,6 +134,7 @@ export function mapAttendanceRow(row: AttendanceRow): AttendanceRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     uiState: deriveAttendanceUiState(row.status, row.clock_out),
+    eligibleTasksSnapshot: mapEligibleTasksSnapshot(row.eligible_tasks_snapshot),
     user: row.user
       ? {
           id: row.user.id,

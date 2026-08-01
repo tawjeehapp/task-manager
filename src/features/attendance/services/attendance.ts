@@ -19,8 +19,10 @@ import type {
 } from "@/features/attendance/schemas/attendance.schema";
 import {
   mapAttendanceRow,
+  type AttendanceAllocationSummary,
   type AttendanceRecord,
   type AttendanceRow,
+  type EligibleTaskSnapshot,
 } from "@/features/attendance/types/attendance.types";
 import {
   getManagedDepartmentId,
@@ -31,8 +33,100 @@ import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const ATTENDANCE_ELIGIBLE_STATUSES = ["todo", "in_progress"] as const;
+
 const ATTENDANCE_SELECT =
-  "id, user_id, date, clock_in, clock_out, break_minutes, total_hours, status, approved_by, approved_at, rejection_reason, created_at, updated_at, user:users!user_id(id, full_name, employee_number), approved_by_user:users!approved_by(id, full_name, employee_number)";
+  "id, user_id, date, clock_in, clock_out, break_minutes, total_hours, status, approved_by, approved_at, rejection_reason, eligible_tasks_snapshot, created_at, updated_at, user:users!user_id(id, full_name, employee_number), approved_by_user:users!approved_by(id, full_name, employee_number)";
+
+/** Assigned tasks the employee can allocate attendance hours to (excludes blocked/completed). */
+export async function listEligibleTasksForAttendance(
+  userId: string,
+): Promise<EligibleTaskSnapshot[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("tasks")
+    .select("id, title, status")
+    .eq("assigned_to", userId)
+    .in("status", [...ATTENDANCE_ELIGIBLE_STATUSES])
+    .order("title", { ascending: true });
+
+  if (error) {
+    throw new ApiError(
+      "تعذر جلب المهام المتاحة للدوام.",
+      500,
+      "LIST_ELIGIBLE_TASKS_FAILED",
+    );
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    title: row.title as string,
+    status: row.status as EligibleTaskSnapshot["status"],
+  }));
+}
+
+async function attachDayAllocations(
+  records: AttendanceRecord[],
+): Promise<AttendanceRecord[]> {
+  if (records.length === 0) {
+    return records;
+  }
+
+  const admin = createAdminClient();
+  const userIds = [...new Set(records.map((r) => r.userId))];
+  const dates = [...new Set(records.map((r) => r.date))];
+
+  const { data, error } = await admin
+    .from("work_logs")
+    .select("user_id, date, hours, task_id, description, task:tasks!task_id(id, title)")
+    .in("user_id", userIds)
+    .in("date", dates);
+
+  if (error) {
+    throw new ApiError(
+      "تعذر جلب توزيع ساعات الدوام.",
+      500,
+      "LIST_ATTENDANCE_ALLOCATIONS_FAILED",
+    );
+  }
+
+  const byKey = new Map<string, AttendanceAllocationSummary[]>();
+  for (const row of data ?? []) {
+    const userId = row.user_id as string;
+    const date = row.date as string;
+    const taskId = (row.task_id as string | null) ?? null;
+    const taskRaw = row.task as
+      | { id: string; title: string }
+      | { id: string; title: string }[]
+      | null;
+    const taskObj = Array.isArray(taskRaw) ? (taskRaw[0] ?? null) : taskRaw;
+    const key = `${userId}:${date}`;
+    const list = byKey.get(key) ?? [];
+    if (taskId) {
+      list.push({
+        kind: "task",
+        taskId,
+        title: taskObj?.title ?? "—",
+        hours: Number(row.hours),
+        reason: null,
+      });
+    } else {
+      list.push({
+        kind: "general",
+        taskId: null,
+        title: "",
+        hours: Number(row.hours),
+        reason: (row.description as string | null) ?? null,
+      });
+    }
+    byKey.set(key, list);
+  }
+
+  return records.map((record) => ({
+    ...record,
+    allocations: byKey.get(`${record.userId}:${record.date}`) ?? [],
+  }));
+}
 
 function mapRow(data: unknown): AttendanceRecord {
   return mapAttendanceRow(data as AttendanceRow);
@@ -89,7 +183,8 @@ export async function getAttendanceById(
 ): Promise<AttendanceRecord> {
   const row = await getAttendanceRow(id);
   await assertCanViewAttendanceUser(viewer, row.user_id);
-  return mapRow(row);
+  const [withAllocations] = await attachDayAllocations([mapRow(row)]);
+  return withAllocations ?? mapRow(row);
 }
 
 export async function getTodayAttendance(
@@ -260,6 +355,8 @@ export async function submitAttendance(
     );
   }
 
+  const eligibleTasksSnapshot = await listEligibleTasksForAttendance(viewer.id);
+
   const { data, error } = await admin
     .from("attendance_records")
     .insert({
@@ -270,6 +367,7 @@ export async function submitAttendance(
       break_minutes: input.breakMinutes,
       total_hours: totalHours,
       status: "pending",
+      eligible_tasks_snapshot: eligibleTasksSnapshot,
     })
     .select(ATTENDANCE_SELECT)
     .single();
@@ -401,6 +499,8 @@ export async function resubmitAttendance(
     taskIdsFromAllocations(input.allocations),
   );
 
+  const eligibleTasksSnapshot = await listEligibleTasksForAttendance(viewer.id);
+
   const wasRejected = existing.status === "rejected";
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -414,6 +514,7 @@ export async function resubmitAttendance(
       approved_by: null,
       approved_at: null,
       rejection_reason: null,
+      eligible_tasks_snapshot: eligibleTasksSnapshot,
       updated_at: nowIso(),
     })
     .eq("id", id)
@@ -739,7 +840,10 @@ export async function listAttendanceForViewer(
     throw new ApiError("تعذر جلب سجلات الحضور.", 500, "LIST_ATTENDANCE_FAILED");
   }
 
-  const items = (data ?? []).map((row) => mapRow(row));
+  let items = (data ?? []).map((row) => mapRow(row));
+  if (query.awaitingApproval) {
+    items = await attachDayAllocations(items);
+  }
   const total = count ?? 0;
 
   // Sum total_hours for current filter (separate query without pagination)

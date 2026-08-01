@@ -67,6 +67,7 @@ export type DashboardAttendanceItem = {
   totalHours: number | null;
   status: string;
   uiState: AttendanceUiState;
+  rejectionReason: string | null;
   allocations: DashboardAttendanceAllocation[];
 };
 

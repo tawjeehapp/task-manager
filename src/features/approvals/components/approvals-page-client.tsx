@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { CalendarDays, Clock3, ClipboardList } from "lucide-react";
 
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
+import { AttendanceReviewDialog } from "@/features/attendance/components/attendance-review-dialog";
 import type { EmployeeRequest } from "@/features/employee-requests/types/employee-request.types";
 import type { LeaveRequest } from "@/features/leave/types/leave.types";
 import { formatDate } from "@/lib/dates";
@@ -78,11 +79,15 @@ export function ApprovalsPageClient({
   canApproveAttendance,
 }: ApprovalsPageClientProps) {
   const t = useTranslations("approvals");
+  const tAttendance = useTranslations("attendance");
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [reviewRecord, setReviewRecord] = useState<AttendanceRecord | null>(
+    null,
+  );
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
@@ -193,6 +198,7 @@ export function ApprovalsPageClient({
     onSuccess: async () => {
       setSuccessMessage(t("approveSuccess"));
       setActionError(null);
+      setReviewRecord(null);
       await queryClient.invalidateQueries({ queryKey: ["approvals-attendance"] });
       await queryClient.invalidateQueries({ queryKey: ["attendance"] });
     },
@@ -237,6 +243,7 @@ export function ApprovalsPageClient({
       setActionError(null);
       setRejectTarget(null);
       setRejectReason("");
+      setReviewRecord(null);
       await queryClient.invalidateQueries({ queryKey: ["approvals-leave"] });
       await queryClient.invalidateQueries({ queryKey: ["approvals-attendance"] });
       await queryClient.invalidateQueries({ queryKey: ["approvals-extensions"] });
@@ -467,28 +474,13 @@ export function ApprovalsPageClient({
                           <TableCell>{formatDate(row.date)}</TableCell>
                           <TableCell>{row.user?.fullName ?? "—"}</TableCell>
                           <TableCell>{row.totalHours ?? "—"}</TableCell>
-                          <TableCell className="space-x-2 space-x-reverse">
+                          <TableCell>
                             <Button
                               type="button"
                               size="sm"
-                              onClick={() =>
-                                approveAttendanceMutation.mutate(row.id)
-                              }
+                              onClick={() => setReviewRecord(row)}
                             >
-                              {t("approve")}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                setRejectTarget({
-                                  kind: "attendance",
-                                  id: row.id,
-                                })
-                              }
-                            >
-                              {t("reject")}
+                              {tAttendance("review")}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -501,6 +493,21 @@ export function ApprovalsPageClient({
           ) : null}
         </div>
       </div>
+
+      <AttendanceReviewDialog
+        record={reviewRecord}
+        open={!!reviewRecord}
+        onOpenChange={(open) => {
+          if (!open) setReviewRecord(null);
+        }}
+        isApproving={approveAttendanceMutation.isPending}
+        onApprove={(id) => approveAttendanceMutation.mutate(id)}
+        onReject={(id) => {
+          setReviewRecord(null);
+          setRejectTarget({ kind: "attendance", id });
+          setRejectReason("");
+        }}
+      />
 
       <Dialog
         open={!!rejectTarget}

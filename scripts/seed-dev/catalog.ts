@@ -167,7 +167,6 @@ export const IDS = {
 
   announcementCompany: "a100000d-0000-4000-8000-000000000001",
   announcementDeptIt: "a100000d-0000-4000-8000-000000000002",
-  announcementExpired: "a100000d-0000-4000-8000-000000000003",
 
   notifSaraAssigned: "a100000e-0000-4000-8000-000000000001",
   notifAhmedApproval: "a100000e-0000-4000-8000-000000000002",
@@ -190,7 +189,6 @@ export const RESET_ID_SETS = {
   announcements: [
     IDS.announcementCompany,
     IDS.announcementDeptIt,
-    IDS.announcementExpired,
   ],
   employee_requests: [
     IDS.empReqPendingExtension,

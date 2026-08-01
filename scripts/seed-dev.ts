@@ -933,8 +933,6 @@ async function main() {
 
   // --- Milestone 7: Announcements + notifications ---
   const publishPast = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-  const expirePast = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const expireFuture = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   await upsertRows(admin, "announcements", [
     {
@@ -946,7 +944,6 @@ async function main() {
       department_id: null,
       priority: "high",
       publish_at: publishPast,
-      expires_at: expireFuture,
       created_by: users["0000"],
       updated_at: now,
     },
@@ -958,20 +955,7 @@ async function main() {
       department_id: IDS.deptIt,
       priority: "medium",
       publish_at: publishPast,
-      expires_at: null,
       created_by: users["1001"],
-      updated_at: now,
-    },
-    {
-      id: IDS.announcementExpired,
-      title: "إعلان منتهٍ — اجتماع الربع السابق",
-      content: "هذا الإعلان منتهٍ ويظهر في تبويب المنتهية فقط.",
-      audience_type: "company",
-      department_id: null,
-      priority: "low",
-      publish_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-      expires_at: expirePast,
-      created_by: users["0000"],
       updated_at: now,
     },
   ]);

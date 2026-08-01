@@ -8,6 +8,7 @@ import {
   AttendanceEditDialog,
   canEmployeeEditAttendance,
 } from "@/features/attendance/components/attendance-edit-dialog";
+import { AttendanceReviewDialog } from "@/features/attendance/components/attendance-review-dialog";
 import { AttendanceSubmitForm } from "@/features/attendance/components/attendance-submit-form";
 import { calendarDateInOrgTimezone } from "@/features/attendance/services/compute-hours";
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
@@ -121,6 +122,9 @@ export function AttendancePageClient({
   const [statusFilter, setStatusFilter] = useState("");
 
   const [approvalsPage, setApprovalsPage] = useState(1);
+  const [reviewRecord, setReviewRecord] = useState<AttendanceRecord | null>(
+    null,
+  );
   const [rejectTarget, setRejectTarget] = useState<AttendanceRecord | null>(
     null,
   );
@@ -237,6 +241,7 @@ export function AttendancePageClient({
     onSuccess: async () => {
       setSuccessMessage(t("approveSuccess"));
       setActionError(null);
+      setReviewRecord(null);
       await invalidateAttendance();
     },
     onError: (error: Error) => setActionError(error.message),
@@ -255,6 +260,7 @@ export function AttendancePageClient({
     onSuccess: async () => {
       setRejectTarget(null);
       setRejectReason("");
+      setReviewRecord(null);
       setSuccessMessage(t("rejectSuccess"));
       setActionError(null);
       await invalidateAttendance();
@@ -375,6 +381,7 @@ export function AttendancePageClient({
                 <AttendanceSubmitForm
                   viewerId={viewerId}
                   defaultDate={calendarDateInOrgTimezone()}
+                  lockDate
                   onSuccess={() => {
                     setActionError(null);
                     setSuccessMessage(t("submitSuccess"));
@@ -600,23 +607,12 @@ export function AttendancePageClient({
                           <TableCell>{formatDate(row.date)}</TableCell>
                           <TableCell>{row.user?.fullName ?? "—"}</TableCell>
                           <TableCell>{row.totalHours ?? "—"}</TableCell>
-                          <TableCell className="space-x-2 space-x-reverse">
+                          <TableCell>
                             <Button
                               size="sm"
-                              onClick={() => approveMutation.mutate(row.id)}
-                              disabled={approveMutation.isPending}
+                              onClick={() => setReviewRecord(row)}
                             >
-                              {t("approve")}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => {
-                                setRejectTarget(row);
-                                setRejectReason("");
-                              }}
-                            >
-                              {t("reject")}
+                              {t("review")}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -719,6 +715,22 @@ export function AttendancePageClient({
           ) : null}
         </TabPanel>
       </Tabs>
+
+      <AttendanceReviewDialog
+        record={reviewRecord}
+        open={!!reviewRecord}
+        onOpenChange={(open) => {
+          if (!open) setReviewRecord(null);
+        }}
+        isApproving={approveMutation.isPending}
+        onApprove={(id) => approveMutation.mutate(id)}
+        onReject={() => {
+          if (!reviewRecord) return;
+          setRejectTarget(reviewRecord);
+          setReviewRecord(null);
+          setRejectReason("");
+        }}
+      />
 
       <Dialog
         open={Boolean(rejectTarget)}

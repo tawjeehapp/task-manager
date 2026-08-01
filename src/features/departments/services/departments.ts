@@ -438,6 +438,10 @@ export async function listDepartmentsForViewer(
   viewer: AppUser,
   options: ListDepartmentsQuery,
 ): Promise<DepartmentsListResult> {
+  if (viewer.role === "employee") {
+    throw new ApiError("ليس لديك صلاحية لعرض الأقسام.", 403, "FORBIDDEN");
+  }
+
   const admin = createAdminClient();
   const page = options.page ?? 1;
   const pageSize = options.pageSize ?? 25;
@@ -471,24 +475,6 @@ export async function listDepartmentsForViewer(
 
   if (viewer.role === "department_manager") {
     builder = builder.eq("manager_id", viewer.id);
-  } else if (viewer.role === "employee") {
-    const { data: membership } = await admin
-      .from("department_memberships")
-      .select("department_id")
-      .eq("user_id", viewer.id)
-      .eq("is_current", true)
-      .maybeSingle();
-
-    if (!membership) {
-      return {
-        items: [],
-        total: 0,
-        page,
-        pageSize,
-        totalPages: 0,
-      };
-    }
-    builder = builder.eq("id", membership.department_id);
   }
 
   // For computed sorts, fetch all matching then paginate in memory (small org lists).

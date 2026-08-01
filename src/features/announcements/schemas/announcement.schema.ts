@@ -20,7 +20,6 @@ export const createAnnouncementSchema = z
     departmentId: z.string().uuid().nullable().optional(),
     priority: announcementPrioritySchema.default("medium"),
     publishAt: z.string().datetime({ offset: true }).optional(),
-    expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.audienceType === "company" && data.departmentId) {
@@ -37,13 +36,6 @@ export const createAnnouncementSchema = z
         path: ["departmentId"],
       });
     }
-    if (data.expiresAt && data.publishAt && data.expiresAt <= data.publishAt) {
-      ctx.addIssue({
-        code: "custom",
-        message: "تاريخ الانتهاء يجب أن يكون بعد تاريخ النشر",
-        path: ["expiresAt"],
-      });
-    }
   });
 
 export const updateAnnouncementSchema = z
@@ -52,15 +44,13 @@ export const updateAnnouncementSchema = z
     content: z.string().trim().min(1).max(10000).optional(),
     priority: announcementPrioritySchema.optional(),
     publishAt: z.string().datetime({ offset: true }).optional(),
-    expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
   })
   .refine(
     (data) =>
       data.title !== undefined ||
       data.content !== undefined ||
       data.priority !== undefined ||
-      data.publishAt !== undefined ||
-      data.expiresAt !== undefined,
+      data.publishAt !== undefined,
     { message: "لا توجد حقول للتحديث" },
   );
 
@@ -77,7 +67,6 @@ export const listAnnouncementsQuerySchema = z.object({
     .default(DEFAULT_TABLE_PAGE_SIZE),
   audienceType: announcementAudienceSchema.optional(),
   priority: announcementPrioritySchema.optional(),
-  status: z.enum(["active", "expired", "all"]).default("active"),
   unreadOnly: z
     .enum(["true", "false"])
     .optional()

@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { PERMISSIONS } from "@/lib/permissions";
 import { updateAnnouncementSchema } from "@/features/announcements/schemas/announcement.schema";
 import {
-  expireAnnouncement,
+  deleteAnnouncement,
   getAnnouncementById,
   updateAnnouncement,
 } from "@/features/announcements/services/announcements";
@@ -47,8 +47,8 @@ export async function DELETE(_request: Request, context: RouteContext) {
     });
     await requirePermission(user, PERMISSIONS.ANNOUNCEMENT_MANAGE);
     const { id } = await context.params;
-    const item = await expireAnnouncement(user, id);
-    return apiSuccess(item);
+    const result = await deleteAnnouncement(user, id);
+    return apiSuccess(result);
   } catch (error) {
     return apiError(error);
   }

@@ -398,7 +398,10 @@ export function ProjectDetailClient({
               ? [
                   {
                     label: project.department.name,
-                    href: `/departments/${project.departmentId}`,
+                    // Employees must not deep-link into department pages.
+                    ...(isEmployee
+                      ? {}
+                      : { href: `/departments/${project.departmentId}` }),
                   },
                 ]
               : []),

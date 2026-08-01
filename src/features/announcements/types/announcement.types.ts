@@ -14,11 +14,9 @@ export type Announcement = {
   departmentName: string | null;
   priority: AnnouncementPriority;
   publishAt: string;
-  expiresAt: string | null;
   createdBy: string;
   createdByName: string | null;
   createdAt: string;
   updatedAt: string;
   isRead: boolean;
-  isActive: boolean;
 };

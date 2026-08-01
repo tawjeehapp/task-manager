@@ -108,6 +108,13 @@ export const navSections: NavSection[] = [
         permission: "project.view",
         showForRoles: ["department_manager"],
       },
+      {
+        key: "attendanceLeave",
+        href: "/attendance",
+        icon: Clock3,
+        enabled: true,
+        anyOfPermissions: ["attendance.view", "leave.view"],
+      },
     ],
   },
   {
@@ -119,6 +126,7 @@ export const navSections: NavSection[] = [
         icon: Building2,
         enabled: true,
         permission: "department.view",
+        hideForRoles: ["employee"],
       },
       {
         key: "employees",
@@ -132,13 +140,6 @@ export const navSections: NavSection[] = [
   {
     key: "operations",
     items: [
-      {
-        key: "attendanceLeave",
-        href: "/attendance",
-        icon: Clock3,
-        enabled: true,
-        anyOfPermissions: ["attendance.view", "leave.view"],
-      },
       {
         key: "requests",
         href: "/approvals",

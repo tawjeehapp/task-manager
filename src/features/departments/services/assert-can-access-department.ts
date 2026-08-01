@@ -6,7 +6,8 @@ import { getCurrentDepartmentIdForUser } from "@/features/departments/services/m
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * Viewer may access a department if admin, manages it, or is a current member.
+ * Viewer may access a department if admin or manages it.
+ * Employees are scoped to project membership only — no department-level access.
  */
 export async function assertCanAccessDepartment(
   viewer: AppUser,
@@ -14,6 +15,10 @@ export async function assertCanAccessDepartment(
 ): Promise<void> {
   if (viewer.role === "admin") {
     return;
+  }
+
+  if (viewer.role === "employee") {
+    throw new ApiError("ليس لديك صلاحية لعرض هذا القسم.", 403, "FORBIDDEN");
   }
 
   const admin = createAdminClient();

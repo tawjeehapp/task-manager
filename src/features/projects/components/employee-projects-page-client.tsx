@@ -4,21 +4,17 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { Folder, Network, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import type { ProjectWithStats } from "@/features/projects/types/project.types";
 import type { EmployeeProjectsListResult } from "@/features/projects/services/projects";
-import {
-  filterProjectsBySearch,
-  groupProjectsByDepartment,
-} from "@/features/projects/lib/group-projects-by-department";
+import { filterProjectsBySearch } from "@/features/projects/lib/group-projects-by-department";
 import { withInitialData } from "@/lib/query/initial-data";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 type EmployeeProjectsPageClientProps = {
   initialProjects: EmployeeProjectsListResult;
@@ -104,13 +100,11 @@ export function EmployeeProjectsPageClient({
     ...withInitialData(initialProjects),
   });
 
-  const groups = useMemo(() => {
-    const items = filterProjectsBySearch(
-      projectsQuery.data?.items ?? [],
-      search,
-    );
-    return groupProjectsByDepartment(items);
-  }, [projectsQuery.data?.items, search]);
+  const projects = useMemo(
+    () =>
+      filterProjectsBySearch(projectsQuery.data?.items ?? [], search),
+    [projectsQuery.data?.items, search],
+  );
 
   if (projectsQuery.isLoading) {
     return <LoadingState />;
@@ -131,19 +125,10 @@ export function EmployeeProjectsPageClient({
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <PageHeader
-            title={t("myDepartmentAndProjects")}
-            description={`${t("hierarchyHint")} · ${t("employeeListHelper")}`}
-          />
-          <Link
-            href="/departments"
-            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-          >
-            <Network className="size-4 shrink-0" aria-hidden />
-            {t("orgStructureLink")}
-          </Link>
-        </div>
+        <PageHeader
+          title={t("myDepartmentAndProjects")}
+          description={t("employeeListHelper")}
+        />
         <div className="relative w-full sm:max-w-xs">
           <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -160,57 +145,28 @@ export function EmployeeProjectsPageClient({
           title={t("emptyTitle")}
           description={t("employeeDescription")}
         />
-      ) : groups.length === 0 ? (
+      ) : projects.length === 0 ? (
         <EmptyState
           title={t("emptyTitle")}
           description={t("employeeDescription")}
         />
       ) : (
-        <div className="space-y-6">
-          {groups.map((group) => (
-            <section
-              key={group.departmentId}
-              className="rounded-2xl border bg-card p-4 sm:p-5"
-            >
-              <header className="mb-4 flex items-start gap-3">
-                <div
-                  className={cn(
-                    "flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary",
-                  )}
-                >
-                  <Folder className="size-5" aria-hidden />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold">
-                    {group.departmentName}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {t("departmentSectionMeta", {
-                      projectCount: group.projects.length,
-                      memberCount: group.memberCount,
-                    })}
-                  </p>
-                </div>
-              </header>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {group.projects.map((project) => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    taskCountLabel={t("cardTaskCount", {
-                      count: project.taskCount,
-                    })}
-                    overdueLabel={
-                      project.overdueCount > 0
-                        ? t("cardOverdueCount", {
-                            count: project.overdueCount,
-                          })
-                        : null
-                    }
-                  />
-                ))}
-              </div>
-            </section>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {projects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              taskCountLabel={t("cardTaskCount", {
+                count: project.taskCount,
+              })}
+              overdueLabel={
+                project.overdueCount > 0
+                  ? t("cardOverdueCount", {
+                      count: project.overdueCount,
+                    })
+                  : null
+              }
+            />
           ))}
         </div>
       )}

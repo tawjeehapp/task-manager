@@ -30,7 +30,6 @@ type AnnouncementRow = {
   department_id: string | null;
   priority: AnnouncementPriority;
   publish_at: string;
-  expires_at: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -39,17 +38,7 @@ type AnnouncementRow = {
 };
 
 const ANNOUNCEMENT_SELECT =
-  "id, title, content, audience_type, department_id, priority, publish_at, expires_at, created_by, created_at, updated_at, department:departments!department_id(id, name), created_by_user:users!created_by(id, full_name)";
-
-function isAnnouncementActive(
-  publishAt: string,
-  expiresAt: string | null,
-  now = new Date(),
-): boolean {
-  const published = new Date(publishAt) <= now;
-  const notExpired = !expiresAt || new Date(expiresAt) > now;
-  return published && notExpired;
-}
+  "id, title, content, audience_type, department_id, priority, publish_at, created_by, created_at, updated_at, department:departments!department_id(id, name), created_by_user:users!created_by(id, full_name)";
 
 function mapAnnouncementRow(
   row: AnnouncementRow,
@@ -64,13 +53,11 @@ function mapAnnouncementRow(
     departmentName: row.department?.name ?? null,
     priority: row.priority,
     publishAt: row.publish_at,
-    expiresAt: row.expires_at,
     createdBy: row.created_by,
     createdByName: row.created_by_user?.full_name ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     isRead,
-    isActive: isAnnouncementActive(row.publish_at, row.expires_at),
   };
 }
 
@@ -230,12 +217,6 @@ export async function listAnnouncements(
     q = q.eq("priority", query.priority);
   }
 
-  if (query.status === "active") {
-    q = q.lte("publish_at", nowIso);
-  } else if (query.status === "expired") {
-    q = q.not("expires_at", "is", null).lte("expires_at", nowIso);
-  }
-
   const { data, error, count } = await q.range(from, to);
 
   if (error) {
@@ -254,17 +235,11 @@ export async function listAnnouncements(
 
   let items = rows.map((row) => mapAnnouncementRow(row, readSet.has(row.id)));
 
-  if (query.status === "active") {
-    items = items.filter((item) => item.isActive);
-  }
   if (query.unreadOnly) {
     items = items.filter((item) => !item.isRead);
   }
 
-  const total =
-    query.unreadOnly || query.status === "active"
-      ? items.length
-      : (count ?? 0);
+  const total = query.unreadOnly ? items.length : (count ?? 0);
 
   return {
     items,
@@ -297,15 +272,6 @@ export async function createAnnouncement(
   }
 
   const publishAt = input.publishAt ?? new Date().toISOString();
-  const expiresAt = input.expiresAt ?? null;
-
-  if (expiresAt && expiresAt <= publishAt) {
-    throw new ApiError(
-      "تاريخ الانتهاء يجب أن يكون بعد تاريخ النشر.",
-      400,
-      "INVALID_EXPIRY",
-    );
-  }
 
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -317,7 +283,6 @@ export async function createAnnouncement(
       department_id: departmentId,
       priority: input.priority,
       publish_at: publishAt,
-      expires_at: expiresAt,
       created_by: actor.id,
     })
     .select(ANNOUNCEMENT_SELECT)
@@ -366,24 +331,11 @@ export async function updateAnnouncement(
     existing.department_id,
   );
 
-  const publishAt = input.publishAt ?? existing.publish_at;
-  const expiresAt =
-    input.expiresAt !== undefined ? input.expiresAt : existing.expires_at;
-
-  if (expiresAt && expiresAt <= publishAt) {
-    throw new ApiError(
-      "تاريخ الانتهاء يجب أن يكون بعد تاريخ النشر.",
-      400,
-      "INVALID_EXPIRY",
-    );
-  }
-
   const patch: Record<string, unknown> = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.content !== undefined) patch.content = input.content;
   if (input.priority !== undefined) patch.priority = input.priority;
   if (input.publishAt !== undefined) patch.publish_at = input.publishAt;
-  if (input.expiresAt !== undefined) patch.expires_at = input.expiresAt;
 
   const admin = createAdminClient();
   const { error } = await admin
@@ -402,11 +354,10 @@ export async function updateAnnouncement(
   return getAnnouncementById(actor, id);
 }
 
-/** Soft-unpublish: set expires_at to now. */
-export async function expireAnnouncement(
+export async function deleteAnnouncement(
   actor: AppUser,
   id: string,
-): Promise<Announcement> {
+): Promise<{ id: string }> {
   const existing = await getAnnouncementRow(id);
   await assertCanManageAnnouncement(
     actor,
@@ -414,22 +365,25 @@ export async function expireAnnouncement(
     existing.department_id,
   );
 
-  const now = new Date().toISOString();
   const admin = createAdminClient();
-  const { error } = await admin
-    .from("announcements")
-    .update({ expires_at: now })
-    .eq("id", id);
+
+  await admin
+    .from("notifications")
+    .delete()
+    .eq("entity_type", "announcement")
+    .eq("entity_id", id);
+
+  const { error } = await admin.from("announcements").delete().eq("id", id);
 
   if (error) {
     throw new ApiError(
-      "تعذر إنهاء الإعلان.",
+      "تعذر حذف الإعلان.",
       500,
-      "EXPIRE_ANNOUNCEMENT_FAILED",
+      "DELETE_ANNOUNCEMENT_FAILED",
     );
   }
 
-  return getAnnouncementById(actor, id);
+  return { id };
 }
 
 export async function markAnnouncementRead(

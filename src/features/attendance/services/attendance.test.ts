@@ -23,6 +23,7 @@ vi.mock("@/features/attendance/services/compute-hours", async (importOriginal) =
 
 import {
   approveAttendance,
+  listEligibleTasksForAttendance,
   rejectAttendance,
   resubmitAttendance,
   submitAttendance,
@@ -83,6 +84,7 @@ function makeAttendanceRow(
     approved_by: null,
     approved_at: null,
     rejection_reason: null,
+    eligible_tasks_snapshot: [],
     created_at: "2026-07-25T05:00:00.000Z",
     updated_at: "2026-07-25T13:00:00.000Z",
     user: {
@@ -373,20 +375,41 @@ describe("attendance service", () => {
         break_minutes: 30,
         total_hours: 7.5,
         status: "pending",
+        eligible_tasks_snapshot: [
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            title: "Task A",
+            status: "todo",
+          },
+        ],
       });
 
       let attendancePayload: Record<string, unknown> | undefined;
       let workLogPayload: unknown;
-      let call = 0;
+      let taskCall = 0;
+      let attendanceCall = 0;
 
       createAdminClientMock.mockReturnValue({
         from: (table: string) => {
           if (table === "tasks") {
+            taskCall += 1;
+            if (taskCall === 1) {
+              return chain({
+                data: [
+                  {
+                    id: "11111111-1111-1111-1111-111111111111",
+                    assigned_to: "emp-1",
+                  },
+                ],
+                error: null,
+              });
+            }
             return chain({
               data: [
                 {
                   id: "11111111-1111-1111-1111-111111111111",
-                  assigned_to: "emp-1",
+                  title: "Task A",
+                  status: "todo",
                 },
               ],
               error: null,
@@ -400,8 +423,8 @@ describe("attendance service", () => {
             };
             return api;
           }
-          call += 1;
-          if (call === 1) {
+          attendanceCall += 1;
+          if (attendanceCall === 1) {
             return chain({ data: null, error: null });
           }
           const api = chain({ data: inserted, error: null });
@@ -438,6 +461,13 @@ describe("attendance service", () => {
         break_minutes: 30,
         total_hours: 7.5,
         status: "pending",
+        eligible_tasks_snapshot: [
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            title: "Task A",
+            status: "todo",
+          },
+        ],
       });
       expect(attendancePayload?.clock_out).toBeTruthy();
       expect(workLogPayload).toEqual([
@@ -461,6 +491,42 @@ describe("attendance service", () => {
       expect(result.id).toBe("att-1");
       expect(result.status).toBe("pending");
       expect(result.totalHours).toBe(7.5);
+      expect(result.eligibleTasksSnapshot).toEqual([
+        {
+          id: "11111111-1111-1111-1111-111111111111",
+          title: "Task A",
+          status: "todo",
+        },
+      ]);
+    });
+  });
+
+  describe("listEligibleTasksForAttendance", () => {
+    it("returns assigned todo and in_progress tasks only", async () => {
+      createAdminClientMock.mockReturnValue({
+        from: () =>
+          chain({
+            data: [
+              {
+                id: "t-1",
+                title: "Alpha",
+                status: "todo",
+              },
+              {
+                id: "t-2",
+                title: "Beta",
+                status: "in_progress",
+              },
+            ],
+            error: null,
+          }),
+      } as never);
+
+      const items = await listEligibleTasksForAttendance("emp-1");
+      expect(items).toEqual([
+        { id: "t-1", title: "Alpha", status: "todo" },
+        { id: "t-2", title: "Beta", status: "in_progress" },
+      ]);
     });
   });
 
@@ -506,20 +572,42 @@ describe("attendance service", () => {
         ...existing,
         break_minutes: 0,
         total_hours: 8,
+        eligible_tasks_snapshot: [
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            title: "Task A",
+            status: "in_progress",
+          },
+        ],
       });
 
       let workLogDeleted = false;
       let workLogInserted: unknown;
+      let attendancePayload: Record<string, unknown> | undefined;
+      let taskCall = 0;
       let attendanceCall = 0;
 
       createAdminClientMock.mockReturnValue({
         from: (table: string) => {
           if (table === "tasks") {
+            taskCall += 1;
+            if (taskCall === 1) {
+              return chain({
+                data: [
+                  {
+                    id: "11111111-1111-1111-1111-111111111111",
+                    assigned_to: "emp-1",
+                  },
+                ],
+                error: null,
+              });
+            }
             return chain({
               data: [
                 {
                   id: "11111111-1111-1111-1111-111111111111",
-                  assigned_to: "emp-1",
+                  title: "Task A",
+                  status: "in_progress",
                 },
               ],
               error: null,
@@ -542,7 +630,10 @@ describe("attendance service", () => {
             return chain({ data: existing, error: null });
           }
           const api = chain({ data: updated, error: null });
-          api.update = () => api;
+          api.update = (payload: Record<string, unknown>) => {
+            attendancePayload = payload;
+            return api;
+          };
           return api;
         },
       } as never);
@@ -570,6 +661,15 @@ describe("attendance service", () => {
       );
 
       expect(result.status).toBe("pending");
+      expect(attendancePayload).toMatchObject({
+        eligible_tasks_snapshot: [
+          {
+            id: "11111111-1111-1111-1111-111111111111",
+            title: "Task A",
+            status: "in_progress",
+          },
+        ],
+      });
       expect(workLogDeleted).toBe(true);
       expect(workLogInserted).toEqual([
         {

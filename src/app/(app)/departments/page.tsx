@@ -24,6 +24,11 @@ export default async function DepartmentsPage() {
     redirect("/login");
   }
 
+  // Employees work only within assigned projects — no department list UI.
+  if (user.role === "employee") {
+    redirect("/");
+  }
+
   const permissions = await getPermissionsForRole(user.role);
   if (!hasPermission(user.role, PERMISSIONS.DEPARTMENT_VIEW, permissions)) {
     redirect("/");

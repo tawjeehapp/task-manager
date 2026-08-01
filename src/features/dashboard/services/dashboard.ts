@@ -645,7 +645,7 @@ async function listTodayTasks(
 
   if (error) {
     throw new ApiError(
-      "تعذر جلب مهام اليوم.",
+      "تعذر جلب مهام مستحقة اليوم.",
       500,
       "DASHBOARD_TODAY_TASKS_FAILED",
     );
@@ -697,7 +697,7 @@ async function listWeekAttendance(
   const [attendanceRes, workLogsRes] = await Promise.all([
     admin
       .from("attendance_records")
-      .select("id, date, clock_in, clock_out, total_hours, status")
+      .select("id, date, clock_in, clock_out, total_hours, status, rejection_reason")
       .eq("user_id", userId)
       .gte("date", start)
       .lte("date", end)
@@ -777,6 +777,7 @@ async function listWeekAttendance(
       totalHours,
       status,
       uiState: deriveAttendanceUiState(status, clockOut),
+      rejectionReason: (row.rejection_reason as string | null) ?? null,
       allocations: allocationsByDate.get(date) ?? [],
     };
   });

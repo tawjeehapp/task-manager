@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { CalendarDays, Clock3, Inbox, List, UserRound } from "lucide-react";
 
 import { EmployeeAttendancePageClient } from "@/features/attendance/components/employee-attendance-page-client";
+import { AttendanceReviewDialog } from "@/features/attendance/components/attendance-review-dialog";
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import { EmployeeLeavePageClient } from "@/features/leave/components/employee-leave-page-client";
 import type { LeaveRequest } from "@/features/leave/types/leave.types";
@@ -112,6 +113,9 @@ export function ManagerAttendanceLeavePageClient({
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [reviewRecord, setReviewRecord] = useState<AttendanceRecord | null>(
+    null,
+  );
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
@@ -196,6 +200,7 @@ export function ManagerAttendanceLeavePageClient({
     onSuccess: async () => {
       setSuccessMessage(tApprovals("approveSuccess"));
       setActionError(null);
+      setReviewRecord(null);
       await queryClient.invalidateQueries({ queryKey: ["attendance"] });
     },
     onError: (error: Error) => setActionError(error.message),
@@ -235,6 +240,7 @@ export function ManagerAttendanceLeavePageClient({
       setActionError(null);
       setRejectTarget(null);
       setRejectReason("");
+      setReviewRecord(null);
       await queryClient.invalidateQueries({ queryKey: ["attendance"] });
       await queryClient.invalidateQueries({ queryKey: ["leave-requests"] });
     },
@@ -327,28 +333,13 @@ export function ManagerAttendanceLeavePageClient({
                             <TableCell>{formatDate(row.date)}</TableCell>
                             <TableCell>{row.user?.fullName ?? "—"}</TableCell>
                             <TableCell>{row.totalHours ?? "—"}</TableCell>
-                            <TableCell className="space-x-2 space-x-reverse">
+                            <TableCell>
                               <Button
                                 type="button"
                                 size="sm"
-                                onClick={() =>
-                                  approveAttendanceMutation.mutate(row.id)
-                                }
+                                onClick={() => setReviewRecord(row)}
                               >
-                                {tApprovals("approve")}
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  setRejectTarget({
-                                    kind: "attendance",
-                                    id: row.id,
-                                  })
-                                }
-                              >
-                                {tApprovals("reject")}
+                                {tAttendance("review")}
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -578,6 +569,21 @@ export function ManagerAttendanceLeavePageClient({
           </div>
         </TabPanel>
       </Tabs>
+
+      <AttendanceReviewDialog
+        record={reviewRecord}
+        open={!!reviewRecord}
+        onOpenChange={(open) => {
+          if (!open) setReviewRecord(null);
+        }}
+        isApproving={approveAttendanceMutation.isPending}
+        onApprove={(id) => approveAttendanceMutation.mutate(id)}
+        onReject={(id) => {
+          setReviewRecord(null);
+          setRejectTarget({ kind: "attendance", id });
+          setRejectReason("");
+        }}
+      />
 
       <Dialog
         open={!!rejectTarget}

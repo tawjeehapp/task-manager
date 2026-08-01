@@ -207,7 +207,6 @@ export function EmployeeDashboardClient({
       <EmployeeAttendanceWidget
         viewerId={viewerId}
         weekAttendance={data.weekAttendance}
-        weekHours={data.metrics.weekHours}
       />
 
       {statusDialogOpen ? (

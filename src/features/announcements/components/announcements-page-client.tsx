@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 
 import type { Announcement } from "@/features/announcements/types/announcement.types";
@@ -11,13 +11,12 @@ import {
   DEFAULT_TABLE_PAGE_SIZE,
   type TablePageSize,
 } from "@/lib/table/constants";
-import { formatDate, formatDateTime } from "@/lib/dates";
+import { formatDateTime } from "@/lib/dates";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { TablePagination } from "@/components/shared/table-pagination";
-import { Tabs, TabPanel } from "@/components/shared/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,7 +85,6 @@ export function AnnouncementsPageClient({
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState("active");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -103,15 +101,12 @@ export function AnnouncementsPageClient({
   const [departmentId, setDepartmentId] = useState(managedDepartmentId ?? "");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
 
-  const status = tab as "active" | "expired" | "all";
-
   const listQuery = useQuery({
-    queryKey: ["announcements", "list", page, pageSize, status],
+    queryKey: ["announcements", "list", page, pageSize],
     queryFn: () => {
       const params = new URLSearchParams({
         page: String(page),
         pageSize: String(pageSize),
-        status,
       });
       return fetch(`/api/announcements?${params}`).then((res) =>
         readApi<ListResult>(res),
@@ -162,31 +157,23 @@ export function AnnouncementsPageClient({
     },
   });
 
-  const expireMutation = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: (id: string) =>
       fetch(`/api/announcements/${id}`, { method: "DELETE" }).then((res) =>
-        readApi<Announcement>(res),
+        readApi<{ id: string }>(res),
       ),
     onSuccess: async () => {
-      setSuccessMessage(t("expireSuccess"));
+      setSuccessMessage(t("deleteSuccess"));
       setActionError(null);
       setDetail(null);
       await queryClient.invalidateQueries({ queryKey: ["announcements"] });
+      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (error: Error) => {
       setActionError(error.message);
       setSuccessMessage(null);
     },
   });
-
-  const tabItems = useMemo(
-    () => [
-      { id: "active", label: t("tabActive") },
-      { id: "expired", label: t("tabExpired") },
-      { id: "all", label: t("tabAll") },
-    ],
-    [t],
-  );
 
   const items = listQuery.data?.items ?? [];
   const total = listQuery.data?.total ?? 0;
@@ -233,122 +220,105 @@ export function AnnouncementsPageClient({
         </Alert>
       ) : null}
 
-      <Tabs
-        items={tabItems}
-        value={tab}
-        onValueChange={(value) => {
-          setTab(value);
-          setPage(1);
-        }}
-      >
-        <TabPanel when={tab} active={tab}>
-          {listQuery.isLoading ? <LoadingState /> : null}
-          {listQuery.isError ? (
-            <ErrorState
-              title={tCommon("errorTitle")}
-              description={
-                listQuery.error instanceof Error
-                  ? listQuery.error.message
-                  : tCommon("unexpectedError")
-              }
-              onRetry={() => void listQuery.refetch()}
-            />
-          ) : null}
+      {listQuery.isLoading ? <LoadingState /> : null}
+      {listQuery.isError ? (
+        <ErrorState
+          title={tCommon("errorTitle")}
+          description={
+            listQuery.error instanceof Error
+              ? listQuery.error.message
+              : tCommon("unexpectedError")
+          }
+          onRetry={() => void listQuery.refetch()}
+        />
+      ) : null}
 
-          {!listQuery.isLoading && !listQuery.isError && items.length === 0 ? (
-            <EmptyState
-              title={t("emptyTitle")}
-              description={t("emptyDescription")}
-            />
-          ) : null}
+      {!listQuery.isLoading && !listQuery.isError && items.length === 0 ? (
+        <EmptyState
+          title={t("emptyTitle")}
+          description={t("emptyDescription")}
+        />
+      ) : null}
 
-          {!listQuery.isLoading && !listQuery.isError && items.length > 0 ? (
-            <>
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("colTitle")}</TableHead>
-                      <TableHead>{t("colAudience")}</TableHead>
-                      <TableHead>{t("colPriority")}</TableHead>
-                      <TableHead>{t("colPublish")}</TableHead>
-                      <TableHead>{t("colExpires")}</TableHead>
-                      <TableHead />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((item) => (
-                      <TableRow
-                        key={item.id}
-                        className={
-                          item.priority === "high" && !item.isRead
-                            ? "bg-destructive/5"
-                            : !item.isRead
-                              ? "bg-primary/5"
-                              : undefined
-                        }
-                      >
-                        <TableCell className="font-medium">{item.title}</TableCell>
-                        <TableCell>
-                          {item.audienceType === "company"
-                            ? t("audience_company")
-                            : (item.departmentName ?? t("audience_department"))}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={priorityVariant(item.priority)}>
-                            {t(`priority_${item.priority}`)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">
-                          {formatDateTime(item.publishAt)}
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-sm">
-                          {item.expiresAt
-                            ? formatDateTime(item.expiresAt)
-                            : t("noExpiry")}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setDetail(item)}
-                            >
-                              {t("view")}
-                            </Button>
-                            {canManage && item.isActive ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                disabled={expireMutation.isPending}
-                                onClick={() => expireMutation.mutate(item.id)}
-                              >
-                                {t("expire")}
-                              </Button>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-              <TablePagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={(size) => {
-                  setPageSize(size);
-                  setPage(1);
-                }}
-              />
-            </>
-          ) : null}
-        </TabPanel>
-      </Tabs>
+      {!listQuery.isLoading && !listQuery.isError && items.length > 0 ? (
+        <>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("colTitle")}</TableHead>
+                  <TableHead>{t("colAudience")}</TableHead>
+                  <TableHead>{t("colPriority")}</TableHead>
+                  <TableHead>{t("colPublish")}</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow
+                    key={item.id}
+                    className={
+                      item.priority === "high" && !item.isRead
+                        ? "bg-destructive/5"
+                        : !item.isRead
+                          ? "bg-primary/5"
+                          : undefined
+                    }
+                  >
+                    <TableCell className="font-medium">{item.title}</TableCell>
+                    <TableCell>
+                      {item.audienceType === "company"
+                        ? t("audience_company")
+                        : (item.departmentName ?? t("audience_department"))}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={priorityVariant(item.priority)}>
+                        {t(`priority_${item.priority}`)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {formatDateTime(item.publishAt)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setDetail(item)}
+                        >
+                          {t("view")}
+                        </Button>
+                        {canManage ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={deleteMutation.isPending}
+                            onClick={() => deleteMutation.mutate(item.id)}
+                          >
+                            {t("delete")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <TablePagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+          />
+        </>
+      ) : null}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -450,7 +420,10 @@ export function AnnouncementsPageClient({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(detail)} onOpenChange={(open) => !open && setDetail(null)}>
+      <Dialog
+        open={Boolean(detail)}
+        onOpenChange={(open) => !open && setDetail(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{detail?.title ?? t("detailTitle")}</DialogTitle>
@@ -472,22 +445,20 @@ export function AnnouncementsPageClient({
               </p>
               <p className="text-muted-foreground">
                 {formatDateTime(detail.publishAt)}
-                {detail.expiresAt
-                  ? ` · ${formatDate(detail.expiresAt)}`
-                  : ` · ${t("noExpiry")}`}
               </p>
-              <div className="flex flex-wrap gap-2">
-                {canManage && detail.isActive ? (
+              {canManage ? (
+                <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => expireMutation.mutate(detail.id)}
+                    disabled={deleteMutation.isPending}
+                    onClick={() => deleteMutation.mutate(detail.id)}
                   >
-                    {t("expire")}
+                    {t("delete")}
                   </Button>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </DialogContent>
