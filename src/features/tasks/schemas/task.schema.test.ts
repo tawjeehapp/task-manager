@@ -35,31 +35,45 @@ describe("task schemas", () => {
     expect(result.success).toBe(false);
   });
 
-  it("accepts create with estimatedHours", () => {
+  it("requires assignedTo on create", () => {
     const result = createTaskSchema.safeParse({
       projectId: PROJECT,
       title: "مهمة",
       estimatedHours: 4,
     });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts create with estimatedHours and assignee", () => {
+    const assignee = "22222222-2222-4222-8222-222222222222";
+    const result = createTaskSchema.safeParse({
+      projectId: PROJECT,
+      title: "مهمة",
+      estimatedHours: 4,
+      assignedTo: assignee,
+    });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.estimatedHours).toBe(4);
+      expect(result.data.assignedTo).toBe(assignee);
       expect(result.data.status).toBe("todo");
       expect(result.data.priority).toBe("medium");
     }
   });
 
-  it("normalizes empty assignedTo to null", () => {
+  it("rejects empty assignedTo on create", () => {
     const result = createTaskSchema.safeParse({
       projectId: PROJECT,
       title: "مهمة",
       estimatedHours: 2,
       assignedTo: "",
     });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.assignedTo).toBeNull();
-    }
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects null assignedTo on update", () => {
+    const result = updateTaskSchema.safeParse({ assignedTo: null });
+    expect(result.success).toBe(false);
   });
 
   it("rejects empty update", () => {

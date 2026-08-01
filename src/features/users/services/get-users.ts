@@ -16,8 +16,8 @@ import { SYSTEM_ADMIN_EMPLOYEE_NUMBER } from "@/lib/table/constants";
 
 export type ListUsersOptions = ListUsersQuery & {
   /**
-   * When viewer is a department manager without user.manage,
-   * restrict to members of their managed department.
+   * Restrict to members of the viewer's managed department
+   * (used for department managers, including those with user.manage).
    */
   scopeToManagedDepartmentOf?: string;
 };
@@ -195,7 +195,8 @@ export async function listUsersForViewer(
   query: ListUsersQuery,
   canManageUsers: boolean,
 ): Promise<UsersListResult> {
-  if (canManageUsers) {
+  // Only admins get org-wide listing. DMs with user.manage stay department-scoped.
+  if (viewer.role === "admin" && canManageUsers) {
     return listUsers(query);
   }
 

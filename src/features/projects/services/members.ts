@@ -2,6 +2,7 @@ import "server-only";
 
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
+import { tryLogEntityActivity } from "@/features/activity/services/entity-activity";
 import {
   assertCanAccessProject,
   assertCanManageProjectContents,
@@ -137,7 +138,18 @@ export async function addProjectMember(
     );
   }
 
-  return mapMember(data as unknown as MemberWithUser, true);
+  const member = mapMember(data as unknown as MemberWithUser, true);
+  await tryLogEntityActivity(
+    viewer.id,
+    "project",
+    projectId,
+    "project.member_added",
+    {
+      userId: input.userId,
+      fullName: member.user?.fullName,
+    },
+  );
+  return member;
 }
 
 export async function removeProjectMember(
@@ -176,4 +188,12 @@ export async function removeProjectMember(
       "REMOVE_PROJECT_MEMBER_FAILED",
     );
   }
+
+  await tryLogEntityActivity(
+    viewer.id,
+    "project",
+    projectId,
+    "project.member_removed",
+    { userId },
+  );
 }

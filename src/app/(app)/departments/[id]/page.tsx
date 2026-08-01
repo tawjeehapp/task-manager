@@ -42,11 +42,15 @@ export default async function DepartmentDetailPage({ params }: PageProps) {
     PERMISSIONS.DEPARTMENT_MANAGE,
     permissions,
   );
+  const canViewEmployeeProfiles =
+    hasPermission(user.role, PERMISSIONS.USER_MANAGE, permissions) ||
+    hasPermission(user.role, PERMISSIONS.USER_RESET_PASSWORD, permissions);
 
   return (
     <DepartmentDetailClient
       departmentId={id}
       canManage={canManage}
+      canViewEmployeeProfiles={canViewEmployeeProfiles}
     />
   );
 }

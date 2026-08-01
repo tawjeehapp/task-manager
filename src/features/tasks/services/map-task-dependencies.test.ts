@@ -29,6 +29,7 @@ const baseRow = {
     name: "Website",
     department_id: "d1",
     end_date: "2026-12-31",
+    department: { id: "d1", name: "Engineering" },
   },
   assignee: {
     id: "u1",

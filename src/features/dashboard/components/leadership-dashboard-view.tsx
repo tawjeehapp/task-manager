@@ -6,6 +6,7 @@ import type {
   AdminDashboard,
   ManagerDashboard,
 } from "@/features/dashboard/types/dashboard.types";
+import { LeadershipAttentionUrgentButton } from "@/features/dashboard/components/leadership-attention-urgent-button";
 import { LeadershipMetricsCardsClient } from "@/features/dashboard/components/leadership-metrics-cards-client";
 import { LeadershipTablesClient } from "@/features/dashboard/components/leadership-tables-client";
 import { PageHeader } from "@/components/shared/page-header";
@@ -20,13 +21,11 @@ import { cn } from "@/lib/utils";
 
 type LeadershipDashboardViewProps = {
   data: AdminDashboard | ManagerDashboard;
-  canViewReports: boolean;
   canApproveAttendance: boolean;
 };
 
 export async function LeadershipDashboardView({
   data,
-  canViewReports,
   canApproveAttendance,
 }: LeadershipDashboardViewProps) {
   const t = await getTranslations("dashboard");
@@ -67,16 +66,6 @@ export async function LeadershipDashboardView({
       <PageHeader
         title={isAdmin ? t("leadershipTitleAdmin") : t("leadershipTitleManager")}
         description={t("leadershipDescription")}
-        actions={
-          canViewReports ? (
-            <Link
-              href="/reports"
-              className={cn(buttonVariants({ variant: "outline" }))}
-            >
-              {t("openReports")}
-            </Link>
-          ) : null
-        }
       />
 
       <LeadershipMetricsCardsClient today={data.today} metrics={metrics} />
@@ -104,15 +93,7 @@ export async function LeadershipDashboardView({
               </div>
             </div>
             {metrics.overdueCount > 0 ? (
-              <Link
-                href="/tasks"
-                className={cn(
-                  buttonVariants({ size: "sm", variant: "outline" }),
-                  "shrink-0",
-                )}
-              >
-                {t("attentionOpen")}
-              </Link>
+              <LeadershipAttentionUrgentButton today={data.today} />
             ) : null}
           </div>
 

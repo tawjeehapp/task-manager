@@ -6,30 +6,33 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 
 import { mobileNavItems } from "@/components/shared/nav-config";
+import type { AuthMeResponse } from "@/features/auth/types/auth.types";
 import { isPersonalWorkspaceRole } from "@/lib/permissions";
 import type { Role } from "@/lib/permissions";
+import { withInitialData } from "@/lib/query/initial-data";
 import { cn } from "@/lib/utils";
 
-type MeResponse = {
-  user: { role: string };
+type MobileNavProps = {
+  initialMe: AuthMeResponse;
 };
 
-async function fetchMe(): Promise<MeResponse | null> {
+async function fetchMe(): Promise<AuthMeResponse | null> {
   const response = await fetch("/api/auth/me");
   if (!response.ok) {
     return null;
   }
-  const payload = (await response.json()) as { data?: MeResponse };
+  const payload = (await response.json()) as { data?: AuthMeResponse };
   return payload.data ?? null;
 }
 
-export function MobileNav() {
+export function MobileNav({ initialMe }: MobileNavProps) {
   const t = useTranslations("nav");
   const pathname = usePathname();
   const meQuery = useQuery({
     queryKey: ["auth", "me"],
     queryFn: fetchMe,
     staleTime: 60_000,
+    ...withInitialData(initialMe),
   });
   const role = (meQuery.data?.user.role ?? null) as Role | null;
   const useMyTasksLabel = isPersonalWorkspaceRole(role);

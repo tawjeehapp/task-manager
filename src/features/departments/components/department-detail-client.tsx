@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 
+import { EntityActivityPanel } from "@/features/activity/components/entity-activity-panel";
 import {
   updateDepartmentSchema,
   type UpdateDepartmentInput,
@@ -54,7 +55,23 @@ import {
 type DepartmentDetailClientProps = {
   departmentId: string;
   canManage: boolean;
+  canViewEmployeeProfiles?: boolean;
 };
+
+function PropertyRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1 border-b border-border/70 py-2.5 last:border-b-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+      <dt className="text-muted-foreground text-sm">{label}</dt>
+      <dd className="text-sm font-medium sm:text-end">{children}</dd>
+    </div>
+  );
+}
 
 async function fetchDepartment(id: string): Promise<Department> {
   const response = await fetch(`/api/departments/${id}`);
@@ -129,6 +146,7 @@ async function fetchDepartmentProjects(
 export function DepartmentDetailClient({
   departmentId,
   canManage,
+  canViewEmployeeProfiles = false,
 }: DepartmentDetailClientProps) {
   const t = useTranslations("departments");
   const tProjects = useTranslations("projects");
@@ -152,9 +170,7 @@ export function DepartmentDetailClient({
   const [membersPage, setMembersPage] = useState(1);
   const [membersPageSize, setMembersPageSize] =
     useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
-  const [activeTab, setActiveTab] = useState<
-    "projects" | "members" | "history"
-  >("projects");
+  const [activeTab, setActiveTab] = useState<"projects" | "members">("projects");
 
   const departmentQuery = useQuery({
     queryKey: ["departments", departmentId],
@@ -214,6 +230,9 @@ export function DepartmentDetailClient({
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["departments"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["department", departmentId, "activity"],
+      });
     },
   });
 
@@ -239,6 +258,9 @@ export function DepartmentDetailClient({
         queryKey: ["departments", departmentId],
       });
       await queryClient.invalidateQueries({ queryKey: ["users"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["department", departmentId, "activity"],
+      });
     },
   });
 
@@ -262,6 +284,9 @@ export function DepartmentDetailClient({
         queryKey: ["departments", departmentId],
       });
       await queryClient.invalidateQueries({ queryKey: ["users"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["department", departmentId, "activity"],
+      });
     },
   });
 
@@ -375,232 +400,259 @@ export function DepartmentDetailClient({
         </Alert>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-border p-4">
-          <p className="text-sm text-muted-foreground">{t("manager")}</p>
-          <p className="mt-1 font-medium">
-            {department.manager?.fullName ?? t("noManager")}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border p-4">
-          <p className="text-sm text-muted-foreground">{t("members")}</p>
-          <p className="mt-1 font-medium">
-            {t("memberCount", { count: department.memberCount })}
-          </p>
-        </div>
-        <div className="rounded-xl border border-border p-4">
-          <p className="text-sm text-muted-foreground">{t("status")}</p>
-          <Badge
-            className="mt-1"
-            variant={department.status === "active" ? "default" : "secondary"}
+      <div className="grid gap-6 lg:grid-cols-[1fr_28rem] lg:items-start">
+        <div className="min-w-0 space-y-4">
+          <Tabs
+            value={activeTab}
+            onValueChange={(id) => setActiveTab(id as "projects" | "members")}
+            items={[
+              {
+                id: "projects",
+                label: tProjects("title"),
+                count: projectsQuery.data?.length,
+              },
+              {
+                id: "members",
+                label: t("members"),
+                count: currentMembers.length,
+              },
+            ]}
+            actions={
+              activeTab === "members" && canManage ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setAddMemberOpen(true)}
+                  disabled={department.status === "archived"}
+                >
+                  {t("addMember")}
+                </Button>
+              ) : null
+            }
           >
-            {department.status === "active" ? t("active") : t("archived")}
-          </Badge>
-        </div>
-      </div>
-
-      <Tabs
-        value={activeTab}
-        onValueChange={(id) =>
-          setActiveTab(id as "projects" | "members" | "history")
-        }
-        items={[
-          {
-            id: "projects",
-            label: tProjects("title"),
-            count: projectsQuery.data?.length,
-          },
-          {
-            id: "members",
-            label: t("members"),
-            count: currentMembers.length,
-          },
-          ...(canManage
-            ? [
-                {
-                  id: "history",
-                  label: t("history"),
-                  count: (membersQuery.data ?? []).filter((m) => !m.isCurrent)
-                    .length,
-                },
-              ]
-            : []),
-        ]}
-        actions={
-          activeTab === "members" && canManage ? (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setAddMemberOpen(true)}
-              disabled={department.status === "archived"}
-            >
-              {t("addMember")}
-            </Button>
-          ) : null
-        }
-      >
-        <TabPanel when="projects" active={activeTab} className="space-y-3">
-          {projectsQuery.isLoading ? <LoadingState /> : null}
-          {projectsQuery.isError ? (
-            <ErrorState
-              title={tCommon("errorTitle")}
-              description={(projectsQuery.error as Error).message}
-              onRetry={() => void projectsQuery.refetch()}
-            />
-          ) : null}
-          {!projectsQuery.isLoading &&
-          !projectsQuery.isError &&
-          (projectsQuery.data?.length ?? 0) === 0 ? (
-            <EmptyState
-              title={tProjects("emptyTitle")}
-              description={tProjects("emptyDescription")}
-            />
-          ) : null}
-          {(projectsQuery.data?.length ?? 0) > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{tProjects("name")}</TableHead>
-                    <TableHead>{tProjects("status")}</TableHead>
-                    <TableHead>{tProjects("priority")}</TableHead>
-                    <TableHead>{tProjects("members")}</TableHead>
-                    <TableHead>{tProjects("endDate")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(projectsQuery.data ?? []).map((project) => (
-                    <TableRow key={project.id}>
-                      <TableCell>
-                        <Link
-                          href={`/projects/${project.id}`}
-                          className="font-medium underline-offset-4 hover:underline"
-                        >
-                          {project.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {tProjects(
-                            `status_${project.status}` as "status_draft",
-                          )}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {tProjects(
-                          `priority_${project.priority}` as "priority_low",
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {tProjects("memberCount", {
-                          count: project.memberCount,
-                        })}
-                      </TableCell>
-                      <TableCell>{project.endDate ?? "—"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : null}
-        </TabPanel>
-
-        <TabPanel when="members" active={activeTab} className="space-y-3">
-          {membersQuery.isLoading ? <LoadingState /> : null}
-          {!membersQuery.isLoading && currentMembers.length === 0 ? (
-            <EmptyState title={t("members")} description="—" />
-          ) : null}
-          {currentMembers.length > 0 ? (
-            <div className="rounded-xl border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("personName")}</TableHead>
-                    <TableHead>{t("role")}</TableHead>
-                    <TableHead>{t("startDate")}</TableHead>
-                    {canManage ? (
-                      <TableHead className="text-start">{t("actions")}</TableHead>
-                    ) : null}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pagedCurrentMembers.map((membership) => (
-                    <TableRow key={membership.id}>
-                      <TableCell>
-                        {membership.user?.fullName ?? membership.userId}
-                      </TableCell>
-                      <TableCell>
-                        {membership.user
-                          ? tRoles(membership.user.role)
-                          : "—"}
-                      </TableCell>
-                      <TableCell>{membership.startDate}</TableCell>
-                      {canManage ? (
-                        <TableCell>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setRemoveMember(membership)}
-                          >
-                            {t("removeMember")}
-                          </Button>
-                        </TableCell>
-                      ) : null}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <TablePagination
-                page={membersPage}
-                pageSize={membersPageSize}
-                total={currentMembers.length}
-                onPageChange={setMembersPage}
-                onPageSizeChange={(size) => {
-                  setMembersPageSize(size);
-                  setMembersPage(1);
-                }}
-              />
-            </div>
-          ) : null}
-        </TabPanel>
-
-        {canManage ? (
-          <TabPanel when="history" active={activeTab} className="space-y-3">
-            {membersQuery.isLoading ? <LoadingState /> : null}
-            {!membersQuery.isLoading &&
-            !(membersQuery.data ?? []).some((m) => !m.isCurrent) ? (
-              <EmptyState title={t("history")} description="—" />
-            ) : null}
-            {(membersQuery.data ?? []).some((m) => !m.isCurrent) ? (
-              <div className="rounded-xl border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("personName")}</TableHead>
-                      <TableHead>{t("startDate")}</TableHead>
-                      <TableHead>{t("endDate")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(membersQuery.data ?? [])
-                      .filter((m) => !m.isCurrent)
-                      .map((membership) => (
-                        <TableRow key={membership.id}>
+            <TabPanel when="projects" active={activeTab} className="space-y-3">
+              {projectsQuery.isLoading ? <LoadingState /> : null}
+              {projectsQuery.isError ? (
+                <ErrorState
+                  title={tCommon("errorTitle")}
+                  description={(projectsQuery.error as Error).message}
+                  onRetry={() => void projectsQuery.refetch()}
+                />
+              ) : null}
+              {!projectsQuery.isLoading &&
+              !projectsQuery.isError &&
+              (projectsQuery.data?.length ?? 0) === 0 ? (
+                <EmptyState
+                  title={tProjects("emptyTitle")}
+                  description={tProjects("emptyDescription")}
+                />
+              ) : null}
+              {(projectsQuery.data?.length ?? 0) > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{tProjects("name")}</TableHead>
+                        <TableHead>{tProjects("status")}</TableHead>
+                        <TableHead>{tProjects("priority")}</TableHead>
+                        <TableHead>{tProjects("members")}</TableHead>
+                        <TableHead>{tProjects("endDate")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(projectsQuery.data ?? []).map((project) => (
+                        <TableRow key={project.id}>
                           <TableCell>
-                            {membership.user?.fullName ?? membership.userId}
+                            <Link
+                              href={`/projects/${project.id}`}
+                              className="font-medium underline-offset-4 hover:underline"
+                            >
+                              {project.name}
+                            </Link>
                           </TableCell>
-                          <TableCell>{membership.startDate}</TableCell>
-                          <TableCell>{membership.endDate ?? "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {tProjects(
+                                `status_${project.status}` as "status_draft",
+                              )}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {tProjects(
+                              `priority_${project.priority}` as "priority_low",
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {tProjects("memberCount", {
+                              count: project.memberCount,
+                            })}
+                          </TableCell>
+                          <TableCell>{project.endDate ?? "—"}</TableCell>
                         </TableRow>
                       ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
+            </TabPanel>
+
+            <TabPanel when="members" active={activeTab} className="space-y-3">
+              {membersQuery.isLoading ? <LoadingState /> : null}
+              {!membersQuery.isLoading && currentMembers.length === 0 ? (
+                <EmptyState title={t("members")} description="—" />
+              ) : null}
+              {currentMembers.length > 0 ? (
+                <div className="rounded-xl border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("personName")}</TableHead>
+                        <TableHead>{t("role")}</TableHead>
+                        <TableHead>{t("startDate")}</TableHead>
+                        {canManage ? (
+                          <TableHead className="text-start">
+                            {t("actions")}
+                          </TableHead>
+                        ) : null}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pagedCurrentMembers.map((membership) => (
+                        <TableRow key={membership.id}>
+                          <TableCell>
+                            {canViewEmployeeProfiles && membership.userId ? (
+                              <Link
+                                href={`/employees/${membership.userId}`}
+                                className="font-medium underline-offset-4 hover:underline"
+                              >
+                                {membership.user?.fullName ?? membership.userId}
+                              </Link>
+                            ) : (
+                              (membership.user?.fullName ?? membership.userId)
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {membership.user
+                              ? tRoles(membership.user.role)
+                              : "—"}
+                          </TableCell>
+                          <TableCell>{membership.startDate}</TableCell>
+                          {canManage ? (
+                            <TableCell>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRemoveMember(membership)}
+                              >
+                                {t("removeMember")}
+                              </Button>
+                            </TableCell>
+                          ) : null}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <TablePagination
+                    page={membersPage}
+                    pageSize={membersPageSize}
+                    total={currentMembers.length}
+                    onPageChange={setMembersPage}
+                    onPageSizeChange={(size) => {
+                      setMembersPageSize(size);
+                      setMembersPage(1);
+                    }}
+                  />
+                </div>
+              ) : null}
+            </TabPanel>
+          </Tabs>
+        </div>
+
+        <aside className="min-w-0 space-y-4 rounded-xl bg-muted p-3 lg:col-start-2 lg:row-start-1 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <section className="space-y-1 rounded-lg border border-border/80 bg-card p-3 shadow-sm">
+            <h2 className="text-sm font-semibold tracking-tight text-primary">
+              {t("properties")}
+            </h2>
+            <dl>
+              <PropertyRow label={t("status")}>
+                <Badge
+                  variant={
+                    department.status === "active" ? "default" : "secondary"
+                  }
+                >
+                  {department.status === "active" ? t("active") : t("archived")}
+                </Badge>
+              </PropertyRow>
+              <PropertyRow label={t("manager")}>
+                {department.manager?.fullName ?? t("noManager")}
+              </PropertyRow>
+              <PropertyRow label={t("members")}>
+                {t("memberCount", { count: department.memberCount })}
+              </PropertyRow>
+              <PropertyRow label={t("activeProjects")}>
+                {department.activeProjectCount}
+              </PropertyRow>
+            </dl>
+            {department.description ? (
+              <p className="text-muted-foreground mt-3 border-t border-border/70 pt-3 text-xs whitespace-pre-wrap">
+                {department.description}
+              </p>
             ) : null}
-          </TabPanel>
-        ) : null}
-      </Tabs>
+          </section>
+
+          <section className="space-y-3 rounded-lg border border-border/80 bg-card p-3 shadow-sm">
+            <h2 className="text-sm font-semibold tracking-tight text-primary">
+              {t("activity")}
+            </h2>
+            <EntityActivityPanel
+              entityType="department"
+              entityId={departmentId}
+              messagesNamespace="departments"
+            />
+          </section>
+
+          {canManage ? (
+            <section className="space-y-3 rounded-lg border border-border/80 bg-card p-3 shadow-sm">
+              <h2 className="text-sm font-semibold tracking-tight text-primary">
+                {t("history")}
+              </h2>
+              {membersQuery.isLoading ? <LoadingState /> : null}
+              {!membersQuery.isLoading &&
+              !(membersQuery.data ?? []).some((m) => !m.isCurrent) ? (
+                <EmptyState title={t("history")} description="—" />
+              ) : null}
+              {(membersQuery.data ?? []).some((m) => !m.isCurrent) ? (
+                <ul className="divide-border divide-y rounded-lg border">
+                  {(membersQuery.data ?? [])
+                    .filter((m) => !m.isCurrent)
+                    .map((membership) => (
+                      <li key={membership.id} className="space-y-1 px-3 py-2.5">
+                        <p className="text-sm font-medium">
+                          {canViewEmployeeProfiles && membership.userId ? (
+                            <Link
+                              href={`/employees/${membership.userId}`}
+                              className="underline-offset-4 hover:underline"
+                            >
+                              {membership.user?.fullName ?? membership.userId}
+                            </Link>
+                          ) : (
+                            (membership.user?.fullName ?? membership.userId)
+                          )}
+                        </p>
+                        <p className="text-muted-foreground text-xs tabular-nums">
+                          {membership.startDate}
+                          {" → "}
+                          {membership.endDate ?? "—"}
+                        </p>
+                      </li>
+                    ))}
+                </ul>
+              ) : null}
+            </section>
+          ) : null}
+        </aside>
+      </div>
 
       {/* Edit dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

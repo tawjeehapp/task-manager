@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
@@ -16,6 +16,11 @@ import type { Department } from "@/features/departments/types/department.types";
 import type { Project } from "@/features/projects/types/project.types";
 import type { Task } from "@/features/tasks/types/task.types";
 import type { UserListItem } from "@/features/users/types/user.types";
+import {
+  EmployeeProfileAttendancePanel,
+  EmployeeProfileLeavePanel,
+  EmployeeProfileRequestsPanel,
+} from "@/features/users/components/employee-profile-activity";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -45,10 +50,36 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+type ProfileTab =
+  | "projects"
+  | "tasks"
+  | "attendance"
+  | "leave"
+  | "requests";
+
+function PropertyRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1 border-b border-border/70 py-2.5 last:border-b-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+      <dt className="text-muted-foreground text-sm">{label}</dt>
+      <dd className="text-sm font-medium sm:text-end">{children}</dd>
+    </div>
+  );
+}
+
 type EmployeeProfileClientProps = {
   userId: string;
   canManage: boolean;
+  isAdmin: boolean;
   canEditTasks: boolean;
+  canApproveAttendance: boolean;
+  canApproveLeave: boolean;
+  canApproveEmployeeRequest: boolean;
   currentUserId: string;
 };
 
@@ -116,7 +147,11 @@ async function fetchUserTasks(userId: string): Promise<Task[]> {
 export function EmployeeProfileClient({
   userId,
   canManage,
+  isAdmin,
   canEditTasks,
+  canApproveAttendance,
+  canApproveLeave,
+  canApproveEmployeeRequest,
   currentUserId,
 }: EmployeeProfileClientProps) {
   const t = useTranslations("employees");
@@ -133,7 +168,7 @@ export function EmployeeProfileClient({
   const [editOpen, setEditOpen] = useState(false);
   const [membershipOpen, setMembershipOpen] = useState(false);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
-  const [activeTab, setActiveTab] = useState<"projects" | "tasks">("projects");
+  const [activeTab, setActiveTab] = useState<ProfileTab>("projects");
   const [confirmAction, setConfirmAction] = useState<
     "delete" | "reset" | "deactivate" | "activate" | "removeDepartment" | null
   >(null);
@@ -146,7 +181,7 @@ export function EmployeeProfileClient({
   const departmentsQuery = useQuery({
     queryKey: ["departments", "active"],
     queryFn: fetchDepartments,
-    enabled: canManage && membershipOpen,
+    enabled: isAdmin && membershipOpen,
   });
 
   const projectsQuery = useQuery({
@@ -159,9 +194,78 @@ export function EmployeeProfileClient({
     queryFn: () => fetchUserTasks(userId),
   });
 
+  const attendanceCountQuery = useQuery({
+    queryKey: ["attendance", "profile-count", userId],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "25",
+        userId,
+        sortBy: "date",
+        sortDir: "desc",
+      });
+      const response = await fetch(`/api/attendance?${params}`);
+      const payload = (await response.json()) as {
+        data?: { total: number };
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Failed");
+      }
+      return payload.data?.total ?? 0;
+    },
+  });
+
+  const leaveCountQuery = useQuery({
+    queryKey: ["leave-requests", "profile-count", userId],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "25",
+        userId,
+        sortBy: "created_at",
+        sortDir: "desc",
+      });
+      const response = await fetch(`/api/leave-requests?${params}`);
+      const payload = (await response.json()) as {
+        data?: { total: number };
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Failed");
+      }
+      return payload.data?.total ?? 0;
+    },
+  });
+
+  const requestsCountQuery = useQuery({
+    queryKey: ["employee-requests", "profile-count", userId],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "25",
+        userId,
+        sortBy: "created_at",
+        sortDir: "desc",
+      });
+      const response = await fetch(`/api/employee-requests?${params}`);
+      const payload = (await response.json()) as {
+        data?: { total: number };
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Failed");
+      }
+      return payload.data?.total ?? 0;
+    },
+  });
+
   const user = userQuery.data;
   const projects = projectsQuery.data ?? [];
   const tasks = tasksQuery.data ?? [];
+  const attendanceTotal = attendanceCountQuery.data ?? 0;
+  const leaveTotal = leaveCountQuery.data ?? 0;
+  const requestsTotal = requestsCountQuery.data ?? 0;
 
   const editForm = useForm<UpdateUserInput>({
     resolver: zodResolver(updateUserSchema) as never,
@@ -414,7 +518,7 @@ export function EmployeeProfileClient({
                   {t("resetPassword")}
                 </Button>
               ) : null}
-              {canManage ? (
+              {isAdmin ? (
                 <>
                   <Button
                     type="button"
@@ -439,7 +543,7 @@ export function EmployeeProfileClient({
                   ) : null}
                 </>
               ) : null}
-              {canManage && !isSelf ? (
+              {isAdmin && !isSelf ? (
                 <Button
                   type="button"
                   variant="destructive"
@@ -459,144 +563,179 @@ export function EmployeeProfileClient({
         </Alert>
       ) : null}
 
-      <dl className="divide-border max-w-xl divide-y rounded-xl border border-border">
-        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-          <dt className="text-muted-foreground text-sm">{t("employeeNumber")}</dt>
-          <dd className="font-medium sm:text-end">{user.employeeNumber}</dd>
-        </div>
-        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-          <dt className="text-muted-foreground text-sm">{t("role")}</dt>
-          <dd className="font-medium sm:text-end">{tRoles(user.role)}</dd>
-        </div>
-        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-          <dt className="text-muted-foreground text-sm">{t("status")}</dt>
-          <dd className="sm:text-end">
-            <Badge variant={user.isActive ? "default" : "secondary"}>
-              {user.isActive ? t("active") : t("inactive")}
-            </Badge>
-          </dd>
-        </div>
-        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-          <dt className="text-muted-foreground text-sm">{t("phone")}</dt>
-          <dd className="font-medium sm:text-end">{user.phone ?? "—"}</dd>
-        </div>
-        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-          <dt className="text-muted-foreground text-sm">
-            {t("weeklyCapacityHours")}
-          </dt>
-          <dd className="font-medium sm:text-end">{user.weeklyCapacityHours}</dd>
-        </div>
-        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-          <dt className="text-muted-foreground text-sm">{t("department")}</dt>
-          <dd className="font-medium sm:text-end">
-            {user.currentDepartment?.name ?? t("noDepartment")}
-          </dd>
-        </div>
-      </dl>
+      <div className="grid gap-6 lg:grid-cols-[1fr_28rem] lg:items-start">
+        <div className="min-w-0 space-y-4">
+          <Tabs
+            value={activeTab}
+            onValueChange={(id) => setActiveTab(id as ProfileTab)}
+            items={[
+              {
+                id: "projects",
+                label: tProjects("title"),
+                count: projects.length,
+              },
+              {
+                id: "tasks",
+                label: tTasks("title"),
+                count: tasks.length,
+              },
+              {
+                id: "attendance",
+                label: t("tabAttendance"),
+                count: attendanceTotal,
+              },
+              {
+                id: "leave",
+                label: t("tabLeave"),
+                count: leaveTotal,
+              },
+              {
+                id: "requests",
+                label: t("tabRequests"),
+                count: requestsTotal,
+              },
+            ]}
+          >
+            <TabPanel when="projects" active={activeTab} className="space-y-3">
+              {projectsQuery.isLoading ? <LoadingState /> : null}
+              {projectsQuery.isError ? (
+                <ErrorState
+                  title={tCommon("errorTitle")}
+                  description={(projectsQuery.error as Error).message}
+                  onRetry={() => void projectsQuery.refetch()}
+                />
+              ) : null}
+              {!projectsQuery.isLoading &&
+              !projectsQuery.isError &&
+              projects.length === 0 ? (
+                <EmptyState
+                  title={t("emptyProjectsTitle")}
+                  description={t("emptyProjectsDescription")}
+                />
+              ) : null}
+              {projects.length > 0 ? (
+                <div className="overflow-x-auto rounded-xl border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{tProjects("name")}</TableHead>
+                        <TableHead>{tProjects("status")}</TableHead>
+                        <TableHead>{tProjects("priority")}</TableHead>
+                        <TableHead>{tProjects("endDate")}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {projects.map((project) => (
+                        <TableRow key={project.id}>
+                          <TableCell>
+                            <Link
+                              href={`/projects/${project.id}`}
+                              className="font-medium underline-offset-4 hover:underline"
+                            >
+                              {project.name}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {tProjects(
+                                `status_${project.status}` as "status_draft",
+                              )}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {tProjects(
+                              `priority_${project.priority}` as "priority_low",
+                            )}
+                          </TableCell>
+                          <TableCell>{project.endDate ?? "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
+            </TabPanel>
 
-      <Tabs
-        value={activeTab}
-        onValueChange={(id) => setActiveTab(id as "projects" | "tasks")}
-        items={[
-          {
-            id: "projects",
-            label: tProjects("title"),
-            count: projects.length,
-          },
-          {
-            id: "tasks",
-            label: tTasks("title"),
-            count: tasks.length,
-          },
-        ]}
-      >
-        <TabPanel when="projects" active={activeTab} className="space-y-3">
-          {projectsQuery.isLoading ? <LoadingState /> : null}
-          {projectsQuery.isError ? (
-            <ErrorState
-              title={tCommon("errorTitle")}
-              description={(projectsQuery.error as Error).message}
-              onRetry={() => void projectsQuery.refetch()}
-            />
-          ) : null}
-          {!projectsQuery.isLoading &&
-          !projectsQuery.isError &&
-          projects.length === 0 ? (
-            <EmptyState
-              title={t("emptyProjectsTitle")}
-              description={t("emptyProjectsDescription")}
-            />
-          ) : null}
-          {projects.length > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{tProjects("name")}</TableHead>
-                    <TableHead>{tProjects("status")}</TableHead>
-                    <TableHead>{tProjects("priority")}</TableHead>
-                    <TableHead>{tProjects("endDate")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {projects.map((project) => (
-                    <TableRow key={project.id}>
-                      <TableCell>
-                        <Link
-                          href={`/projects/${project.id}`}
-                          className="font-medium underline-offset-4 hover:underline"
-                        >
-                          {project.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {tProjects(
-                            `status_${project.status}` as "status_draft",
-                          )}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {tProjects(
-                          `priority_${project.priority}` as "priority_low",
-                        )}
-                      </TableCell>
-                      <TableCell>{project.endDate ?? "—"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : null}
-        </TabPanel>
+            <TabPanel when="tasks" active={activeTab} className="space-y-3">
+              {tasksQuery.isLoading ? <LoadingState /> : null}
+              {tasksQuery.isError ? (
+                <ErrorState
+                  title={tCommon("errorTitle")}
+                  description={(tasksQuery.error as Error).message}
+                  onRetry={() => void tasksQuery.refetch()}
+                />
+              ) : null}
+              {!tasksQuery.isLoading &&
+              !tasksQuery.isError &&
+              tasks.length === 0 ? (
+                <EmptyState
+                  title={t("emptyTasksTitle")}
+                  description={t("emptyTasksDescription")}
+                />
+              ) : null}
+              {tasks.length > 0 ? (
+                <TasksListTable
+                  tasks={tasks}
+                  canEdit={canEditTasks}
+                  viewerId={currentUserId}
+                  showProject
+                />
+              ) : null}
+            </TabPanel>
 
-        <TabPanel when="tasks" active={activeTab} className="space-y-3">
-          {tasksQuery.isLoading ? <LoadingState /> : null}
-          {tasksQuery.isError ? (
-            <ErrorState
-              title={tCommon("errorTitle")}
-              description={(tasksQuery.error as Error).message}
-              onRetry={() => void tasksQuery.refetch()}
-            />
-          ) : null}
-          {!tasksQuery.isLoading &&
-          !tasksQuery.isError &&
-          tasks.length === 0 ? (
-            <EmptyState
-              title={t("emptyTasksTitle")}
-              description={t("emptyTasksDescription")}
-            />
-          ) : null}
-          {tasks.length > 0 ? (
-            <TasksListTable
-              tasks={tasks}
-              canEdit={canEditTasks}
-              viewerId={currentUserId}
-              showProject
-            />
-          ) : null}
-        </TabPanel>
-      </Tabs>
+            <TabPanel when="attendance" active={activeTab} className="space-y-3">
+              <EmployeeProfileAttendancePanel
+                userId={userId}
+                canApprove={canApproveAttendance && !isSelf}
+              />
+            </TabPanel>
+
+            <TabPanel when="leave" active={activeTab} className="space-y-3">
+              <EmployeeProfileLeavePanel
+                userId={userId}
+                canApprove={canApproveLeave && !isSelf}
+              />
+            </TabPanel>
+
+            <TabPanel when="requests" active={activeTab} className="space-y-3">
+              <EmployeeProfileRequestsPanel
+                userId={userId}
+                canApprove={canApproveEmployeeRequest && !isSelf}
+              />
+            </TabPanel>
+          </Tabs>
+        </div>
+
+        <aside className="min-w-0 space-y-4 rounded-xl bg-muted p-3 lg:col-start-2 lg:row-start-1 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <section className="space-y-1 rounded-lg border border-border/80 bg-card p-3 shadow-sm">
+            <h2 className="text-sm font-semibold tracking-tight text-primary">
+              {t("properties")}
+            </h2>
+            <dl>
+              <PropertyRow label={t("employeeNumber")}>
+                {user.employeeNumber}
+              </PropertyRow>
+              <PropertyRow label={t("role")}>
+                {tRoles(user.role)}
+              </PropertyRow>
+              <PropertyRow label={t("status")}>
+                <Badge variant={user.isActive ? "default" : "secondary"}>
+                  {user.isActive ? t("active") : t("inactive")}
+                </Badge>
+              </PropertyRow>
+              <PropertyRow label={t("phone")}>
+                {user.phone ?? "—"}
+              </PropertyRow>
+              <PropertyRow label={t("weeklyCapacityHours")}>
+                {user.weeklyCapacityHours}
+              </PropertyRow>
+              <PropertyRow label={t("department")}>
+                {user.currentDepartment?.name ?? t("noDepartment")}
+              </PropertyRow>
+            </dl>
+          </section>
+        </aside>
+      </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
@@ -616,7 +755,7 @@ export function EmployeeProfileClient({
                   phone: values.phone,
                   weeklyCapacityHours: values.weeklyCapacityHours,
                 };
-                if (!isSelf) {
+                if (isAdmin && !isSelf) {
                   body.role = values.role;
                 }
                 await patchMutation.mutateAsync(body);
@@ -663,7 +802,7 @@ export function EmployeeProfileClient({
                 {t("weeklyCapacityHint")}
               </p>
             </div>
-            {!isSelf ? (
+            {isAdmin && !isSelf ? (
               <div className="space-y-2">
                 <Label htmlFor="edit-role">{t("role")}</Label>
                 <select

@@ -35,8 +35,13 @@ import { cn } from "@/lib/utils";
 type EmployeeTasksBoardProps = {
   viewerId: string;
   initialTasks: TasksListResult;
-  /** Personal = assignee-filtered board; team = department-wide board. */
-  mode?: "personal" | "team";
+  /**
+   * Personal = assignee-filtered board; team = department-wide board;
+   * project = single-project board (same editable cards as team).
+   */
+  mode?: "personal" | "team" | "project";
+  /** Required when mode is "project". */
+  projectId?: string;
   /** When true, parent owns the page header (e.g. list/board toggle). */
   hideHeader?: boolean;
 };
@@ -94,6 +99,25 @@ async function fetchTeamTasks(): Promise<Task[]> {
   return payload.data?.items ?? [];
 }
 
+async function fetchProjectBoardTasks(projectId: string): Promise<Task[]> {
+  const params = new URLSearchParams({
+    page: "1",
+    pageSize: "100",
+    sortBy: "dueDate",
+    sortDir: "asc",
+    projectId,
+  });
+  const response = await fetch(`/api/tasks?${params.toString()}`);
+  const payload = (await response.json()) as {
+    data?: TasksListResult;
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data?.items ?? [];
+}
+
 export function isLateTask(task: Task, today: string): boolean {
   return (
     task.status !== "completed" &&
@@ -136,9 +160,7 @@ export function filterEmployeeBoardTasks(
   return tasks.filter((task) => {
     if (opts.status && task.status !== opts.status) return false;
     if (opts.priority && task.priority !== opts.priority) return false;
-    if (opts.assignee === "__unassigned__") {
-      if (task.assignedTo) return false;
-    } else if (opts.assignee && task.assignedTo !== opts.assignee) {
+    if (opts.assignee && task.assignedTo !== opts.assignee) {
       return false;
     }
     if (opts.lateOnly && !isLateTask(task, opts.today)) return false;
@@ -239,9 +261,11 @@ async function patchTask(
 function TeamBoardTaskCard({
   task,
   today,
+  hideProjectName = false,
 }: {
   task: Task;
   today: string;
+  hideProjectName?: boolean;
 }) {
   const t = useTranslations("tasks");
   const tDashboard = useTranslations("dashboard");
@@ -298,7 +322,7 @@ function TeamBoardTaskCard({
         late && "border-destructive/40",
       )}
     >
-      {task.project?.name ? (
+      {!hideProjectName && task.project?.name ? (
         <p className="text-xs text-muted-foreground">{task.project.name}</p>
       ) : null}
       <Link
@@ -384,12 +408,15 @@ export function EmployeeTasksBoard({
   viewerId,
   initialTasks,
   mode = "personal",
+  projectId,
   hideHeader = false,
 }: EmployeeTasksBoardProps) {
   const t = useTranslations("tasks");
   const tDashboard = useTranslations("dashboard");
   const tCommon = useTranslations("common");
   const isTeam = mode === "team";
+  const isProject = mode === "project";
+  const isManagedBoard = isTeam || isProject;
   const [boardNotice, setBoardNotice] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
@@ -404,15 +431,26 @@ export function EmployeeTasksBoard({
   > | null>(null);
   const today = todayInOrgTimezone();
   const boardQueryKey = (
-    isTeam
-      ? (["tasks", "team-board"] as const)
-      : (["tasks", "employee-board", viewerId] as const)
+    isProject && projectId
+      ? (["tasks", "project-board", projectId] as const)
+      : isTeam
+        ? (["tasks", "team-board"] as const)
+        : (["tasks", "employee-board", viewerId] as const)
   );
 
   const tasksQuery = useQuery({
     queryKey: boardQueryKey,
-    queryFn: () => (isTeam ? fetchTeamTasks() : fetchMyTasks(viewerId)),
+    queryFn: () => {
+      if (isProject && projectId) {
+        return fetchProjectBoardTasks(projectId);
+      }
+      if (isTeam) {
+        return fetchTeamTasks();
+      }
+      return fetchMyTasks(viewerId);
+    },
     ...withInitialData(initialTasks.items),
+    enabled: !isProject || Boolean(projectId),
   });
 
   const statusMutation = useBoardStatusMutation(boardQueryKey);
@@ -422,7 +460,7 @@ export function EmployeeTasksBoard({
         search,
         status: statusFilter,
         priority: priorityFilter,
-        assignee: isTeam ? assigneeFilter : undefined,
+        assignee: isManagedBoard ? assigneeFilter : undefined,
         lateOnly,
         today,
       }),
@@ -432,7 +470,7 @@ export function EmployeeTasksBoard({
       statusFilter,
       priorityFilter,
       assigneeFilter,
-      isTeam,
+      isManagedBoard,
       lateOnly,
       today,
     ],
@@ -487,12 +525,22 @@ export function EmployeeTasksBoard({
       {!hideHeader ? (
         <>
           <PageHeader
-            title={isTeam ? t("teamTasksTitle") : t("myTasksTitle")}
+            title={
+              isProject
+                ? t("title")
+                : isTeam
+                  ? t("teamTasksTitle")
+                  : t("myTasksTitle")
+            }
             description={
-              isTeam ? t("teamTasksDescription") : t("myTasksDescription")
+              isProject
+                ? undefined
+                : isTeam
+                  ? t("teamTasksDescription")
+                  : t("myTasksDescription")
             }
           />
-          {!isTeam ? (
+          {!isManagedBoard ? (
             <p className="text-xs text-muted-foreground">
               {t("assignedToMeLabel")}
             </p>
@@ -548,7 +596,7 @@ export function EmployeeTasksBoard({
           <option value="medium">{t("priority_medium")}</option>
           <option value="high">{t("priority_high")}</option>
         </select>
-        {isTeam ? (
+        {isManagedBoard ? (
           <select
             className="h-9 rounded-md border bg-background px-3 text-sm"
             value={assigneeFilter}
@@ -556,7 +604,6 @@ export function EmployeeTasksBoard({
             aria-label={t("assignee")}
           >
             <option value="">{t("filterAllAssignees")}</option>
-            <option value="__unassigned__">{t("unassigned")}</option>
             {assigneeFilterOptions.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.fullName}
@@ -592,9 +639,9 @@ export function EmployeeTasksBoard({
       <div className="flex gap-3 overflow-x-auto pb-4">
         {columns.map((column) => {
           const isBlockedColumn = column.status === "blocked";
-          const isDropTarget = !isTeam && dropTarget === column.status;
+          const isDropTarget = !isManagedBoard && dropTarget === column.status;
           const showBlockedHint =
-            !isTeam && Boolean(draggingId) && isBlockedColumn;
+            !isManagedBoard && Boolean(draggingId) && isBlockedColumn;
 
           return (
           <div
@@ -610,7 +657,7 @@ export function EmployeeTasksBoard({
                 "ring-2 ring-destructive/40 ring-offset-2 ring-offset-background",
             )}
             onDragOver={
-              isTeam
+              isManagedBoard
                 ? undefined
                 : (event) => {
                     event.preventDefault();
@@ -621,7 +668,7 @@ export function EmployeeTasksBoard({
                   }
             }
             onDrop={
-              isTeam
+              isManagedBoard
                 ? undefined
                 : (event) => {
                     event.preventDefault();
@@ -682,12 +729,13 @@ export function EmployeeTasksBoard({
                 </p>
               ) : null}
               {column.tasks.map((task) => {
-                if (isTeam) {
+                if (isManagedBoard) {
                   return (
                     <TeamBoardTaskCard
                       key={task.id}
                       task={task}
                       today={today}
+                      hideProjectName={isProject}
                     />
                   );
                 }

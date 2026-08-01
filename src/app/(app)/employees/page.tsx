@@ -46,6 +46,7 @@ export default async function EmployeesPage() {
   return (
     <EmployeesPageClient
       canManage={canManage}
+      isAdmin={user.role === "admin"}
       currentUserId={user.id}
       initialUsers={initialUsers}
     />

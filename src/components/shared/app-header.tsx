@@ -23,22 +23,23 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import type { AuthMeResponse } from "@/features/auth/types/auth.types";
+import { withInitialData } from "@/lib/query/initial-data";
 
-type MeResponse = {
-  user: { fullName: string; employeeNumber: string };
-  permissions: string[];
+type AppHeaderProps = {
+  initialMe: AuthMeResponse;
 };
 
-async function fetchMe(): Promise<MeResponse | null> {
+async function fetchMe(): Promise<AuthMeResponse | null> {
   const response = await fetch("/api/auth/me");
   if (!response.ok) {
     return null;
   }
-  const payload = (await response.json()) as { data?: MeResponse };
+  const payload = (await response.json()) as { data?: AuthMeResponse };
   return payload.data ?? null;
 }
 
-export function AppHeader() {
+export function AppHeader({ initialMe }: AppHeaderProps) {
   const t = useTranslations("nav");
   const tApp = useTranslations("app");
   const tHeader = useTranslations("header");
@@ -51,6 +52,7 @@ export function AppHeader() {
     queryKey: ["auth", "me"],
     queryFn: fetchMe,
     staleTime: 60_000,
+    ...withInitialData(initialMe),
   });
 
   const displayName =
@@ -90,6 +92,7 @@ export function AppHeader() {
             </SheetHeader>
             <AppSidebar
               className="border-0"
+              initialMe={initialMe}
               onNavigate={() => setOpen(false)}
             />
           </SheetContent>

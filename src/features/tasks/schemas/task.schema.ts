@@ -25,10 +25,7 @@ export const createTaskSchema = z.object({
     .transform((value) => (value === "" || value === undefined ? null : value)),
   status: taskStatusSchema.optional().default("todo"),
   priority: taskPrioritySchema.optional().default("medium"),
-  assignedTo: z
-    .union([z.string().uuid(), z.literal(""), z.null()])
-    .optional()
-    .transform((value) => (value === "" || value === undefined ? null : value)),
+  assignedTo: z.string().uuid("معرّف المعيّن غير صالح"),
   startDate: optionalDate,
   dueDate: optionalDate,
   estimatedHours: z.preprocess(
@@ -63,15 +60,7 @@ export const updateTaskSchema = z
       }),
     status: taskStatusSchema.optional(),
     priority: taskPrioritySchema.optional(),
-    assignedTo: z
-      .union([z.string().uuid(), z.literal(""), z.null()])
-      .optional()
-      .transform((value) => {
-        if (value === undefined) {
-          return undefined;
-        }
-        return value === "" ? null : value;
-      }),
+    assignedTo: z.string().uuid("معرّف المعيّن غير صالح").optional(),
     startDate: z
       .string()
       .nullable()

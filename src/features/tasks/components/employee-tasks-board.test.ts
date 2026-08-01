@@ -166,7 +166,7 @@ describe("filterEmployeeBoardTasks", () => {
     const withAssignees = [
       makeTask({ id: "1", assignedTo: "u1", assignee: { id: "u1", fullName: "Sara", employeeNumber: "1" } }),
       makeTask({ id: "2", assignedTo: "u2", assignee: { id: "u2", fullName: "Omar", employeeNumber: "2" } }),
-      makeTask({ id: "3", assignedTo: null, assignee: null }),
+      makeTask({ id: "3", assignedTo: "u3", assignee: { id: "u3", fullName: "Lina", employeeNumber: "3" } }),
     ];
 
     expect(
@@ -185,7 +185,7 @@ describe("filterEmployeeBoardTasks", () => {
         search: "",
         status: "",
         priority: "",
-        assignee: "__unassigned__",
+        assignee: "u3",
         lateOnly: false,
         today: "2026-07-26",
       }).map((t) => t.id),

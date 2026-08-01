@@ -54,7 +54,8 @@ export const rejectEmployeeRequestSchema = z.object({
 });
 
 export const approveEmployeeRequestSchema = z.object({
-  assignedTo: z.string().uuid().nullable().optional(),
+  /** Required when approving an excusal; ignored for extensions. */
+  assignedTo: z.string().uuid().optional(),
 });
 
 export const listEmployeeRequestsQuerySchema = z.object({

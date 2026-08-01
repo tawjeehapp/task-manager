@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
 import { List } from "lucide-react";
 
 import { featureFlags } from "@/config/feature-flags";
+import { EntityActivityPanel } from "@/features/activity/components/entity-activity-panel";
 import {
   updateProjectSchema,
   type UpdateProjectInput,
@@ -25,13 +26,13 @@ import type { ProjectRequest } from "@/features/project-requests/types/project-r
 import { computeHoursWeightedProgress } from "@/features/projects/lib/project-progress";
 import type { Task } from "@/features/tasks/types/task.types";
 import { EmployeeProjectTasksTable } from "@/features/projects/components/employee-project-tasks-table";
+import { ProjectTasksPanel } from "@/features/projects/components/project-tasks-panel";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { TabPanel, Tabs } from "@/components/shared/tabs";
-import { TasksListTable } from "@/features/tasks/components/tasks-list-table";
 import { AssigneeSelect } from "@/features/tasks/components/assignee-select";
 import type { AssigneeOption } from "@/features/tasks/components/assignee-select";
 import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
@@ -59,12 +60,28 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
+function PropertyRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1 border-b border-border/70 py-2.5 last:border-b-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+      <dt className="text-muted-foreground text-sm">{label}</dt>
+      <dd className="text-sm font-medium sm:text-end">{children}</dd>
+    </div>
+  );
+}
+
 type ProjectDetailClientProps = {
   projectId: string;
   canManageProject: boolean;
   canManageMembers: boolean;
   canCreateTask: boolean;
   canRequestProjectExtension?: boolean;
+  canViewEmployeeProfiles?: boolean;
   managedDepartmentId: string | null;
   viewerId: string;
   isEmployee?: boolean;
@@ -141,6 +158,7 @@ export function ProjectDetailClient({
   canManageMembers,
   canCreateTask,
   canRequestProjectExtension = false,
+  canViewEmployeeProfiles = false,
   managedDepartmentId,
   viewerId,
   isEmployee = false,
@@ -158,6 +176,7 @@ export function ProjectDetailClient({
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"tasks" | "members">("tasks");
+  const [taskTotal, setTaskTotal] = useState(0);
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [extensionDate, setExtensionDate] = useState("");
   const [extensionReason, setExtensionReason] = useState("");
@@ -176,6 +195,7 @@ export function ProjectDetailClient({
   const tasksQuery = useQuery({
     queryKey: ["tasks", { projectId }],
     queryFn: () => fetchProjectTasks(projectId),
+    enabled: isEmployee,
   });
 
   const departmentMembersQuery = useQuery({
@@ -241,6 +261,9 @@ export function ProjectDetailClient({
       setArchiveOpen(false);
       setSuccessMessage(t("updateSuccess"));
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["project", projectId, "activity"],
+      });
     },
   });
 
@@ -297,6 +320,9 @@ export function ProjectDetailClient({
         queryKey: ["projects", projectId, "members"],
       });
       await queryClient.invalidateQueries({ queryKey: ["projects", projectId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["project", projectId, "activity"],
+      });
     },
   });
 
@@ -320,6 +346,9 @@ export function ProjectDetailClient({
         queryKey: ["projects", projectId, "members"],
       });
       await queryClient.invalidateQueries({ queryKey: ["projects", projectId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["project", projectId, "activity"],
+      });
     },
   });
 
@@ -331,7 +360,7 @@ export function ProjectDetailClient({
       description: "",
       status: "todo",
       priority: "medium",
-      assignedTo: null,
+      assignedTo: viewerId,
       startDate: null,
       dueDate: null,
       dependsOnTaskIds: [],
@@ -362,7 +391,7 @@ export function ProjectDetailClient({
         description: "",
         status: "todo",
         priority: "medium",
-        assignedTo: null,
+        assignedTo: viewerId,
         startDate: null,
         dueDate: null,
         dependsOnTaskIds: [],
@@ -441,9 +470,24 @@ export function ProjectDetailClient({
         });
       }
     }
-    return [...byId.values()].sort((a, b) =>
+    if (!byId.has(viewerId)) {
+      byId.set(viewerId, {
+        id: viewerId,
+        fullName: tTasks("assignee"),
+        employeeNumber: "",
+      });
+    }
+    const sorted = [...byId.values()].sort((a, b) =>
       a.fullName.localeCompare(b.fullName),
     );
+    const viewerOption = sorted.find((option) => option.id === viewerId);
+    if (!viewerOption) {
+      return sorted;
+    }
+    return [
+      viewerOption,
+      ...sorted.filter((option) => option.id !== viewerId),
+    ];
   })();
   const watchedCreateAssignee = createTaskForm.watch("assignedTo");
 
@@ -515,14 +559,6 @@ export function ProjectDetailClient({
                 </>
               ) : (
                 <>
-                  {featureFlags.kanban ? (
-                    <Link
-                      href={`/projects/${projectId}/board`}
-                      className="border-border bg-background inline-flex h-8 items-center rounded-lg border px-2.5 text-sm hover:bg-muted"
-                    >
-                      {t("kanban")}
-                    </Link>
-                  ) : null}
                   {featureFlags.gantt ? (
                     <Link
                       href={`/projects/${projectId}/gantt`}
@@ -574,174 +610,211 @@ export function ProjectDetailClient({
         </Alert>
       ) : null}
 
-      {!isEmployee ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-lg border p-4">
-            <p className="text-muted-foreground text-sm">{t("status")}</p>
-            <Badge className="mt-2" variant="secondary">
-              {statusLabel(project.status)}
-            </Badge>
-          </div>
-          <div className="rounded-lg border p-4">
-            <p className="text-muted-foreground text-sm">{t("priority")}</p>
-            <p className="mt-2 font-medium">
-              {priorityLabel(project.priority)}
-            </p>
-          </div>
-          <div className="rounded-lg border p-4">
-            <p className="text-muted-foreground text-sm">{t("endDate")}</p>
-            <p className="mt-2 font-medium">{project.endDate}</p>
-            {allowExtensionRequest ? (
-              <div className="mt-3 space-y-2">
-                {pendingExtension ? (
-                  <Badge variant="secondary">
-                    {t("pendingExtension", {
-                      date: formatDate(pendingExtension.requestedDate),
-                    })}
-                  </Badge>
-                ) : (
+      <div className="grid gap-6 lg:grid-cols-[1fr_28rem] lg:items-start">
+        <div className="min-w-0 space-y-4">
+          <Tabs
+            value={activeTab}
+            onValueChange={(id) => setActiveTab(id as "tasks" | "members")}
+            items={[
+              {
+                id: "tasks",
+                label: tTasks("title"),
+                count: isEmployee ? tasks.length : taskTotal,
+              },
+              {
+                id: "members",
+                label: t("members"),
+                count: members.length,
+              },
+            ]}
+            actions={
+              activeTab === "tasks" ? (
+                !isEmployee &&
+                canCreateTask &&
+                project.status !== "archived" ? (
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setExtensionError(null);
-                      setExtensionDate("");
-                      setExtensionReason("");
-                      setExtensionOpen(true);
-                    }}
+                    onClick={() => setCreateTaskOpen(true)}
                   >
-                    {t("requestExtension")}
+                    {tTasks("create")}
                   </Button>
-                )}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {!isEmployee && project.description ? (
-        <p className="text-muted-foreground text-sm whitespace-pre-wrap">
-          {project.description}
-        </p>
-      ) : null}
-
-      <Tabs
-        value={activeTab}
-        onValueChange={(id) => setActiveTab(id as "tasks" | "members")}
-        items={[
-          {
-            id: "tasks",
-            label: tTasks("title"),
-            count: tasks.length,
-          },
-          {
-            id: "members",
-            label: t("members"),
-            count: members.length,
-          },
-        ]}
-        actions={
-          activeTab === "tasks" ? (
-            !isEmployee &&
-            canCreateTask &&
-            project.status !== "archived" ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setCreateTaskOpen(true)}
-              >
-                {tTasks("create")}
-              </Button>
-            ) : null
-          ) : allowMemberActions ? (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setAddMemberOpen(true)}
-            >
-              {t("addMember")}
-            </Button>
-          ) : null
-        }
-      >
-        <TabPanel when="tasks" active={activeTab} className="space-y-3">
-          {isEmployee ? (
-            <EmployeeProjectTasksTable
-              tasks={tasks}
-              members={members}
-              viewerId={viewerId}
-              isLoading={tasksQuery.isLoading}
-            />
-          ) : (
-            <>
-              {tasksQuery.isLoading ? <LoadingState /> : null}
-              {tasks.length === 0 && !tasksQuery.isLoading ? (
-                <EmptyState
-                  title={tTasks("emptyTitle")}
-                  description={tTasks("emptyDescription")}
+                ) : null
+              ) : allowMemberActions ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setAddMemberOpen(true)}
+                >
+                  {t("addMember")}
+                </Button>
+              ) : null
+            }
+          >
+            <TabPanel when="tasks" active={activeTab} className="space-y-3">
+              {isEmployee ? (
+                <EmployeeProjectTasksTable
+                  tasks={tasks}
+                  members={members}
+                  viewerId={viewerId}
+                  isLoading={tasksQuery.isLoading}
                 />
               ) : (
-                <TasksListTable
-                  tasks={tasks}
+                <ProjectTasksPanel
+                  projectId={projectId}
                   canEdit={canCreateTask}
                   viewerId={viewerId}
+                  onTotalChange={setTaskTotal}
                 />
               )}
-            </>
-          )}
-        </TabPanel>
+            </TabPanel>
 
-        <TabPanel when="members" active={activeTab} className="space-y-3">
-          {membersQuery.isLoading ? <LoadingState /> : null}
-          {members.length === 0 && !membersQuery.isLoading ? (
-            <EmptyState
-              title={t("emptyMembersTitle")}
-              description={t("emptyMembersDescription")}
+            <TabPanel when="members" active={activeTab} className="space-y-3">
+              {membersQuery.isLoading ? <LoadingState /> : null}
+              {members.length === 0 && !membersQuery.isLoading ? (
+                <EmptyState
+                  title={t("emptyMembersTitle")}
+                  description={t("emptyMembersDescription")}
+                />
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{t("memberName")}</TableHead>
+                        {!isEmployee ? (
+                          <TableHead>{t("employeeNumber")}</TableHead>
+                        ) : null}
+                        {allowMemberActions ? (
+                          <TableHead>{t("actions")}</TableHead>
+                        ) : null}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {members.map((member) => (
+                        <TableRow key={member.id}>
+                          <TableCell>
+                            {canViewEmployeeProfiles && member.userId ? (
+                              <Link
+                                href={`/employees/${member.userId}`}
+                                className="font-medium underline-offset-4 hover:underline"
+                              >
+                                {member.user?.fullName ?? "—"}
+                              </Link>
+                            ) : (
+                              (member.user?.fullName ?? "—")
+                            )}
+                          </TableCell>
+                          {!isEmployee ? (
+                            <TableCell>
+                              {member.user?.employeeNumber ?? "—"}
+                            </TableCell>
+                          ) : null}
+                          {allowMemberActions ? (
+                            <TableCell>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setRemoveMember(member)}
+                              >
+                                {t("removeMember")}
+                              </Button>
+                            </TableCell>
+                          ) : null}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </TabPanel>
+          </Tabs>
+        </div>
+
+        <aside className="min-w-0 space-y-4 rounded-xl bg-muted p-3 lg:col-start-2 lg:row-start-1 lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <section className="space-y-1 rounded-lg border border-border/80 bg-card p-3 shadow-sm">
+            <h2 className="text-sm font-semibold tracking-tight text-primary">
+              {t("properties")}
+            </h2>
+            <dl>
+              <PropertyRow label={t("status")}>
+                <Badge variant="secondary">{statusLabel(project.status)}</Badge>
+              </PropertyRow>
+              <PropertyRow label={t("priority")}>
+                {priorityLabel(project.priority)}
+              </PropertyRow>
+              <PropertyRow label={t("endDate")}>
+                <div className="space-y-2 sm:text-end">
+                  <p>{project.endDate}</p>
+                  {allowExtensionRequest ? (
+                    pendingExtension ? (
+                      <Badge variant="secondary">
+                        {t("pendingExtension", {
+                          date: formatDate(pendingExtension.requestedDate),
+                        })}
+                      </Badge>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setExtensionError(null);
+                          setExtensionDate("");
+                          setExtensionReason("");
+                          setExtensionOpen(true);
+                        }}
+                      >
+                        {t("requestExtension")}
+                      </Button>
+                    )
+                  ) : null}
+                </div>
+              </PropertyRow>
+              {project.startDate ? (
+                <PropertyRow label={t("startDate")}>
+                  {project.startDate}
+                </PropertyRow>
+              ) : null}
+              {!isEmployee && project.department ? (
+                <PropertyRow label={t("department")}>
+                  <Link
+                    href={`/departments/${project.departmentId}`}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {project.department.name}
+                  </Link>
+                </PropertyRow>
+              ) : null}
+              <PropertyRow label={t("members")}>
+                {t("memberCount", { count: project.memberCount ?? members.length })}
+              </PropertyRow>
+              {!isEmployee && project.createdByUser ? (
+                <PropertyRow label={t("createdBy")}>
+                  {project.createdByUser.fullName}
+                </PropertyRow>
+              ) : null}
+            </dl>
+            {!isEmployee && project.description ? (
+              <p className="text-muted-foreground mt-3 border-t border-border/70 pt-3 text-xs whitespace-pre-wrap">
+                {project.description}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="space-y-3 rounded-lg border border-border/80 bg-card p-3 shadow-sm">
+            <h2 className="text-sm font-semibold tracking-tight text-primary">
+              {t("activity")}
+            </h2>
+            <EntityActivityPanel
+              entityType="project"
+              entityId={projectId}
+              messagesNamespace="projects"
             />
-          ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("memberName")}</TableHead>
-                    {!isEmployee ? (
-                      <TableHead>{t("employeeNumber")}</TableHead>
-                    ) : null}
-                    {allowMemberActions ? (
-                      <TableHead>{t("actions")}</TableHead>
-                    ) : null}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {members.map((member) => (
-                    <TableRow key={member.id}>
-                      <TableCell>{member.user?.fullName ?? "—"}</TableCell>
-                      {!isEmployee ? (
-                        <TableCell>
-                          {member.user?.employeeNumber ?? "—"}
-                        </TableCell>
-                      ) : null}
-                      {allowMemberActions ? (
-                        <TableCell>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setRemoveMember(member)}
-                          >
-                            {t("removeMember")}
-                          </Button>
-                        </TableCell>
-                      ) : null}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </TabPanel>
-      </Tabs>
+          </section>
+        </aside>
+      </div>
 
       <Dialog
         open={extensionOpen}

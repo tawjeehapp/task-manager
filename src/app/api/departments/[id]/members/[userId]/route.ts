@@ -2,6 +2,7 @@ import { apiError, apiSuccess } from "@/lib/api/response";
 import { requireUser } from "@/lib/auth/require-user";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { PERMISSIONS } from "@/lib/permissions";
+import { tryLogEntityActivity } from "@/features/activity/services/entity-activity";
 import { removeDepartmentMember } from "@/features/departments/services/memberships";
 
 type RouteContext = {
@@ -17,6 +18,13 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     const { id, userId } = await context.params;
     await removeDepartmentMember(id, userId);
+    await tryLogEntityActivity(
+      user.id,
+      "department",
+      id,
+      "department.member_removed",
+      { userId },
+    );
     return apiSuccess({ ok: true });
   } catch (error) {
     return apiError(error);

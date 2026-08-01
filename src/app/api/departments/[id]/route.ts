@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth/require-user";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { PERMISSIONS } from "@/lib/permissions";
+import { tryLogEntityActivity } from "@/features/activity/services/entity-activity";
 import { updateDepartmentSchema } from "@/features/departments/schemas/department.schema";
 import {
   deleteDepartment,
@@ -45,6 +46,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const department = await updateDepartment(id, parsed.data);
+    await tryLogEntityActivity(
+      user.id,
+      "department",
+      id,
+      "department.updated",
+      {
+        fields: Object.keys(parsed.data).filter(
+          (key) => parsed.data[key as keyof typeof parsed.data] !== undefined,
+        ),
+      },
+    );
     return apiSuccess(department);
   } catch (error) {
     return apiError(error);

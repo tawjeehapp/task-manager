@@ -52,6 +52,10 @@ type TaskWithRelations = TaskRow & {
     name: string;
     department_id: string;
     end_date: string;
+    department:
+      | { id: string; name: string }
+      | { id: string; name: string }[]
+      | null;
   } | null;
   assignee: {
     id: string;
@@ -66,7 +70,7 @@ type TaskWithRelations = TaskRow & {
 };
 
 const TASK_SELECT =
-  "id, project_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id, end_date), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number)";
+  "id, project_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id, end_date, department:departments!department_id(id, name)), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number)";
 
 const SORT_COLUMN_MAP: Record<ListTasksQuery["sortBy"], string> = {
   title: "title",
@@ -95,18 +99,48 @@ function mapUserSummary(
   };
 }
 
+function embedOne<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
 function mapProject(
   row: TaskWithRelations["project"],
+  departmentNames?: Map<string, string>,
 ): TaskProjectSummary | null {
   if (!row) {
     return null;
   }
+  const embedded = embedOne(row.department);
   return {
     id: row.id,
     name: row.name,
     departmentId: row.department_id,
+    departmentName:
+      embedded?.name ?? departmentNames?.get(row.department_id) ?? null,
     endDate: String(row.end_date).slice(0, 10),
   };
+}
+
+async function getDepartmentNameMap(
+  departmentIds: string[],
+): Promise<Map<string, string>> {
+  const unique = [...new Set(departmentIds.filter(Boolean))];
+  const map = new Map<string, string>();
+  if (unique.length === 0) return map;
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("departments")
+    .select("id, name")
+    .in("id", unique);
+  if (error) {
+    throw new ApiError("تعذر جلب الأقسام.", 500, "LIST_DEPARTMENTS_FAILED");
+  }
+  for (const row of data ?? []) {
+    map.set(row.id as string, row.name as string);
+  }
+  return map;
 }
 
 function toHours(value: number | string | null | undefined): number {
@@ -145,13 +179,14 @@ export function mapTask(
     incompleteDependencies?: IncompleteDependencySummary[];
     attachments?: TaskAttachmentSummary[];
     includeEmployeeNumber?: boolean;
+    departmentNames?: Map<string, string>;
   },
 ): Task {
   const includeEmployeeNumber = extras?.includeEmployeeNumber !== false;
   return {
     id: row.id,
     projectId: row.project_id,
-    project: mapProject(row.project),
+    project: mapProject(row.project, extras?.departmentNames),
     title: row.title,
     description: row.description,
     status: row.status,
@@ -306,12 +341,16 @@ async function loadTaskById(id: string): Promise<Task> {
   const row = data as unknown as TaskWithRelations;
   const depAggregates = await getDependencyAggregates([row.id]);
   const deps = depAggregates.get(row.id);
+  const departmentNames = await getDepartmentNameMap(
+    row.project?.department_id ? [row.project.department_id] : [],
+  );
 
   return mapTask(row, {
     dependencyCount: deps?.count ?? 0,
     incompleteDependencyCount: deps?.incompleteCount ?? 0,
     incompleteDependencyTitles: deps?.incompleteTitles ?? [],
     incompleteDependencies: deps?.incompleteDependencies ?? [],
+    departmentNames,
   });
 }
 
@@ -390,7 +429,7 @@ export async function createTask(
   await assertAssigneeAllowed(
     input.projectId,
     departmentId,
-    input.assignedTo ?? null,
+    input.assignedTo ?? viewer.id,
   );
 
   const dependsOnTaskIds = [
@@ -449,7 +488,7 @@ export async function createTask(
       description: input.description,
       status: createStatus,
       priority: input.priority,
-      assigned_to: input.assignedTo ?? null,
+      assigned_to: input.assignedTo ?? viewer.id,
       created_by: viewer.id,
       start_date: input.startDate,
       due_date: input.dueDate,
@@ -540,6 +579,13 @@ export async function updateTask(
   }
 
   if (input.assignedTo !== undefined) {
+    if (!input.assignedTo) {
+      throw new ApiError(
+        "لا يمكن ترك المهمة بدون معيّن.",
+        400,
+        "ASSIGNEE_REQUIRED",
+      );
+    }
     if (!canAssign && !canManageProject) {
       throw new ApiError("ليس لديك صلاحية لتعيين المهام.", 403, "FORBIDDEN");
     }
@@ -905,6 +951,11 @@ export async function listTasksForViewer(
   const allIds = rows.map((r) => r.id);
   const depAggregates = await getDependencyAggregates(allIds);
   const attachmentAggregates = await getAttachmentSummariesByTaskIds(allIds);
+  const departmentNames = await getDepartmentNameMap(
+    rows
+      .map((row) => row.project?.department_id)
+      .filter((id): id is string => Boolean(id)),
+  );
   const total = count ?? 0;
   const includeEmployeeNumber = viewer.role !== "employee";
 
@@ -918,6 +969,7 @@ export async function listTasksForViewer(
         incompleteDependencies: deps?.incompleteDependencies ?? [],
         attachments: attachmentAggregates.get(row.id) ?? [],
         includeEmployeeNumber,
+        departmentNames,
       });
     }),
     total,

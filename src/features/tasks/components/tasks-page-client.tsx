@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
@@ -30,6 +30,10 @@ import { TablePagination } from "@/components/shared/table-pagination";
 import { TasksListTable } from "@/features/tasks/components/tasks-list-table";
 import { EmployeeTasksBoard } from "@/features/tasks/components/employee-tasks-board";
 import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
+import {
+  AssigneeSelect,
+  type AssigneeOption,
+} from "@/features/tasks/components/assignee-select";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -143,6 +147,49 @@ async function fetchUsersForFilter(): Promise<UserOption[]> {
   return payload.data!.items;
 }
 
+async function fetchCreateAssigneeOptions(
+  projectId: string,
+  departmentId: string | null | undefined,
+): Promise<AssigneeOption[]> {
+  const requests: Promise<Response>[] = [
+    fetch(`/api/projects/${projectId}/members`),
+  ];
+  if (departmentId) {
+    requests.push(fetch(`/api/departments/${departmentId}/members`));
+  }
+
+  const responses = await Promise.all(requests);
+  const byId = new Map<string, AssigneeOption>();
+
+  for (const response of responses) {
+    const payload = (await response.json()) as {
+      data?: {
+        items: Array<{
+          user?: { id: string; fullName: string; employeeNumber?: string };
+        }>;
+      };
+    };
+    if (!response.ok) {
+      continue;
+    }
+    for (const member of payload.data?.items ?? []) {
+      const user = member.user;
+      if (!user) {
+        continue;
+      }
+      byId.set(user.id, {
+        id: user.id,
+        fullName: user.fullName,
+        employeeNumber: user.employeeNumber,
+      });
+    }
+  }
+
+  return [...byId.values()].sort((a, b) =>
+    a.fullName.localeCompare(b.fullName),
+  );
+}
+
 export function TasksPageClient({
   canCreate,
   viewerRole,
@@ -251,7 +298,7 @@ export function TasksPageClient({
       description: "",
       status: "todo",
       priority: "medium",
-      assignedTo: null,
+      assignedTo: viewerId,
       startDate: null,
       dueDate: null,
       dependsOnTaskIds: [],
@@ -260,9 +307,45 @@ export function TasksPageClient({
 
   const watchedProjectId = createForm.watch("projectId");
   const watchedDependsOn = createForm.watch("dependsOnTaskIds") ?? [];
-  const selectedProjectEndDate =
-    projectsQuery.data?.find((project) => project.id === watchedProjectId)
-      ?.endDate ?? undefined;
+  const watchedCreateAssignee = createForm.watch("assignedTo");
+  const selectedProject = projectsQuery.data?.find(
+    (project) => project.id === watchedProjectId,
+  );
+  const selectedProjectEndDate = selectedProject?.endDate ?? undefined;
+
+  const createAssigneesQuery = useQuery({
+    queryKey: [
+      "task-create-assignees",
+      watchedProjectId,
+      selectedProject?.departmentId,
+    ],
+    enabled: Boolean(watchedProjectId),
+    queryFn: () =>
+      fetchCreateAssigneeOptions(
+        watchedProjectId,
+        selectedProject?.departmentId,
+      ),
+  });
+
+  const createAssigneeOptions = useMemo(() => {
+    const options = [...(createAssigneesQuery.data ?? [])];
+    const viewerInList = options.find((option) => option.id === viewerId);
+    if (!viewerInList) {
+      const fromFilter = (usersQuery.data ?? []).find(
+        (user) => user.id === viewerId,
+      );
+      options.unshift({
+        id: viewerId,
+        fullName: fromFilter?.fullName ?? t("assignee"),
+        employeeNumber: fromFilter?.employeeNumber,
+      });
+      return options;
+    }
+    return [
+      viewerInList,
+      ...options.filter((option) => option.id !== viewerId),
+    ];
+  }, [createAssigneesQuery.data, usersQuery.data, viewerId, t]);
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateTaskInput) => {
@@ -282,7 +365,17 @@ export function TasksPageClient({
     },
     onSuccess: async () => {
       setCreateOpen(false);
-      createForm.reset();
+      createForm.reset({
+        projectId: "",
+        title: "",
+        description: "",
+        status: "todo",
+        priority: "medium",
+        assignedTo: viewerId,
+        startDate: null,
+        dueDate: null,
+        dependsOnTaskIds: [],
+      });
       setSuccessMessage(t("createSuccess"));
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
@@ -408,6 +501,31 @@ export function TasksPageClient({
                             {statusLabel("in_progress")}
                           </option>
                         </select>
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="create-assignee">{t("assignee")}</Label>
+                        <AssigneeSelect
+                          id="create-assignee"
+                          value={
+                            typeof watchedCreateAssignee === "string"
+                              ? watchedCreateAssignee
+                              : viewerId
+                          }
+                          options={createAssigneeOptions}
+                          disabled={
+                            !watchedProjectId || createAssigneesQuery.isLoading
+                          }
+                          onChange={(userId) =>
+                            createForm.setValue("assignedTo", userId, {
+                              shouldDirty: true,
+                            })
+                          }
+                        />
+                        {createForm.formState.errors.assignedTo ? (
+                          <p className="text-destructive text-sm">
+                            {createForm.formState.errors.assignedTo.message}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="dueDate">{t("dueDate")}</Label>

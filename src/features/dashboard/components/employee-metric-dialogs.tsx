@@ -299,6 +299,7 @@ type MetricTaskRow = {
   projectName: string | null;
   projectId: string;
   departmentId: string | null;
+  departmentName: string | null;
   href: string;
   assignedTo: string | null;
   assigneeName: string | null;
@@ -420,6 +421,7 @@ async function fetchMetricTasks(
     projectName: task.project?.name ?? null,
     projectId: task.projectId,
     departmentId: task.project?.departmentId ?? null,
+    departmentName: task.project?.departmentName ?? null,
     href: `/tasks/${task.id}`,
     assignedTo: task.assignedTo,
     assigneeName: task.assignee?.fullName ?? null,
@@ -564,6 +566,9 @@ function MetricTaskEditableRow({
       <TableCell className="hidden sm:table-cell">
         {task.projectName ?? "—"}
       </TableCell>
+      <TableCell className="hidden md:table-cell">
+        {task.departmentName ?? "—"}
+      </TableCell>
       <TableCell>
         <AssigneeSelect
           className={metricSelectClassName}
@@ -661,6 +666,9 @@ export function MetricTasksDialog({
                     <TableHead>{t("colTask")}</TableHead>
                     <TableHead className="hidden sm:table-cell">
                       {t("colProject")}
+                    </TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      {t("colDepartment")}
                     </TableHead>
                     <TableHead>{t("colAssignee")}</TableHead>
                     <TableHead>{t("colPriority")}</TableHead>

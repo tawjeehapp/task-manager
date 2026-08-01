@@ -67,6 +67,18 @@ function mapRpcError(message: string | undefined): ApiError {
         409,
         "TASK_DUE_AFTER_PROJECT_END",
       );
+    case "ASSIGNEE_REQUIRED":
+      return new ApiError(
+        "يجب اختيار معيّن عند اعتماد الإعفاء.",
+        400,
+        "ASSIGNEE_REQUIRED",
+      );
+    case "CANNOT_REASSIGN_TO_EXCUSED":
+      return new ApiError(
+        "لا يمكن إعادة إسناد المهمة إلى نفس الموظف المعفى.",
+        409,
+        "CANNOT_REASSIGN_TO_EXCUSED",
+      );
     default:
       return new ApiError(
         "تعذر تنفيذ اعتماد الطلب.",
@@ -461,8 +473,15 @@ export async function approveEmployeeRequest(
   let newAssignee: string | null = null;
 
   if (existing.type === "excusal") {
-    newAssignee =
-      input.assignedTo === undefined ? null : input.assignedTo;
+    if (!input.assignedTo) {
+      throw new ApiError(
+        "يجب اختيار معيّن عند اعتماد الإعفاء.",
+        400,
+        "ASSIGNEE_REQUIRED",
+      );
+    }
+
+    newAssignee = input.assignedTo;
 
     if (newAssignee === existing.user_id) {
       throw new ApiError(
@@ -472,35 +491,35 @@ export async function approveEmployeeRequest(
       );
     }
 
-    if (newAssignee) {
-      const lookup = createAdminClient();
-      const { data: task, error: taskError } = await lookup
-        .from("tasks")
-        .select("id, project_id")
-        .eq("id", existing.task_id)
-        .maybeSingle();
+    const lookup = createAdminClient();
+    const { data: task, error: taskError } = await lookup
+      .from("tasks")
+      .select("id, project_id")
+      .eq("id", existing.task_id)
+      .maybeSingle();
 
-      if (taskError || !task) {
-        throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
-      }
+    if (taskError || !task) {
+      throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+    }
 
-      const { data: project, error: projectError } = await lookup
-        .from("projects")
-        .select("id, department_id")
-        .eq("id", task.project_id)
-        .maybeSingle();
+    const { data: project, error: projectError } = await lookup
+      .from("projects")
+      .select("id, department_id")
+      .eq("id", task.project_id)
+      .maybeSingle();
 
-      if (projectError || !project) {
-        throw new ApiError("تعذر التحقق من المشروع.", 500, "PROJECT_LOOKUP_FAILED");
-      }
+    if (projectError || !project) {
+      throw new ApiError("تعذر التحقق من المشروع.", 500, "PROJECT_LOOKUP_FAILED");
+    }
 
+    if (newAssignee !== actor.id) {
       await assertAssigneeAllowed(
         task.project_id as string,
         project.department_id as string,
         newAssignee,
       );
     }
-  } else if (input.assignedTo !== undefined && input.assignedTo !== null) {
+  } else if (input.assignedTo !== undefined) {
     throw new ApiError(
       "إعادة الإسناد متاحة فقط عند اعتماد الإعفاء.",
       400,

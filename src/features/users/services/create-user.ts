@@ -9,12 +9,25 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 export { assertCanViewUser } from "@/features/users/services/assert-can-view-user";
 
+export type CreateUserOptions = {
+  /** When set, creates a current department membership for the new user. */
+  departmentId?: string;
+};
+
+function utcToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /**
- * Compensating create: Auth user → profile.
+ * Compensating create: Auth user → profile → optional membership.
  * If profile insert fails, delete the Auth user.
+ * If membership insert fails, delete profile + Auth user.
  * Password is the employee number and is never returned.
  */
-export async function createUser(input: CreateUserInput) {
+export async function createUser(
+  input: CreateUserInput,
+  options: CreateUserOptions = {},
+) {
   const admin = createAdminClient();
   const email = toAuthEmail(input.employeeNumber);
   const temporaryPassword = input.employeeNumber;
@@ -79,7 +92,31 @@ export async function createUser(input: CreateUserInput) {
     );
   }
 
-  return toPublicUser(mapUserRow(profile as UserRow));
+  const profileRow = profile as UserRow;
+
+  if (options.departmentId) {
+    const { error: membershipError } = await admin
+      .from("department_memberships")
+      .insert({
+        department_id: options.departmentId,
+        user_id: profileRow.id,
+        start_date: utcToday(),
+        end_date: null,
+        is_current: true,
+      });
+
+    if (membershipError) {
+      await admin.from("users").delete().eq("id", profileRow.id);
+      await admin.auth.admin.deleteUser(authUserId);
+      throw new ApiError(
+        "تعذر إضافة الموظف إلى القسم.",
+        500,
+        "ADD_MEMBERSHIP_FAILED",
+      );
+    }
+  }
+
+  return toPublicUser(mapUserRow(profileRow));
 }
 
 export async function countActiveAdmins(): Promise<number> {

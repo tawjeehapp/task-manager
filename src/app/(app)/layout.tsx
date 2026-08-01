@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { setRequestLocale } from "next-intl/server";
 
 import { AppShell } from "@/components/shared/app-shell";
+import { getMe } from "@/features/auth/services/get-me";
 import { getCurrentUser } from "@/lib/auth/session";
 import { routing } from "@/i18n/routing";
 
@@ -24,5 +25,7 @@ export default async function AppLayout({ children }: AppLayoutProps) {
     redirect("/change-password");
   }
 
-  return <AppShell>{children}</AppShell>;
+  const initialMe = await getMe(user);
+
+  return <AppShell initialMe={initialMe}>{children}</AppShell>;
 }

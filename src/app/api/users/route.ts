@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/require-user";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
+import { getManagedDepartmentId } from "@/features/departments/services/membership-helpers";
 import {
   createUserSchema,
   listUsersQuerySchema,
@@ -50,11 +51,12 @@ export async function GET(request: Request) {
       );
     }
 
-    // Only admins (user.manage) may filter by arbitrary departmentId / role
+    const isAdmin = user.role === "admin";
+    // Only admins may filter by arbitrary departmentId / role
     const query = {
       ...parsed.data,
-      departmentId: canManage ? parsed.data.departmentId : undefined,
-      role: canManage ? parsed.data.role : undefined,
+      departmentId: isAdmin ? parsed.data.departmentId : undefined,
+      role: isAdmin ? parsed.data.role : undefined,
     };
 
     const result = await listUsersForViewer(user, query, canManage);
@@ -80,7 +82,32 @@ export async function POST(request: Request) {
       );
     }
 
-    const created = await createUser(parsed.data);
+    let createInput = parsed.data;
+    let departmentId: string | undefined;
+
+    if (user.role === "department_manager") {
+      if (parsed.data.role !== "employee") {
+        throw new ApiError(
+          "يمكن لمدير القسم إنشاء موظفين فقط.",
+          403,
+          "FORBIDDEN",
+        );
+      }
+
+      const managedDeptId = await getManagedDepartmentId(user.id);
+      if (!managedDeptId) {
+        throw new ApiError(
+          "لا يوجد قسم مُدار مرتبط بحسابك.",
+          400,
+          "NO_MANAGED_DEPARTMENT",
+        );
+      }
+
+      createInput = { ...parsed.data, role: "employee" };
+      departmentId = managedDeptId;
+    }
+
+    const created = await createUser(createInput, { departmentId });
     return apiSuccess(created, { status: 201 });
   } catch (error) {
     return apiError(error);

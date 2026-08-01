@@ -56,6 +56,10 @@ export default async function ProjectDetailPage({ params }: PageProps) {
     user.role === "department_manager" &&
     hasPermission(user.role, PERMISSIONS.PROJECT_REQUEST_CREATE, permissions);
 
+  const canViewEmployeeProfiles =
+    hasPermission(user.role, PERMISSIONS.USER_MANAGE, permissions) ||
+    hasPermission(user.role, PERMISSIONS.USER_RESET_PASSWORD, permissions);
+
   return (
     <ProjectDetailClient
       projectId={id}
@@ -63,6 +67,7 @@ export default async function ProjectDetailPage({ params }: PageProps) {
       canManageMembers={canManageMembers}
       canCreateTask={canCreateTask}
       canRequestProjectExtension={canRequestProjectExtension}
+      canViewEmployeeProfiles={canViewEmployeeProfiles}
       managedDepartmentId={managedDepartmentId}
       viewerId={user.id}
       isEmployee={user.role === "employee"}

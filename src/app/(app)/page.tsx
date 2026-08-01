@@ -38,11 +38,6 @@ export default async function DashboardPage() {
       getManagerDashboard(user),
       getPermissionsForRole(user.role),
     ]);
-    const canViewReports = hasPermission(
-      user.role,
-      PERMISSIONS.REPORT_VIEW,
-      permissions,
-    );
     const canApproveAttendance = hasPermission(
       user.role,
       PERMISSIONS.ATTENDANCE_APPROVE,
@@ -51,7 +46,6 @@ export default async function DashboardPage() {
     return (
       <LeadershipDashboardView
         data={data}
-        canViewReports={canViewReports}
         canApproveAttendance={canApproveAttendance}
       />
     );
@@ -73,11 +67,6 @@ export default async function DashboardPage() {
     getPermissionsForRole(user.role),
   ]);
 
-  const canViewReports = hasPermission(
-    user.role,
-    PERMISSIONS.REPORT_VIEW,
-    permissions,
-  );
   const canApproveAttendance = hasPermission(
     user.role,
     PERMISSIONS.ATTENDANCE_APPROVE,
@@ -91,7 +80,6 @@ export default async function DashboardPage() {
   return (
     <LeadershipDashboardView
       data={data}
-      canViewReports={canViewReports}
       canApproveAttendance={canApproveAttendance}
     />
   );

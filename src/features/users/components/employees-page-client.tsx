@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 
 type EmployeesPageClientProps = {
   canManage: boolean;
+  isAdmin: boolean;
   currentUserId: string;
   initialUsers: UsersListResult;
 };
@@ -130,6 +131,7 @@ async function fetchDepartments(): Promise<Department[]> {
 
 export function EmployeesPageClient({
   canManage,
+  isAdmin,
   currentUserId,
   initialUsers,
 }: EmployeesPageClientProps) {
@@ -195,7 +197,7 @@ export function EmployeesPageClient({
   const departmentsQuery = useQuery({
     queryKey: ["departments", "filter"],
     queryFn: fetchDepartments,
-    enabled: canManage,
+    enabled: isAdmin,
   });
 
   const items = usersQuery.data?.items ?? [];
@@ -460,7 +462,7 @@ export function EmployeesPageClient({
     <div className="space-y-6">
       <PageHeader
         title={t("title")}
-        description={canManage ? t("description") : t("managerDescription")}
+        description={isAdmin ? t("description") : t("managerDescription")}
         actions={
           canManage ? (
             <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -480,7 +482,10 @@ export function EmployeesPageClient({
                   onSubmit={createForm.handleSubmit(async (values) => {
                     try {
                       setSuccessMessage(null);
-                      await createMutation.mutateAsync(values);
+                      const payload = isAdmin
+                        ? values
+                        : { ...values, role: "employee" as const };
+                      await createMutation.mutateAsync(payload);
                     } catch (error) {
                       createForm.setError("root", {
                         message:
@@ -536,20 +541,22 @@ export function EmployeesPageClient({
                       {t("weeklyCapacityHint")}
                     </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="role">{t("role")}</Label>
-                    <select
-                      id="role"
-                      className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
-                      {...createForm.register("role")}
-                    >
-                      <option value="employee">{tRoles("employee")}</option>
-                      <option value="department_manager">
-                        {tRoles("department_manager")}
-                      </option>
-                      <option value="admin">{tRoles("admin")}</option>
-                    </select>
-                  </div>
+                  {isAdmin ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="role">{t("role")}</Label>
+                      <select
+                        id="role"
+                        className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+                        {...createForm.register("role")}
+                      >
+                        <option value="employee">{tRoles("employee")}</option>
+                        <option value="department_manager">
+                          {tRoles("department_manager")}
+                        </option>
+                        <option value="admin">{tRoles("admin")}</option>
+                      </select>
+                    </div>
+                  ) : null}
                   {createForm.formState.errors.root ? (
                     <Alert variant="destructive">
                       <AlertDescription>
@@ -598,24 +605,26 @@ export function EmployeesPageClient({
             placeholder={t("searchPlaceholder")}
             className="sm:max-w-xs"
           />
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span className="whitespace-nowrap">{t("filterRole")}</span>
-            <select
-              className={selectClassName}
-              value={roleFilter}
-              onChange={(event) =>
-                handleRoleFilterChange(event.target.value as RoleFilter)
-              }
-            >
-              <option value="">{t("filterAll")}</option>
-              <option value="admin">{tRoles("admin")}</option>
-              <option value="department_manager">
-                {tRoles("department_manager")}
-              </option>
-              <option value="employee">{tRoles("employee")}</option>
-            </select>
-          </label>
-          {canManage ? (
+          {isAdmin ? (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="whitespace-nowrap">{t("filterRole")}</span>
+              <select
+                className={selectClassName}
+                value={roleFilter}
+                onChange={(event) =>
+                  handleRoleFilterChange(event.target.value as RoleFilter)
+                }
+              >
+                <option value="">{t("filterAll")}</option>
+                <option value="admin">{tRoles("admin")}</option>
+                <option value="department_manager">
+                  {tRoles("department_manager")}
+                </option>
+                <option value="employee">{tRoles("employee")}</option>
+              </select>
+            </label>
+          ) : null}
+          {isAdmin ? (
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <span className="whitespace-nowrap">{t("filterDepartment")}</span>
               <select
@@ -681,14 +690,16 @@ export function EmployeesPageClient({
                 >
                   {t("deactivate")}
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setBulkAction("assignDepartment")}
-                >
-                  {t("assignDepartment")}
-                </Button>
+                {isAdmin ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setBulkAction("assignDepartment")}
+                  >
+                    {t("assignDepartment")}
+                  </Button>
+                ) : null}
               </>
             ) : null}
             <Button
@@ -699,7 +710,7 @@ export function EmployeesPageClient({
             >
               {t("resetPassword")}
             </Button>
-            {canManage ? (
+            {isAdmin ? (
               <Button
                 type="button"
                 size="sm"
@@ -738,7 +749,7 @@ export function EmployeesPageClient({
         <EmptyState
           title={t("emptyTitle")}
           description={
-            canManage ? t("emptyDescription") : t("emptyManagerDescription")
+            isAdmin ? t("emptyDescription") : t("emptyManagerDescription")
           }
         />
       ) : null}

@@ -1,11 +1,6 @@
 import type { AppUser } from "@/lib/auth/types";
 import type { Role } from "@/lib/permissions";
 
-export type AuthMeResponse = {
-  user: AppUser;
-  permissions: string[];
-};
-
 export type PublicUser = {
   id: string;
   employeeNumber: string;
@@ -19,6 +14,12 @@ export type PublicUser = {
   weeklyCapacityHours: number;
   createdAt: string;
   updatedAt: string;
+};
+
+/** Payload from GET /api/auth/me and server-seeded shell queries. */
+export type AuthMeResponse = {
+  user: PublicUser;
+  permissions: string[];
 };
 
 export function toPublicUser(user: AppUser): PublicUser {

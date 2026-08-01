@@ -71,7 +71,7 @@ const createdRow = {
   description: null,
   status: "todo",
   priority: "medium",
-  assigned_to: null,
+  assigned_to: "mgr-1",
   created_by: "mgr-1",
   start_date: null,
   due_date: null,
@@ -80,7 +80,11 @@ const createdRow = {
   created_at: "2026-07-31T00:00:00.000Z",
   updated_at: "2026-07-31T00:00:00.000Z",
   project: { id: "proj-1", name: "Project", department_id: "dept-1", end_date: "2026-12-31" },
-  assignee: null,
+  assignee: {
+    id: "mgr-1",
+    full_name: "Manager",
+    employee_number: "1001",
+  },
   created_by_user: {
     id: "mgr-1",
     full_name: "Manager",
@@ -121,7 +125,7 @@ describe("createTask", () => {
         description: null,
         status: "todo",
         priority: "medium",
-        assignedTo: null,
+        assignedTo: "mgr-1",
         startDate: null,
         dueDate: null,
         estimatedHours: 1,
@@ -163,6 +167,12 @@ describe("createTask", () => {
           if (table === "task_dependencies") {
             return chain({ data: [], error: null });
           }
+          if (table === "department_memberships") {
+            return chain({ data: { id: "mem-1" }, error: null });
+          }
+          if (table === "project_memberships") {
+            return chain({ data: { id: "pm-1" }, error: null });
+          }
           return chain({ data: null, error: null });
         },
       } as never;
@@ -174,7 +184,7 @@ describe("createTask", () => {
       description: null,
       status: "todo",
       priority: "medium",
-      assignedTo: null,
+      assignedTo: "mgr-1",
       startDate: null,
       dueDate: null,
       estimatedHours: 5,
@@ -186,6 +196,7 @@ describe("createTask", () => {
       project_id: "proj-1",
       title: "مهمة",
       estimated_hours: 5,
+      assigned_to: "mgr-1",
     });
     expect(result.estimatedHours).toBe(5);
   });

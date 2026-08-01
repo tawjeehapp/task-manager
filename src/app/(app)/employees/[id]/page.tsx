@@ -45,6 +45,21 @@ export default async function EmployeeProfilePage({ params }: PageProps) {
   const canEditTasks =
     user.role === "admin" ||
     hasPermission(user.role, PERMISSIONS.TASK_ASSIGN, permissions);
+  const canApproveAttendance = hasPermission(
+    user.role,
+    PERMISSIONS.ATTENDANCE_APPROVE,
+    permissions,
+  );
+  const canApproveLeave = hasPermission(
+    user.role,
+    PERMISSIONS.LEAVE_APPROVE,
+    permissions,
+  );
+  const canApproveEmployeeRequest = hasPermission(
+    user.role,
+    PERMISSIONS.EMPLOYEE_REQUEST_APPROVE,
+    permissions,
+  );
 
   const { id } = await params;
 
@@ -52,7 +67,11 @@ export default async function EmployeeProfilePage({ params }: PageProps) {
     <EmployeeProfileClient
       userId={id}
       canManage={canManage}
+      isAdmin={user.role === "admin"}
       canEditTasks={canEditTasks}
+      canApproveAttendance={canApproveAttendance}
+      canApproveLeave={canApproveLeave}
+      canApproveEmployeeRequest={canApproveEmployeeRequest}
       currentUserId={user.id}
     />
   );

@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api/errors";
 import { requireUser } from "@/lib/auth/require-user";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { PERMISSIONS } from "@/lib/permissions";
+import { tryLogEntityActivity } from "@/features/activity/services/entity-activity";
 import {
   addDepartmentMemberSchema,
   listMembersQuerySchema,
@@ -71,6 +72,16 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const membership = await addDepartmentMember(id, parsed.data);
+    await tryLogEntityActivity(
+      user.id,
+      "department",
+      id,
+      "department.member_added",
+      {
+        userId: parsed.data.userId,
+        fullName: membership.user?.fullName,
+      },
+    );
     return apiSuccess(membership, { status: 201 });
   } catch (error) {
     return apiError(error);

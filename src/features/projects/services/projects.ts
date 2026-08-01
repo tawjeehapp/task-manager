@@ -2,6 +2,7 @@ import "server-only";
 
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
+import { tryLogEntityActivity } from "@/features/activity/services/entity-activity";
 import { getManagedDepartmentId, getProjectIdsForUser } from "@/features/departments/services/membership-helpers";
 import {
   assertCanAccessProject,
@@ -217,7 +218,12 @@ export async function createProject(
     await validateAndInsertMembers(project.id, project.department_id, memberIds);
   }
 
-  return loadProjectById(project.id);
+  const created = await loadProjectById(project.id);
+  await tryLogEntityActivity(viewer.id, "project", created.id, "project.created", {
+    name: created.name,
+    status: created.status,
+  });
+  return created;
 }
 
 async function validateAndInsertMembers(
@@ -369,7 +375,17 @@ export async function updateProject(
     throw new ApiError("تعذر تحديث المشروع.", 500, "UPDATE_PROJECT_FAILED");
   }
 
-  return loadProjectById(projectId);
+  const updated = await loadProjectById(projectId);
+  if (Object.keys(patch).length > 0) {
+    await tryLogEntityActivity(
+      viewer.id,
+      "project",
+      projectId,
+      "project.updated",
+      { fields: Object.keys(patch) },
+    );
+  }
+  return updated;
 }
 
 export async function listProjectsForViewer(

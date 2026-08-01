@@ -10,43 +10,43 @@ import {
   navSections,
 } from "@/components/shared/nav-config";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { AuthMeResponse } from "@/features/auth/types/auth.types";
 import { isPersonalWorkspaceRole } from "@/lib/permissions";
+import type { Role } from "@/lib/permissions";
+import { withInitialData } from "@/lib/query/initial-data";
 import { cn } from "@/lib/utils";
 
 type AppSidebarProps = {
   className?: string;
   onNavigate?: () => void;
+  initialMe: AuthMeResponse;
 };
 
-type MeResponse = {
-  user: { fullName: string; role: string };
-  permissions: string[];
-};
-
-async function fetchMe(): Promise<MeResponse | null> {
+async function fetchMe(): Promise<AuthMeResponse | null> {
   const response = await fetch("/api/auth/me");
   if (!response.ok) {
     return null;
   }
-  const payload = (await response.json()) as { data?: MeResponse };
+  const payload = (await response.json()) as { data?: AuthMeResponse };
   return payload.data ?? null;
 }
 
-export function AppSidebar({ className, onNavigate }: AppSidebarProps) {
+export function AppSidebar({
+  className,
+  onNavigate,
+  initialMe,
+}: AppSidebarProps) {
   const t = useTranslations("nav");
   const pathname = usePathname();
   const meQuery = useQuery({
     queryKey: ["auth", "me"],
     queryFn: fetchMe,
     staleTime: 60_000,
+    ...withInitialData(initialMe),
   });
 
   const permissions = meQuery.data?.permissions ?? [];
-  const role = (meQuery.data?.user.role ?? null) as
-    | "admin"
-    | "department_manager"
-    | "employee"
-    | null;
+  const role = (meQuery.data?.user.role ?? null) as Role | null;
 
   return (
     <aside

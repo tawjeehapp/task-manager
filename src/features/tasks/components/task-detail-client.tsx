@@ -351,7 +351,7 @@ export function TaskDetailClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...rest,
-          assignedTo: rest.assignedTo || null,
+          assignedTo: rest.assignedTo,
           dueDate: rest.dueDate || null,
           description: rest.description || null,
         }),

@@ -248,7 +248,7 @@ export function ApprovalsPageClient({
   const approveEmployeeMutation = useMutation({
     mutationFn: async (payload: {
       id: string;
-      assignedTo?: string | null;
+      assignedTo?: string;
     }) => {
       const response = await fetch(
         `/api/employee-requests/${payload.id}/approve`,
@@ -445,7 +445,7 @@ export function ApprovalsPageClient({
                             }
                             onClick={() => {
                               if (row.type === "excusal") {
-                                setExcusalAssigneeId("");
+                                setExcusalAssigneeId(viewerId);
                                 setExcusalTarget(row);
                                 return;
                               }
@@ -755,22 +755,37 @@ export function ApprovalsPageClient({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="excusalAssignee">{t("reassignOptional")}</Label>
+            <Label htmlFor="excusalAssignee">{t("reassignRequired")}</Label>
             <select
               id="excusalAssignee"
               className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
               value={excusalAssigneeId}
               onChange={(event) => setExcusalAssigneeId(event.target.value)}
               disabled={projectMembersQuery.isLoading}
+              required
             >
-              <option value="">{t("leaveUnassigned")}</option>
-              {(projectMembersQuery.data ?? [])
-                .filter((member) => member.userId !== excusalTarget?.userId)
-                .map((member) => (
-                  <option key={member.userId} value={member.userId}>
-                    {member.user?.fullName ?? member.userId}
-                  </option>
-                ))}
+              {(() => {
+                const members = (projectMembersQuery.data ?? []).filter(
+                  (member) => member.userId !== excusalTarget?.userId,
+                );
+                const hasViewer = members.some(
+                  (member) => member.userId === viewerId,
+                );
+                return (
+                  <>
+                    {!hasViewer && viewerId !== excusalTarget?.userId ? (
+                      <option value={viewerId}>{t("reassignToMe")}</option>
+                    ) : null}
+                    {members.map((member) => (
+                      <option key={member.userId} value={member.userId}>
+                        {member.userId === viewerId
+                          ? t("reassignToMe")
+                          : (member.user?.fullName ?? member.userId)}
+                      </option>
+                    ))}
+                  </>
+                );
+              })()}
             </select>
           </div>
           <DialogFooter>
@@ -786,12 +801,14 @@ export function ApprovalsPageClient({
             </Button>
             <Button
               type="button"
-              disabled={approveEmployeeMutation.isPending}
+              disabled={
+                approveEmployeeMutation.isPending || !excusalAssigneeId
+              }
               onClick={() => {
-                if (!excusalTarget) return;
+                if (!excusalTarget || !excusalAssigneeId) return;
                 approveEmployeeMutation.mutate({
                   id: excusalTarget.id,
-                  assignedTo: excusalAssigneeId || null,
+                  assignedTo: excusalAssigneeId,
                 });
               }}
             >

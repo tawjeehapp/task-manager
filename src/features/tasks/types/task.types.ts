@@ -21,6 +21,7 @@ export type TaskProjectSummary = {
   id: string;
   name: string;
   departmentId: string;
+  departmentName: string | null;
   endDate: string;
 };
 
@@ -41,7 +42,7 @@ export type Task = {
   description: string | null;
   status: TaskStatus;
   priority: TaskPriority;
-  assignedTo: string | null;
+  assignedTo: string;
   assignee: TaskUserSummary | null;
   createdBy: string;
   createdByUser: TaskUserSummary | null;
@@ -70,7 +71,7 @@ export type TaskRow = {
   description: string | null;
   status: TaskStatus;
   priority: TaskPriority;
-  assigned_to: string | null;
+  assigned_to: string;
   created_by: string;
   start_date: string | null;
   due_date: string | null;

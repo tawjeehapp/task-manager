@@ -20,8 +20,6 @@ export type AssigneeOption = {
   employeeNumber?: string;
 };
 
-const UNASSIGNED_VALUE = "__unassigned__";
-
 async function fetchWorkload(userId: string): Promise<EmployeeWorkload> {
   const response = await fetch(`/api/users/${userId}/workload`);
   const payload = (await response.json()) as {
@@ -36,7 +34,7 @@ async function fetchWorkload(userId: string): Promise<EmployeeWorkload> {
 
 type AssigneeSelectProps = {
   value: string | null | undefined;
-  onChange: (userId: string | null) => void;
+  onChange: (userId: string) => void;
   options: AssigneeOption[];
   disabled?: boolean;
   id?: string;
@@ -84,11 +82,11 @@ export function AssigneeSelect({
   }
 
   function selectedLabel(selected: string | null): string {
-    if (!selected || selected === UNASSIGNED_VALUE) {
-      return t("unassigned");
+    if (!selected) {
+      return t("assignee");
     }
     const option = options.find((item) => item.id === selected);
-    return option ? displayName(option) : t("unassigned");
+    return option ? displayName(option) : t("assignee");
   }
 
   function optionListLabel(option: AssigneeOption): string {
@@ -111,10 +109,9 @@ export function AssigneeSelect({
       onPointerDown={(event) => event.stopPropagation()}
     >
       <Select
-        value={value ?? UNASSIGNED_VALUE}
+        value={value ?? undefined}
         onValueChange={(next) => {
-          if (next == null || next === UNASSIGNED_VALUE) {
-            onChange(null);
+          if (next == null) {
             return;
           }
           onChange(String(next));
@@ -130,7 +127,7 @@ export function AssigneeSelect({
           )}
           aria-label={t("assignee")}
         >
-          <SelectValue placeholder={t("unassigned")}>
+          <SelectValue placeholder={t("assignee")}>
             {(selected) => (
               <span className="min-w-0 flex-1 truncate text-start">
                 {selectedLabel(selected)}
@@ -143,9 +140,6 @@ export function AssigneeSelect({
           align="start"
           className="min-w-[14rem] max-w-[min(22rem,90vw)]"
         >
-          <SelectItem value={UNASSIGNED_VALUE} label={t("unassigned")}>
-            {t("unassigned")}
-          </SelectItem>
           {options.map((option) => (
             <SelectItem
               key={option.id}

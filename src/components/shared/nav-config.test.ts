@@ -33,7 +33,6 @@ const MANAGER_PERMS = [
   "project_request.create",
   "announcement.view",
   "notification.view",
-  "report.view",
   "user.reset_password",
   "task.create",
   "task.assign",
@@ -61,9 +60,8 @@ describe("navItemIsVisible", () => {
     ]);
   });
 
-  it("hides Reports, Departments, manager dashboards, team tasks, and requests from employees", () => {
+  it("hides Departments, manager dashboards, team tasks, and requests from employees", () => {
     for (const key of [
-      "reports",
       "departments",
       "departmentDashboard",
       "myDashboard",
@@ -94,7 +92,6 @@ describe("navItemIsVisible", () => {
       "departments",
       "employees",
       "requests",
-      "reports",
       "announcements",
     ]);
   });
@@ -104,7 +101,6 @@ describe("navItemIsVisible", () => {
     const attendanceLeave = allItems().find(
       (item) => item.key === "attendanceLeave",
     );
-    const reports = allItems().find((item) => item.key === "reports");
 
     expect(
       navItemIsVisible(projects!, MANAGER_PERMS, "department_manager"),
@@ -112,9 +108,6 @@ describe("navItemIsVisible", () => {
     expect(
       navItemIsVisible(attendanceLeave!, MANAGER_PERMS, "department_manager"),
     ).toBe(true);
-    expect(navItemIsVisible(reports!, MANAGER_PERMS, "department_manager")).toBe(
-      true,
-    );
   });
 
   it("mobile nav is Dashboard, Tasks, Notifications", () => {

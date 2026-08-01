@@ -101,11 +101,11 @@ describe("createEmployeeRequestSchema", () => {
     ).toBe(true);
   });
 
-  it("accepts optional assignedTo on approve", () => {
+  it("accepts optional assignedTo uuid on approve schema", () => {
     expect(approveEmployeeRequestSchema.safeParse({}).success).toBe(true);
     expect(
       approveEmployeeRequestSchema.safeParse({ assignedTo: null }).success,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       approveEmployeeRequestSchema.safeParse({
         assignedTo: "11111111-1111-4111-8111-111111111111",
