@@ -14,7 +14,6 @@ import { assertCanAccessProject } from "@/features/projects/services/assert-can-
 import {
   addTaskDependency,
   assertStatusNotLockedByDependencies,
-  assertDependencyHierarchyAllowed,
   areDependenciesSatisfied,
   ensureBlockedWhenDependenciesIncomplete,
   syncDependentsAfterPrerequisiteChange,
@@ -59,20 +58,10 @@ type TaskWithRelations = TaskRow & {
     full_name: string;
     employee_number: string;
   } | null;
-  parent?:
-    | {
-        id: string;
-        title: string;
-      }
-    | {
-        id: string;
-        title: string;
-      }[]
-    | null;
 };
 
 const TASK_SELECT =
-  "id, project_id, parent_task_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, progress_percentage, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number), parent:tasks!parent_task_id(id, title)";
+  "id, project_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, progress_percentage, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number)";
 
 const SORT_COLUMN_MAP: Record<ListTasksQuery["sortBy"], string> = {
   title: "title",
@@ -121,7 +110,6 @@ function toHours(value: number | string | null): number | null {
 export function mapTask(
   row: TaskWithRelations,
   extras?: {
-    subtaskCount?: number;
     dependencyCount?: number;
     incompleteDependencyCount?: number;
     incompleteDependencyTitles?: string[];
@@ -131,10 +119,6 @@ export function mapTask(
     id: row.id,
     projectId: row.project_id,
     project: mapProject(row.project),
-    parentTaskId: row.parent_task_id,
-    parentTitle: Array.isArray(row.parent)
-      ? (row.parent[0]?.title ?? null)
-      : (row.parent?.title ?? null),
     title: row.title,
     description: row.description,
     status: row.status,
@@ -152,44 +136,10 @@ export function mapTask(
     completedAt: row.completed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    subtaskCount: extras?.subtaskCount,
     dependencyCount: extras?.dependencyCount,
     incompleteDependencyCount: extras?.incompleteDependencyCount,
     incompleteDependencyTitles: extras?.incompleteDependencyTitles,
   };
-}
-
-async function getSubtaskAggregates(
-  taskIds: string[],
-): Promise<Map<string, { count: number; hours: number }>> {
-  const aggregates = new Map<string, { count: number; hours: number }>();
-  if (taskIds.length === 0) {
-    return aggregates;
-  }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("tasks")
-    .select("parent_task_id, estimated_hours")
-    .in("parent_task_id", taskIds);
-
-  if (error) {
-    throw new ApiError(
-      "تعذر حساب المهام الفرعية.",
-      500,
-      "SUBTASK_COUNT_FAILED",
-    );
-  }
-
-  for (const row of data ?? []) {
-    const id = row.parent_task_id as string;
-    const current = aggregates.get(id) ?? { count: 0, hours: 0 };
-    current.count += 1;
-    current.hours += toHours(row.estimated_hours as number | string | null) ?? 0;
-    aggregates.set(id, current);
-  }
-
-  return aggregates;
 }
 
 async function getDependencyAggregates(
@@ -248,47 +198,6 @@ async function getDependencyAggregates(
   return aggregates;
 }
 
-async function syncParentEstimatedHours(
-  parentTaskId: string | null,
-): Promise<void> {
-  if (!parentTaskId) {
-    return;
-  }
-
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from("tasks")
-    .select("estimated_hours")
-    .eq("parent_task_id", parentTaskId);
-
-  if (error) {
-    throw new ApiError(
-      "تعذر تحديث ساعات المهمة الأب.",
-      500,
-      "PARENT_HOURS_SYNC_FAILED",
-    );
-  }
-
-  const sum = (data ?? []).reduce(
-    (total, row) =>
-      total + (toHours(row.estimated_hours as number | string | null) ?? 0),
-    0,
-  );
-
-  const { error: updateError } = await admin
-    .from("tasks")
-    .update({ estimated_hours: sum })
-    .eq("id", parentTaskId);
-
-  if (updateError) {
-    throw new ApiError(
-      "تعذر تحديث ساعات المهمة الأب.",
-      500,
-      "PARENT_HOURS_SYNC_FAILED",
-    );
-  }
-}
-
 async function assertCanMutateTask(
   viewer: AppUser,
   access: {
@@ -333,26 +242,11 @@ async function loadTaskById(id: string): Promise<Task> {
   const depAggregates = await getDependencyAggregates([row.id]);
   const deps = depAggregates.get(row.id);
 
-  if (row.parent_task_id) {
-    return mapTask(row, {
-      dependencyCount: deps?.count ?? 0,
-      incompleteDependencyCount: deps?.incompleteCount ?? 0,
-      incompleteDependencyTitles: deps?.incompleteTitles ?? [],
-    });
-  }
-
-  const aggregates = await getSubtaskAggregates([row.id]);
-  const aggregate = aggregates.get(row.id);
-  const mapped = mapTask(row, {
-    subtaskCount: aggregate?.count ?? 0,
+  return mapTask(row, {
     dependencyCount: deps?.count ?? 0,
     incompleteDependencyCount: deps?.incompleteCount ?? 0,
     incompleteDependencyTitles: deps?.incompleteTitles ?? [],
   });
-  return {
-    ...mapped,
-    estimatedHours: aggregate?.hours ?? 0,
-  };
 }
 
 export { loadTaskById };
@@ -394,34 +288,6 @@ export async function createTask(
     );
   }
 
-  if (input.parentTaskId) {
-    const { data: parent, error: parentError } = await admin
-      .from("tasks")
-      .select("id, project_id, parent_task_id")
-      .eq("id", input.parentTaskId)
-      .maybeSingle();
-
-    if (parentError || !parent) {
-      throw new ApiError("المهمة الأب غير موجودة.", 404, "PARENT_TASK_NOT_FOUND");
-    }
-
-    if (parent.project_id !== input.projectId) {
-      throw new ApiError(
-        "المهمة الأب يجب أن تكون في نفس المشروع.",
-        409,
-        "PARENT_PROJECT_MISMATCH",
-      );
-    }
-
-    if (parent.parent_task_id) {
-      throw new ApiError(
-        "يُسمح بمستوى واحد فقط من المهام الفرعية.",
-        409,
-        "SUBTASK_DEPTH_EXCEEDED",
-      );
-    }
-  }
-
   await assertAssigneeAllowed(
     input.projectId,
     departmentId,
@@ -439,7 +305,7 @@ export async function createTask(
   if (dependsOnTaskIds.length > 0) {
     const { data: depTasks, error: depLookupError } = await admin
       .from("tasks")
-      .select("id, project_id, status, parent_task_id")
+      .select("id, project_id, status")
       .in("id", dependsOnTaskIds);
 
     if (depLookupError) {
@@ -466,11 +332,6 @@ export async function createTask(
           "DEPENDENCY_PROJECT_MISMATCH",
         );
       }
-
-      assertDependencyHierarchyAllowed({
-        taskParentTaskId: input.parentTaskId ?? null,
-        dependsOnParentTaskId: (dep.parent_task_id as string | null) ?? null,
-      });
     }
 
     const statuses = (depTasks ?? []).map((row) => row.status as string);
@@ -480,14 +341,10 @@ export async function createTask(
     }
   }
 
-  const isSubtask = Boolean(input.parentTaskId);
-  const estimatedHours = isSubtask ? (input.estimatedHours ?? null) : 0;
-
   const { data, error } = await admin
     .from("tasks")
     .insert({
       project_id: input.projectId,
-      parent_task_id: input.parentTaskId ?? null,
       title: input.title,
       description: input.description,
       status: createStatus,
@@ -496,7 +353,7 @@ export async function createTask(
       created_by: viewer.id,
       start_date: input.startDate,
       due_date: input.dueDate,
-      estimated_hours: estimatedHours,
+      estimated_hours: input.estimatedHours ?? null,
       completed_at: completedAt,
     })
     .select("*")
@@ -507,14 +364,12 @@ export async function createTask(
   }
 
   const created = data as TaskRow;
-  await syncParentEstimatedHours(created.parent_task_id);
 
   await logTaskActivity(viewer.id, created.id, "task.created", {
     title: created.title,
     status: created.status,
     assignedTo: created.assigned_to,
     projectId: created.project_id,
-    parentTaskId: created.parent_task_id,
   });
 
   if (created.assigned_to) {
@@ -593,7 +448,7 @@ export async function updateTask(
   const { data: existing, error: existingError } = await admin
     .from("tasks")
     .select(
-      "parent_task_id, status, assigned_to, title, description, priority, start_date, due_date, estimated_hours, progress_percentage",
+      "status, assigned_to, title, description, priority, start_date, due_date, estimated_hours, progress_percentage",
     )
     .eq("id", taskId)
     .maybeSingle();
@@ -626,14 +481,6 @@ export async function updateTask(
     patch.due_date = input.dueDate;
   }
   if (input.estimatedHours !== undefined) {
-    if (!existing.parent_task_id) {
-      throw new ApiError(
-        "ساعات المهمة الأب تُحسب تلقائياً من المهام الفرعية.",
-        409,
-        "HOURS_FROM_SUBTASKS",
-      );
-    }
-
     patch.estimated_hours = input.estimatedHours;
   }
   if (input.progressPercentage !== undefined) {
@@ -663,10 +510,6 @@ export async function updateTask(
 
   if (error) {
     throw new ApiError("تعذر تحديث المهمة.", 500, "UPDATE_TASK_FAILED");
-  }
-
-  if (input.estimatedHours !== undefined) {
-    await syncParentEstimatedHours(existing.parent_task_id as string | null);
   }
 
   if (
@@ -768,24 +611,10 @@ export async function deleteTask(
   await assertCanMutateTask(viewer, access);
 
   const admin = createAdminClient();
-  const { data: existing, error: existingError } = await admin
-    .from("tasks")
-    .select("parent_task_id")
-    .eq("id", taskId)
-    .maybeSingle();
-
-  if (existingError || !existing) {
-    throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
-  }
-
-  const parentTaskId = existing.parent_task_id as string | null;
-
   const { error } = await admin.from("tasks").delete().eq("id", taskId);
   if (error) {
     throw new ApiError("تعذر حذف المهمة.", 500, "DELETE_TASK_FAILED");
   }
-
-  await syncParentEstimatedHours(parentTaskId);
 }
 
 export async function listTasksForViewer(
@@ -927,13 +756,6 @@ export async function listTasksForViewer(
   if (query.priority) {
     builder = builder.eq("priority", query.priority);
   }
-  if (query.subtasksOnly) {
-    builder = builder.not("parent_task_id", "is", null);
-  } else if (query.parentTaskId === null) {
-    builder = builder.is("parent_task_id", null);
-  } else if (query.parentTaskId !== undefined) {
-    builder = builder.eq("parent_task_id", query.parentTaskId);
-  }
   if (query.dueFrom) {
     builder = builder.gte("due_date", query.dueFrom);
   }
@@ -952,35 +774,18 @@ export async function listTasksForViewer(
   }
 
   const rows = (data ?? []) as unknown as TaskWithRelations[];
-  const rootIds = rows.filter((r) => !r.parent_task_id).map((r) => r.id);
   const allIds = rows.map((r) => r.id);
-  const [aggregates, depAggregates] = await Promise.all([
-    getSubtaskAggregates(rootIds),
-    getDependencyAggregates(allIds),
-  ]);
+  const depAggregates = await getDependencyAggregates(allIds);
   const total = count ?? 0;
 
   return {
     items: rows.map((row) => {
       const deps = depAggregates.get(row.id);
-      const depExtras = {
+      return mapTask(row, {
         dependencyCount: deps?.count ?? 0,
         incompleteDependencyCount: deps?.incompleteCount ?? 0,
         incompleteDependencyTitles: deps?.incompleteTitles ?? [],
-      };
-
-      if (row.parent_task_id) {
-        return mapTask(row, depExtras);
-      }
-      const aggregate = aggregates.get(row.id);
-      const mapped = mapTask(row, {
-        subtaskCount: aggregate?.count ?? 0,
-        ...depExtras,
       });
-      return {
-        ...mapped,
-        estimatedHours: aggregate?.hours ?? 0,
-      };
     }),
     total,
     page: query.page,
@@ -997,19 +802,4 @@ function emptyResult(query: ListTasksQuery): TasksListResult {
     pageSize: query.pageSize,
     totalPages: 1,
   };
-}
-
-export async function listSubtasks(
-  viewer: AppUser,
-  parentTaskId: string,
-): Promise<Task[]> {
-  await assertCanAccessTask(viewer, parentTaskId);
-  const result = await listTasksForViewer(viewer, {
-    parentTaskId,
-    page: 1,
-    pageSize: 100,
-    sortBy: "createdAt",
-    sortDir: "asc",
-  });
-  return result.items;
 }

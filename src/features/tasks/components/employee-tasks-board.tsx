@@ -370,8 +370,6 @@ export function EmployeeTasksBoard({
                 const late = isLateTask(task, today);
                 const dueToday = isDueTodayTask(task, today);
                 const isCompleted = task.status === "completed";
-                const isSubtask = Boolean(task.parentTaskId);
-                const parentTitle = task.parentTitle ?? null;
 
                 return (
                   <div
@@ -388,20 +386,12 @@ export function EmployeeTasksBoard({
                     }
                     className={cn(
                       "rounded-md border bg-background p-3 shadow-sm",
-                      isSubtask && "border-dashed",
                       !statusLocked && "cursor-grab active:cursor-grabbing",
                       statusLocked && "opacity-80",
                       draggingId === task.id && "opacity-60",
                       late && "border-destructive/40",
                     )}
                   >
-                    {isSubtask ? (
-                      <p className="mb-1 text-[11px] leading-tight text-muted-foreground">
-                        {t("boardUnderParent", {
-                          title: parentTitle ?? "—",
-                        })}
-                      </p>
-                    ) : null}
                     {task.project?.name ? (
                       <p className="text-xs text-muted-foreground">
                         {task.project.name}

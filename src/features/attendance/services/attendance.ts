@@ -110,7 +110,7 @@ export async function getTodayAttendance(
   return data ? mapRow(data) : null;
 }
 
-async function assertAllocatedSubtasks(
+async function assertAllocatedTasks(
   viewer: AppUser,
   taskIds: string[],
 ): Promise<void> {
@@ -121,12 +121,12 @@ async function assertAllocatedSubtasks(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("tasks")
-    .select("id, parent_task_id, assigned_to")
+    .select("id, assigned_to")
     .in("id", taskIds);
 
   if (error) {
     throw new ApiError(
-      "تعذر التحقق من المهام الفرعية.",
+      "تعذر التحقق من المهام.",
       500,
       "VALIDATE_ALLOCATIONS_FAILED",
     );
@@ -137,7 +137,6 @@ async function assertAllocatedSubtasks(
       row.id as string,
       row as {
         id: string;
-        parent_task_id: string | null;
         assigned_to: string | null;
       },
     ]),
@@ -148,18 +147,11 @@ async function assertAllocatedSubtasks(
     if (!task) {
       throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
     }
-    if (task.parent_task_id == null) {
-      throw new ApiError(
-        "يمكن تخصيص الوقت للمهام الفرعية فقط.",
-        409,
-        "NOT_A_SUBTASK",
-      );
-    }
     if (task.assigned_to !== viewer.id) {
       throw new ApiError(
         "يمكن تخصيص الوقت لمهامك المسندة فقط.",
         403,
-        "SUBTASK_NOT_ASSIGNED",
+        "TASK_NOT_ASSIGNED",
       );
     }
   }
@@ -247,7 +239,7 @@ export async function submitAttendance(
   );
 
   assertAllocationsEqualNet(input.allocations, totalHours);
-  await assertAllocatedSubtasks(viewer, taskIdsFromAllocations(input.allocations));
+  await assertAllocatedTasks(viewer, taskIdsFromAllocations(input.allocations));
 
   const admin = createAdminClient();
   const { data: existing, error: existingError } = await admin
@@ -404,7 +396,7 @@ export async function resubmitAttendance(
   );
 
   assertAllocationsEqualNet(input.allocations, totalHours);
-  await assertAllocatedSubtasks(
+  await assertAllocatedTasks(
     viewer,
     taskIdsFromAllocations(input.allocations),
   );

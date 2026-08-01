@@ -329,8 +329,7 @@ describe("attendance service", () => {
       });
     });
 
-    it("rejects root tasks as allocations", async () => {
-      let call = 0;
+    it("rejects tasks not assigned to the viewer", async () => {
       createAdminClientMock.mockReturnValue({
         from: (table: string) => {
           if (table === "tasks") {
@@ -338,45 +337,6 @@ describe("attendance service", () => {
               data: [
                 {
                   id: "11111111-1111-1111-1111-111111111111",
-                  parent_task_id: null,
-                  assigned_to: "emp-1",
-                },
-              ],
-              error: null,
-            });
-          }
-          call += 1;
-          return chain({ data: null, error: null });
-        },
-      } as never);
-
-      await expect(
-        submitAttendance(makeUser({ id: "emp-1", role: "employee" }), {
-          ...baseInput,
-          allocations: [
-            {
-              type: "task",
-              taskId: "11111111-1111-1111-1111-111111111111",
-              hours: 7.5,
-            },
-          ],
-        }),
-      ).rejects.toMatchObject({
-        code: "NOT_A_SUBTASK",
-        status: 409,
-      });
-      expect(call).toBe(0);
-    });
-
-    it("rejects unassigned subtasks", async () => {
-      createAdminClientMock.mockReturnValue({
-        from: (table: string) => {
-          if (table === "tasks") {
-            return chain({
-              data: [
-                {
-                  id: "11111111-1111-1111-1111-111111111111",
-                  parent_task_id: "parent-1",
                   assigned_to: "other-user",
                 },
               ],
@@ -399,7 +359,7 @@ describe("attendance service", () => {
           ],
         }),
       ).rejects.toMatchObject({
-        code: "SUBTASK_NOT_ASSIGNED",
+        code: "TASK_NOT_ASSIGNED",
         status: 403,
       });
     });
@@ -426,7 +386,6 @@ describe("attendance service", () => {
               data: [
                 {
                   id: "11111111-1111-1111-1111-111111111111",
-                  parent_task_id: "parent-1",
                   assigned_to: "emp-1",
                 },
               ],
@@ -560,7 +519,6 @@ describe("attendance service", () => {
               data: [
                 {
                   id: "11111111-1111-1111-1111-111111111111",
-                  parent_task_id: "parent-1",
                   assigned_to: "emp-1",
                 },
               ],

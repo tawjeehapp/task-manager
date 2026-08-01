@@ -70,7 +70,6 @@ async function fetchTasks(params: {
     pageSize: String(params.pageSize),
     sortBy: params.sortBy,
     sortDir: params.sortDir,
-    parentTaskId: "null",
   });
   if (params.status) {
     searchParams.set("status", params.status);
@@ -254,7 +253,6 @@ export function TasksPageClient({
       startDate: null,
       dueDate: null,
       estimatedHours: null,
-      parentTaskId: null,
       dependsOnTaskIds: [],
     },
   });
@@ -396,7 +394,6 @@ export function TasksPageClient({
                   </div>
                   <TaskDependencyPicker
                     projectId={watchedProjectId || null}
-                    parentTaskId={null}
                     value={watchedDependsOn}
                     onChange={(ids) =>
                       createForm.setValue("dependsOnTaskIds", ids)

@@ -5,7 +5,7 @@ import { countEmployeeTaskMetrics } from "@/features/dashboard/lib/actionable-ta
 describe("countEmployeeTaskMetrics", () => {
   const today = "2026-07-31";
 
-  it("counts root tasks and subtasks together", () => {
+  it("counts all tasks by status and due date", () => {
     const result = countEmployeeTaskMetrics(
       [
         { status: "in_progress", due_date: "2026-08-07" },

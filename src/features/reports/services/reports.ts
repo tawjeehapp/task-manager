@@ -225,8 +225,7 @@ export async function listTaskCompletionReport(
   let tasksQuery = admin
     .from("tasks")
     .select("id, assigned_to, status, completed_at, project_id, project:projects!project_id(id, department_id)")
-    .in("assigned_to", scoped.userIds)
-    .is("parent_task_id", null);
+    .in("assigned_to", scoped.userIds);
 
   if (query.projectId) {
     tasksQuery = tasksQuery.eq("project_id", query.projectId);

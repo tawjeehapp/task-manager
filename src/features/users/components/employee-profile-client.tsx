@@ -98,7 +98,6 @@ async function fetchUserProjects(userId: string): Promise<Project[]> {
 async function fetchUserTasks(userId: string): Promise<Task[]> {
   const params = new URLSearchParams({
     assignee: userId,
-    parentTaskId: "null",
     pageSize: "100",
     sortBy: "createdAt",
     sortDir: "desc",
@@ -156,7 +155,7 @@ export function EmployeeProfileClient({
   });
 
   const tasksQuery = useQuery({
-    queryKey: ["tasks", { assignee: userId, parentTaskId: null }],
+    queryKey: ["tasks", { assignee: userId }],
     queryFn: () => fetchUserTasks(userId),
   });
 

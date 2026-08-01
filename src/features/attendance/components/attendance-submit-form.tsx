@@ -17,10 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-type SubtaskOption = {
+type TaskOption = {
   id: string;
   title: string;
-  parentTaskId: string | null;
 };
 
 type AllocationRowType = "task" | "general";
@@ -156,19 +155,18 @@ export function AttendanceSubmitForm({
   );
   const [formError, setFormError] = useState<string | null>(null);
 
-  const subtasksQuery = useQuery({
-    queryKey: ["tasks", "assigned-subtasks", viewerId],
+  const tasksQuery = useQuery({
+    queryKey: ["tasks", "assigned-tasks", viewerId],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: "1",
         pageSize: "100",
         assignee: viewerId,
-        subtasksOnly: "true",
         sortBy: "title",
         sortDir: "asc",
       });
       const response = await fetch(`/api/tasks?${params}`);
-      const data = await readApi<{ items: SubtaskOption[] }>(response);
+      const data = await readApi<{ items: TaskOption[] }>(response);
       return data.items;
     },
   });
@@ -316,24 +314,23 @@ export function AttendanceSubmitForm({
     saveMutation.mutate();
   }
 
-  const subtasks = subtasksQuery.data ?? [];
+  const assignedTasks = tasksQuery.data ?? [];
   const selectedIds = new Set(
     rows.filter((r) => r.type === "task" && r.taskId).map((r) => r.taskId),
   );
   // Keep currently allocated tasks visible even if no longer assigned
   const selectOptions = useMemo(() => {
-    const byId = new Map(subtasks.map((task) => [task.id, task]));
+    const byId = new Map(assignedTasks.map((task) => [task.id, task]));
     for (const row of initialAllocations ?? []) {
       if (row.type === "task" && !byId.has(row.taskId)) {
         byId.set(row.taskId, {
           id: row.taskId,
           title: row.title ?? row.taskId,
-          parentTaskId: "unknown",
         });
       }
     }
     return Array.from(byId.values());
-  }, [subtasks, initialAllocations]);
+  }, [assignedTasks, initialAllocations]);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -390,18 +387,18 @@ export function AttendanceSubmitForm({
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <Label>{t("timeBreakdown")}</Label>
+          <Label>{t("taskAllocations")}</Label>
           <Button type="button" variant="outline" size="sm" onClick={addRow}>
             <Plus className="size-4" />
-            {t("addTimeRow")}
+            {t("addTaskRow")}
           </Button>
         </div>
 
-        {subtasksQuery.isLoading ? (
-          <p className="text-muted-foreground text-sm">{t("loadingSubtasks")}</p>
+        {tasksQuery.isLoading ? (
+          <p className="text-muted-foreground text-sm">{t("loadingTasks")}</p>
         ) : null}
-        {!subtasksQuery.isLoading && selectOptions.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{t("noAssignedSubtasks")}</p>
+        {!tasksQuery.isLoading && selectOptions.length === 0 ? (
+          <p className="text-muted-foreground text-sm">{t("noAssignedTasks")}</p>
         ) : null}
 
         <div className="space-y-2">
@@ -437,10 +434,10 @@ export function AttendanceSubmitForm({
                     onChange={(e) =>
                       updateRow(row.key, { taskId: e.target.value })
                     }
-                    aria-label={t("subtask")}
+                    aria-label={t("selectTask")}
                     disabled={selectOptions.length === 0}
                   >
-                    <option value="">{t("selectSubtask")}</option>
+                    <option value="">{t("selectTask")}</option>
                     {selectOptions.map((task) => (
                       <option
                         key={task.id}

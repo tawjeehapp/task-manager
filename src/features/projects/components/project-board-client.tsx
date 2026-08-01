@@ -21,12 +21,6 @@ type ProjectBoardClientProps = {
   canUpdateStatus: boolean;
 };
 
-type BoardCard = Task & {
-  parentTitle: string | null;
-  completedSubtasks: number;
-  totalSubtasks: number;
-};
-
 const STATUS_COLORS: Record<TaskStatus, string> = {
   todo: "bg-muted",
   in_progress: "bg-sky-500/10 border-sky-500/30",
@@ -46,7 +40,6 @@ async function fetchProject(id: string): Promise<Project> {
   return payload.data!;
 }
 
-/** Loads root tasks and subtasks so each can sit in its own status column. */
 async function fetchBoardTasks(projectId: string): Promise<Task[]> {
   const params = new URLSearchParams({
     projectId,
@@ -63,36 +56,6 @@ async function fetchBoardTasks(projectId: string): Promise<Task[]> {
     throw new Error(payload.error?.message ?? "Failed");
   }
   return payload.data!.items;
-}
-
-function buildBoardCards(tasks: Task[]): BoardCard[] {
-  const byId = new Map(tasks.map((task) => [task.id, task]));
-  const subtasksByParent = new Map<string, Task[]>();
-
-  for (const task of tasks) {
-    if (!task.parentTaskId) {
-      continue;
-    }
-    const list = subtasksByParent.get(task.parentTaskId) ?? [];
-    list.push(task);
-    subtasksByParent.set(task.parentTaskId, list);
-  }
-
-  return tasks.map((task) => {
-    const children = subtasksByParent.get(task.id) ?? [];
-    const completedSubtasks = children.filter(
-      (child) => child.status === "completed",
-    ).length;
-
-    return {
-      ...task,
-      parentTitle: task.parentTaskId
-        ? (byId.get(task.parentTaskId)?.title ?? null)
-        : null,
-      completedSubtasks,
-      totalSubtasks: children.length,
-    };
-  });
 }
 
 export function ProjectBoardClient({
@@ -142,17 +105,14 @@ export function ProjectBoardClient({
     },
   });
 
-  const boardCards = useMemo(
-    () => buildBoardCards(tasksQuery.data ?? []),
-    [tasksQuery.data],
-  );
+  const boardTasks = tasksQuery.data ?? [];
 
   const columns = useMemo(() => {
     return TASK_STATUSES.map((status) => ({
       status,
-      tasks: boardCards.filter((task) => task.status === status),
+      tasks: boardTasks.filter((task) => task.status === status),
     }));
-  }, [boardCards]);
+  }, [boardTasks]);
 
   function statusLabel(status: TaskStatus) {
     return t(`status_${status}` as "status_todo");
@@ -229,7 +189,7 @@ export function ProjectBoardClient({
               if (!canUpdateStatus || !draggingId) {
                 return;
               }
-              const task = boardCards.find((item) => item.id === draggingId);
+              const task = boardTasks.find((item) => item.id === draggingId);
               if (
                 task &&
                 task.status !== column.status &&
@@ -251,7 +211,6 @@ export function ProjectBoardClient({
             </div>
             <div className="space-y-2">
               {column.tasks.map((task) => {
-                const isSubtask = Boolean(task.parentTaskId);
                 const statusLocked = (task.incompleteDependencyCount ?? 0) > 0;
                 const canDrag = canUpdateStatus && !statusLocked;
                 return (
@@ -271,52 +230,26 @@ export function ProjectBoardClient({
                     }
                     className={cn(
                       "rounded-md border bg-background p-3 shadow-sm",
-                      isSubtask && "border-dashed ps-2",
                       canDrag && "cursor-grab active:cursor-grabbing",
                       statusLocked && "opacity-80",
                       draggingId === task.id && "opacity-60",
                     )}
                   >
-                    {isSubtask ? (
-                      <p className="text-muted-foreground mb-1 text-[11px] leading-tight">
-                        {t("boardUnderParent", {
-                          title: task.parentTitle ?? "—",
-                        })}
-                      </p>
-                    ) : null}
-                    <div className="flex items-start gap-1.5">
-                      {isSubtask ? (
-                        <span
-                          className="text-muted-foreground mt-0.5 text-xs"
-                          aria-hidden
-                        >
-                          ↳
-                        </span>
-                      ) : null}
-                      <Link
-                        href={`/tasks/${task.id}`}
-                        className="min-w-0 flex-1 font-medium underline-offset-4 hover:underline"
-                        onClick={(event) => {
-                          if (draggingId) {
-                            event.preventDefault();
-                          }
-                        }}
-                      >
-                        {task.title}
-                      </Link>
-                    </div>
+                    <Link
+                      href={`/tasks/${task.id}`}
+                      className="min-w-0 flex-1 font-medium underline-offset-4 hover:underline"
+                      onClick={(event) => {
+                        if (draggingId) {
+                          event.preventDefault();
+                        }
+                      }}
+                    >
+                      {task.title}
+                    </Link>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                       <p className="text-muted-foreground text-xs">
                         {task.assignee?.fullName ?? t("unassigned")}
                       </p>
-                      {!isSubtask && task.totalSubtasks > 0 ? (
-                        <Badge variant="outline" className="text-[10px]">
-                          {t("boardSubtaskProgress", {
-                            done: task.completedSubtasks,
-                            total: task.totalSubtasks,
-                          })}
-                        </Badge>
-                      ) : null}
                     </div>
                   </div>
                 );

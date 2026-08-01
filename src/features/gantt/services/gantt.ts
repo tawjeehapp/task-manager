@@ -19,7 +19,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 type TaskRow = {
   id: string;
   title: string;
-  parent_task_id: string | null;
   status: string;
   priority: string;
   assigned_to: string | null;
@@ -44,7 +43,7 @@ export async function getProjectGantt(
   let builder = admin
     .from("tasks")
     .select(
-      "id, title, parent_task_id, status, priority, assigned_to, start_date, due_date, progress_percentage, created_at, assignee:users!assigned_to(full_name)",
+      "id, title, status, priority, assigned_to, start_date, due_date, progress_percentage, created_at, assignee:users!assigned_to(full_name)",
     )
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
@@ -107,7 +106,6 @@ export async function getProjectGantt(
     return {
       id: row.id,
       title: row.title,
-      parentTaskId: row.parent_task_id,
       status: row.status,
       priority: row.priority,
       assignedTo: row.assigned_to,

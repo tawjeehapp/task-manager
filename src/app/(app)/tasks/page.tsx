@@ -63,9 +63,7 @@ export default async function TasksPage() {
     user.role === "admin" ||
     hasPermission(user.role, PERMISSIONS.TASK_CREATE, permissions);
 
-  const defaultQuery = listTasksQuerySchema.parse({
-    parentTaskId: "null",
-  });
+  const defaultQuery = listTasksQuerySchema.parse({});
   const initialTasks = await listTasksForViewer(user, defaultQuery);
 
   return (

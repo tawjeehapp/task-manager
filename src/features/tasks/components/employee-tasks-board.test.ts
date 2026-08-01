@@ -18,7 +18,6 @@ function makeTask(overrides: Partial<Task> = {}): Task {
       name: "Website",
       departmentId: "d1",
     },
-    parentTaskId: null,
     title: "Design homepage",
     description: null,
     status: "todo",

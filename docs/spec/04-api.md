@@ -730,7 +730,7 @@ Create body may include optional `dependsOnTaskIds: string[]` (same-project fini
 List filters:
 
 - Projects: `status`, `departmentId`, `includeArchived`, pagination, sort
-- Tasks: `projectId`, `status`, `assignee`, `priority`, `parentTaskId` (`null` = roots), `dueFrom`/`dueTo`, pagination, sort
+- Tasks: `projectId`, `status`, `assignee`, `priority`, `dueFrom`/`dueTo`, pagination, sort
 
 Notable error codes:
 
@@ -738,10 +738,7 @@ Notable error codes:
 - `PROJECT_ARCHIVED` (409) — cannot create tasks on archived project
 - `INVALID_PROJECT_MEMBER` (409) — member not in department
 - `ALREADY_PROJECT_MEMBER` (409)
-- `SUBTASK_DEPTH_EXCEEDED` (409) — only one subtask level
 - `INVALID_ASSIGNEE` (409)
-- `PARENT_TASK_NOT_FOUND` (404)
-- `PARENT_PROJECT_MISMATCH` (409)
 
 Permissions seeded in M3:
 
@@ -766,8 +763,6 @@ Department managers manage members and tasks inside department projects via serv
 Dependency rules (finish-to-start):
 
 - Same project only; no self-edges; no cycles
-- Root tasks may only depend on other **root** tasks (not subtasks)
-- Subtasks may only depend on **sibling** subtasks under the same parent
 - Status is forced to `blocked` while any dependency is incomplete; status changes are rejected (`STATUS_LOCKED_BY_DEPENDENCIES` 409)
 - When prerequisites are satisfied, blocked dependents return to `todo`
 - Adding an incomplete dependency forces the dependent task to `blocked`
@@ -792,8 +787,6 @@ Notable error codes:
 - `STATUS_LOCKED_BY_DEPENDENCIES` (409)
 - `DEPENDENCY_SELF` (409)
 - `DEPENDENCY_CYCLE` (409)
-- `DEPENDENCY_ROOT_ON_SUBTASK` (409)
-- `DEPENDENCY_SUBTASK_SCOPE` (409)
 - `DEPENDENCY_PROJECT_MISMATCH` (409)
 - `DEPENDENCY_ALREADY_EXISTS` (409)
 - `DEPENDENCY_INVALID_FOR_STATUS` (409)
@@ -808,7 +801,7 @@ Notable error codes:
 |--------|------|------------|
 | GET | `/api/attendance` | `attendance.view` (scoped) |
 | GET | `/api/attendance/today` | `attendance.view` (own today) |
-| POST | `/api/attendance/submit` | `attendance.view` (manual full-day submit + optional subtask allocations) |
+| POST | `/api/attendance/submit` | `attendance.view` (manual full-day submit + optional task allocations) |
 | GET | `/api/attendance/[id]` | `attendance.view` + access assert |
 | POST | `/api/attendance/[id]/resubmit` | owner; pending or rejected only; replaces times + same-day work logs |
 | PATCH | `/api/attendance/[id]` | owner (pending/rejected) or admin correction |
@@ -822,7 +815,7 @@ Notable error codes:
 
 - `date` (YYYY-MM-DD), `clockIn` / `clockOut` (HH:mm), `breakMinutes`
 - `allocations`: discriminated entries that must sum **exactly** to net attendance hours:
-  - `{ type: "task", taskId, hours }` — assigned **subtasks** only
+  - `{ type: "task", taskId, hours }` — assigned **tasks** only
   - `{ type: "general", reason, hours }` — reason required (why not on an assigned task)
   - Each entry creates a `work_logs` row (`task_id` null for general; reason in `description`)
 
@@ -832,7 +825,7 @@ List filters:
 
 - Attendance: `status`, `userId`, `dateFrom`/`dateTo`, `awaitingApproval`, pagination, sort
 - Work logs: `userId`, `taskId`, `dateFrom`/`dateTo`, pagination, sort
-- Tasks (for allocation dropdown): `assignee`, `subtasksOnly=true`
+- Tasks (for allocation dropdown): `assignee`
 
 List attendance also returns `totalHoursSum` for the current filter (daily/reporting total).
 
@@ -845,8 +838,7 @@ Notable error codes:
 
 - `ATTENDANCE_EXISTS` (409)
 - `ALLOCATION_MUST_EQUAL_NET_HOURS` (409)
-- `NOT_A_SUBTASK` (409)
-- `SUBTASK_NOT_ASSIGNED` (403)
+- `TASK_NOT_ASSIGNED` (403)
 - `CLOCK_OUT_REQUIRED` (409)
 - `CANNOT_APPROVE_OWN` (403)
 - `ATTENDANCE_APPROVED_LOCKED` (409)
@@ -930,7 +922,7 @@ Out of scope for M8: charts, CSV/PDF export, scheduled reports, Advanced Analyti
 
 # Milestone 9 — Advanced Views (Gantt, Filters, Comments, Attachments)
 
-Task list filters (server-side): `projectId`, `departmentId`, `status`, `assignee`, `priority`, `parentTaskId`, `dueFrom`, `dueTo`.
+Task list filters (server-side): `projectId`, `departmentId`, `status`, `assignee`, `priority`, `dueFrom`, `dueTo`.
 
 | Method | Path | Authz | Notes |
 |--------|------|-------|-------|

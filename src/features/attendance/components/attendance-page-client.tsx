@@ -215,7 +215,6 @@ export function AttendancePageClient({
       const params = new URLSearchParams({
         page: "1",
         pageSize: "100",
-        parentTaskId: "null",
       });
       const response = await fetch(`/api/tasks?${params}`);
       const data = await readApi<{ items: TaskOption[] }>(response);

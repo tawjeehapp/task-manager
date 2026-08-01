@@ -18,7 +18,6 @@ function task(overrides: Partial<AggregateTaskRow> = {}): AggregateTaskRow {
     dueDate: "2026-07-20",
     estimatedHours: 4,
     progressPercentage: 25,
-    parentTaskId: null,
     ...overrides,
   };
 }
@@ -42,7 +41,7 @@ describe("leadership aggregates", () => {
     );
   });
 
-  it("averages root-task progress", () => {
+  it("averages task progress", () => {
     expect(
       computeProjectProgress([
         task({ progressPercentage: 0 }),

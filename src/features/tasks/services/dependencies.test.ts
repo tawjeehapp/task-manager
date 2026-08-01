@@ -54,7 +54,7 @@ describe("dependency status rules", () => {
 });
 
 describe("dependency hierarchy rules", () => {
-  it("allows root → root and rejects root → subtask", () => {
+  it("always allows dependencies regardless of former parent hierarchy", () => {
     expect(
       isDependencyHierarchyAllowed({
         taskParentTaskId: null,
@@ -64,15 +64,6 @@ describe("dependency hierarchy rules", () => {
     expect(
       isDependencyHierarchyAllowed({
         taskParentTaskId: null,
-        dependsOnParentTaskId: "parent-1",
-      }),
-    ).toBe(false);
-  });
-
-  it("allows sibling subtasks only", () => {
-    expect(
-      isDependencyHierarchyAllowed({
-        taskParentTaskId: "parent-1",
         dependsOnParentTaskId: "parent-1",
       }),
     ).toBe(true);
@@ -81,13 +72,7 @@ describe("dependency hierarchy rules", () => {
         taskParentTaskId: "parent-1",
         dependsOnParentTaskId: "parent-2",
       }),
-    ).toBe(false);
-    expect(
-      isDependencyHierarchyAllowed({
-        taskParentTaskId: "parent-1",
-        dependsOnParentTaskId: null,
-      }),
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 

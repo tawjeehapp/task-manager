@@ -157,19 +157,19 @@ npm run seed:dev -- --reset
 
 - Users `0000`–`1008` (Arabic names; roles: admin, 2 managers, employees)
 - Departments: تقنية المعلومات، المناهج والتخطيط (current memberships only)
-- Projects, tasks/subtasks, dependencies, uneven workload
+- Projects, tasks, dependencies, uneven workload
 - Attendance scenarios (awaiting approval, approved, rejected, resubmitted pending, break minutes, empty today)
-- Work logs on parent tasks and subtasks across multiple days
+- Work logs on assigned tasks across multiple days
 
 ### Credential rules
 
 | Case | Behavior |
 |---|---|
 | New Auth user | Password = employee number; profile `must_change_password = false` |
-| Existing Auth user | **Password never overwritten** |
-| Existing profile | Updates deterministic fields only (name, phone, role, active); **does not** reset `must_change_password` |
+| Existing Auth user | Password reset to employee number on every seed run |
+| Existing profile | Updates deterministic fields (name, phone, role, active) and sets `must_change_password = false` |
 
-Login with employee number only (e.g. `1003` / `1003` when Auth was created by this seed).
+Login with employee number only (e.g. `0000` / `0000`, `1003` / `1003`).
 
 ### Minimal vs full seed
 
@@ -269,7 +269,7 @@ Milestones **0–9** core product scope is implemented (M0 PWA offline + Web Pus
 ### Shipped through M9 (summary)
 
 - Auth, users, permissions, departments, memberships
-- Projects, members, tasks, one-level subtasks, Kanban, Gantt
+- Projects, members, flat tasks, Kanban, Gantt
 - Finish-to-start dependencies, assignee workload hints, task activity history
 - Attendance manual submit, approval/rejection, daily hour totals, task work logs
 - Leave types/balances/requests, task extension/excusal, centralized `/approvals`

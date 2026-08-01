@@ -276,7 +276,7 @@ export function EmployeeAttendancePageClient({
                     <TableHead>{t("dayLabel")}</TableHead>
                     <TableHead>{t("clockInOutColumn")}</TableHead>
                     <TableHead>{t("netHoursColumn")}</TableHead>
-                    <TableHead>{t("subtask")}</TableHead>
+                    <TableHead>{t("entryTypeTask")}</TableHead>
                     <TableHead>{t("status")}</TableHead>
                     <TableHead>{t("actions")}</TableHead>
                   </TableRow>

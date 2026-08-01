@@ -208,7 +208,7 @@ async function buildLeadershipDashboard(input: {
       : admin
           .from("tasks")
           .select(
-            "id, project_id, assigned_to, status, due_date, estimated_hours, progress_percentage, parent_task_id",
+            "id, project_id, assigned_to, status, due_date, estimated_hours, progress_percentage",
           )
           .in("project_id", projectIds);
 
@@ -326,7 +326,6 @@ async function buildLeadershipDashboard(input: {
       due_date: string | null;
       estimated_hours: number | string | null;
       progress_percentage: number;
-      parent_task_id: string | null;
     };
     return {
       id: r.id,
@@ -339,7 +338,6 @@ async function buildLeadershipDashboard(input: {
           ? null
           : Number(r.estimated_hours),
       progressPercentage: Number(r.progress_percentage ?? 0),
-      parentTaskId: r.parent_task_id,
     };
   });
 
@@ -504,8 +502,6 @@ function mapTaskRow(row: {
   status: unknown;
   due_date: unknown;
   priority: unknown;
-  parent_task_id: unknown;
-  parent?: unknown;
   project: unknown;
 }): DashboardTaskItem {
   const project = row.project as
@@ -515,22 +511,12 @@ function mapTaskRow(row: {
   const projectName = Array.isArray(project)
     ? (project[0]?.name ?? null)
     : (project?.name ?? null);
-  const parent = row.parent as
-    | { id: string; title: string }
-    | { id: string; title: string }[]
-    | null
-    | undefined;
-  const parentTitle = Array.isArray(parent)
-    ? (parent[0]?.title ?? null)
-    : (parent?.title ?? null);
   return {
     id: row.id as string,
     title: row.title as string,
     status: row.status as string,
     dueDate: calendarDateOnly(row.due_date as string | null),
     priority: row.priority as string,
-    parentTaskId: (row.parent_task_id as string | null) ?? null,
-    parentTitle,
     projectName,
     href: `/tasks/${row.id}`,
     incompleteDependencyCount: 0,
@@ -600,7 +586,7 @@ async function listTodayTasks(
   const { data, error } = await admin
     .from("tasks")
     .select(
-      "id, title, status, due_date, priority, parent_task_id, parent:tasks!parent_task_id(id, title), project:projects!project_id(id, name)",
+      "id, title, status, due_date, priority, project:projects!project_id(id, name)",
     )
     .eq("assigned_to", userId)
     .lte("due_date", today)

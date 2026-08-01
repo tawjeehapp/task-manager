@@ -37,9 +37,7 @@ export default async function TeamTasksPage() {
     user.role === "admin" ||
     hasPermission(user.role, PERMISSIONS.TASK_CREATE, permissions);
 
-  const defaultQuery = listTasksQuerySchema.parse({
-    parentTaskId: "null",
-  });
+  const defaultQuery = listTasksQuerySchema.parse({});
   const initialTasks = await listTasksForViewer(user, defaultQuery);
 
   return (

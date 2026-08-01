@@ -17,7 +17,6 @@ const optionalDate = z
 
 export const createTaskSchema = z.object({
   projectId: z.string().uuid("معرّف المشروع غير صالح"),
-  parentTaskId: z.string().uuid().optional().nullable(),
   title: z.string().min(2, "عنوان المهمة مطلوب"),
   description: z
     .string()
@@ -118,20 +117,6 @@ export const listTasksQuerySchema = z.object({
   status: taskStatusSchema.optional(),
   assignee: z.string().uuid().optional(),
   priority: taskPrioritySchema.optional(),
-  parentTaskId: z
-    .union([z.literal("null"), z.string().uuid()])
-    .optional()
-    .transform((value) => {
-      if (value === undefined) {
-        return undefined;
-      }
-      return value === "null" ? null : value;
-    }),
-  /** When true, only tasks with a parent (subtasks). */
-  subtasksOnly: z
-    .enum(["true", "false"])
-    .optional()
-    .transform((v) => (v === undefined ? undefined : v === "true")),
   dueFrom: z.string().optional(),
   dueTo: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -156,10 +141,5 @@ export const listTasksQuerySchema = z.object({
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export type UpdateTaskInput = z.input<typeof updateTaskSchema>;
-export type ListTasksQuery = Omit<
-  z.infer<typeof listTasksQuerySchema>,
-  "subtasksOnly"
-> & {
-  subtasksOnly?: boolean;
-};
+export type ListTasksQuery = z.infer<typeof listTasksQuerySchema>;
 export type TaskSortBy = ListTasksQuery["sortBy"];

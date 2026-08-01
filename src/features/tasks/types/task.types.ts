@@ -22,9 +22,6 @@ export type Task = {
   id: string;
   projectId: string;
   project: TaskProjectSummary | null;
-  parentTaskId: string | null;
-  /** Parent task title when this row is a subtask. */
-  parentTitle?: string | null;
   title: string;
   description: string | null;
   status: TaskStatus;
@@ -40,7 +37,6 @@ export type Task = {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  subtaskCount?: number;
   /** Number of finish-to-start prerequisites. */
   dependencyCount?: number;
   /** Prerequisites that are not yet completed. */
@@ -52,7 +48,6 @@ export type Task = {
 export type TaskRow = {
   id: string;
   project_id: string;
-  parent_task_id: string | null;
   title: string;
   description: string | null;
   status: TaskStatus;

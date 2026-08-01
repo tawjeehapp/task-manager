@@ -102,7 +102,6 @@ async function fetchMembers(id: string): Promise<ProjectMember[]> {
 async function fetchProjectTasks(projectId: string): Promise<Task[]> {
   const params = new URLSearchParams({
     projectId,
-    parentTaskId: "null",
     pageSize: "25",
     sortBy: "createdAt",
     sortDir: "desc",
@@ -166,7 +165,7 @@ export function ProjectDetailClient({
   });
 
   const tasksQuery = useQuery({
-    queryKey: ["tasks", { projectId, parentTaskId: null }],
+    queryKey: ["tasks", { projectId }],
     queryFn: () => fetchProjectTasks(projectId),
   });
 
@@ -266,7 +265,6 @@ export function ProjectDetailClient({
     resolver: zodResolver(createTaskSchema) as never,
     defaultValues: {
       projectId,
-      parentTaskId: null,
       title: "",
       description: "",
       status: "todo",
@@ -299,7 +297,6 @@ export function ProjectDetailClient({
       setCreateTaskOpen(false);
       createTaskForm.reset({
         projectId,
-        parentTaskId: null,
         title: "",
         description: "",
         status: "todo",
@@ -939,7 +936,6 @@ export function ProjectDetailClient({
             </div>
             <TaskDependencyPicker
               projectId={projectId}
-              parentTaskId={null}
               value={createTaskForm.watch("dependsOnTaskIds") ?? []}
               onChange={(ids) =>
                 createTaskForm.setValue("dependsOnTaskIds", ids)

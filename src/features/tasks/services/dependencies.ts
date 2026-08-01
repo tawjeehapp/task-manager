@@ -47,44 +47,19 @@ export function mapDependency(row: DependencyWithTask): TaskDependency {
   };
 }
 
-/** Pure hierarchy rule for finish-to-start dependencies. */
-export function isDependencyHierarchyAllowed(params: {
+/** @deprecated Hierarchy rules removed; dependencies are same-project only. Kept for test imports. */
+export function isDependencyHierarchyAllowed(_params: {
   taskParentTaskId: string | null;
   dependsOnParentTaskId: string | null;
 }): boolean {
-  const taskIsRoot = params.taskParentTaskId == null;
-  const dependsOnIsRoot = params.dependsOnParentTaskId == null;
-
-  if (taskIsRoot) {
-    // Root tasks may only depend on other root tasks.
-    return dependsOnIsRoot;
-  }
-
-  // Subtasks may only depend on sibling subtasks under the same parent.
-  return params.dependsOnParentTaskId === params.taskParentTaskId;
+  return true;
 }
 
-export function assertDependencyHierarchyAllowed(params: {
+export function assertDependencyHierarchyAllowed(_params: {
   taskParentTaskId: string | null;
   dependsOnParentTaskId: string | null;
 }): void {
-  if (isDependencyHierarchyAllowed(params)) {
-    return;
-  }
-
-  if (params.taskParentTaskId == null) {
-    throw new ApiError(
-      "لا يمكن أن تعتمد المهمة على مهمة فرعية.",
-      409,
-      "DEPENDENCY_ROOT_ON_SUBTASK",
-    );
-  }
-
-  throw new ApiError(
-    "المهمة الفرعية تعتمد فقط على مهام فرعية ضمن نفس المهمة الأب.",
-    409,
-    "DEPENDENCY_SUBTASK_SCOPE",
-  );
+  // No-op: finish-to-start dependencies are validated by same-project only.
 }
 
 /** Pure: true when every prerequisite status is completed. */
@@ -384,7 +359,7 @@ export async function addTaskDependency(
 
   const { data: task, error: taskError } = await admin
     .from("tasks")
-    .select("id, project_id, status, parent_task_id")
+    .select("id, project_id, status")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -394,7 +369,7 @@ export async function addTaskDependency(
 
   const { data: dependsOn, error: dependsError } = await admin
     .from("tasks")
-    .select("id, project_id, status, title, parent_task_id")
+    .select("id, project_id, status, title")
     .eq("id", input.dependsOnTaskId)
     .maybeSingle();
 
@@ -413,11 +388,6 @@ export async function addTaskDependency(
       "DEPENDENCY_PROJECT_MISMATCH",
     );
   }
-
-  assertDependencyHierarchyAllowed({
-    taskParentTaskId: (task.parent_task_id as string | null) ?? null,
-    dependsOnParentTaskId: (dependsOn.parent_task_id as string | null) ?? null,
-  });
 
   if (await wouldCreateDependencyCycle(taskId, input.dependsOnTaskId)) {
     throw new ApiError(

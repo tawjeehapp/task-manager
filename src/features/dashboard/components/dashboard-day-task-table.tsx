@@ -166,22 +166,7 @@ export function DashboardDayTaskTable({
                       className="inline-flex min-w-0 flex-wrap items-center gap-1.5 font-medium underline-offset-4 hover:underline"
                     >
                       <span className="truncate">{task.title}</span>
-                      {task.parentTaskId ? (
-                        <Badge
-                          variant="secondary"
-                          className="shrink-0 text-[10px]"
-                        >
-                          {t("subtaskBadge")}
-                        </Badge>
-                      ) : null}
                     </Link>
-                    {task.parentTaskId ? (
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {tTasks("boardUnderParent", {
-                          title: task.parentTitle ?? "—",
-                        })}
-                      </p>
-                    ) : null}
                     {statusLocked ? (
                       <p className="text-muted-foreground mt-1 text-xs">
                         {tTasks("statusLockedByDependencies")}

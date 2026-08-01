@@ -9,9 +9,7 @@ import { useTranslations } from "next-intl";
 
 import type { EmployeeRequest } from "@/features/employee-requests/types/employee-request.types";
 import {
-  createTaskSchema,
   updateTaskSchema,
-  type CreateTaskInput,
   type UpdateTaskInput,
 } from "@/features/tasks/schemas/task.schema";
 import type { Task } from "@/features/tasks/types/task.types";
@@ -20,10 +18,8 @@ import { TaskActivityPanel } from "@/features/tasks/components/task-activity-pan
 import { TaskAttachmentsPanel } from "@/features/tasks/components/task-attachments-panel";
 import { TaskCommentsPanel } from "@/features/tasks/components/task-comments-panel";
 import { TaskDependenciesPanel } from "@/features/tasks/components/task-dependencies-panel";
-import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { PageHeader } from "@/components/shared/page-header";
-import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { TabPanel, Tabs } from "@/components/shared/tabs";
@@ -38,14 +34,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 type TaskDetailClientProps = {
@@ -96,24 +84,6 @@ async function fetchTask(id: string): Promise<Task> {
     throw new Error(payload.error?.message ?? "Failed");
   }
   return payload.data!;
-}
-
-async function fetchSubtasks(parentTaskId: string): Promise<Task[]> {
-  const params = new URLSearchParams({
-    parentTaskId,
-    pageSize: "100",
-    sortBy: "createdAt",
-    sortDir: "asc",
-  });
-  const response = await fetch(`/api/tasks?${params.toString()}`);
-  const payload = (await response.json()) as {
-    data?: { items: Task[] };
-    error?: { message: string };
-  };
-  if (!response.ok) {
-    throw new Error(payload.error?.message ?? "Failed");
-  }
-  return payload.data!.items;
 }
 
 async function fetchAssigneeOptions(
@@ -176,7 +146,6 @@ export function TaskDetailClient({
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [subtaskOpen, setSubtaskOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [extensionOpen, setExtensionOpen] = useState(false);
   const [excusalOpen, setExcusalOpen] = useState(false);
@@ -188,18 +157,6 @@ export function TaskDetailClient({
   const taskQuery = useQuery({
     queryKey: ["tasks", taskId],
     queryFn: () => fetchTask(taskId),
-  });
-
-  const parentTaskQuery = useQuery({
-    queryKey: ["tasks", taskQuery.data?.parentTaskId],
-    queryFn: () => fetchTask(taskQuery.data!.parentTaskId!),
-    enabled: Boolean(taskQuery.data?.parentTaskId),
-  });
-
-  const subtasksQuery = useQuery({
-    queryKey: ["tasks", { parentTaskId: taskId }],
-    queryFn: () => fetchSubtasks(taskId),
-    enabled: Boolean(taskQuery.data && !taskQuery.data.parentTaskId),
   });
 
   const departmentId = taskQuery.data?.project?.departmentId;
@@ -383,23 +340,6 @@ export function TaskDetailClient({
       : undefined,
   });
 
-  const subtaskForm = useForm<CreateTaskInput>({
-    resolver: zodResolver(createTaskSchema) as never,
-    defaultValues: {
-      projectId: "",
-      parentTaskId: null,
-      title: "",
-      description: "",
-      status: "todo",
-      priority: "medium",
-      assignedTo: null,
-      startDate: null,
-      dueDate: null,
-      estimatedHours: null,
-      dependsOnTaskIds: [],
-    },
-  });
-
   const patchMutation = useMutation({
     mutationFn: async (values: UpdateTaskInput) => {
       const response = await fetch(`/api/tasks/${taskId}`, {
@@ -446,35 +386,6 @@ export function TaskDetailClient({
     },
   });
 
-  const createSubtaskMutation = useMutation({
-    mutationFn: async (values: CreateTaskInput) => {
-      const task = taskQuery.data!;
-      const response = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...values,
-          projectId: task.projectId,
-          parentTaskId: task.id,
-        }),
-      });
-      const payload = (await response.json()) as {
-        data?: Task;
-        error?: { message: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? t("createFailed"));
-      }
-      return payload.data!;
-    },
-    onSuccess: async () => {
-      setSubtaskOpen(false);
-      subtaskForm.reset();
-      setSuccessMessage(t("subtaskCreateSuccess"));
-      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
-  });
-
   if (taskQuery.isLoading) {
     return <LoadingState />;
   }
@@ -490,12 +401,8 @@ export function TaskDetailClient({
   }
 
   const task = taskQuery.data;
-  const subtasks = subtasksQuery.data ?? [];
-  const isRoot = !task.parentTaskId;
   const assignees = assigneesQuery.data ?? [];
   const watchedAssignee = editForm.watch("assignedTo");
-  const watchedSubtaskAssignee = subtaskForm.watch("assignedTo");
-  const watchedSubtaskDependsOn = subtaskForm.watch("dependsOnTaskIds") ?? [];
 
   function statusLabel(status: string) {
     return t(`status_${status}` as "status_todo");
@@ -516,15 +423,6 @@ export function TaskDetailClient({
                   {
                     label: task.project.name,
                     href: `/projects/${task.projectId}`,
-                  },
-                ]
-              : []),
-            ...(task.parentTaskId
-              ? [
-                  {
-                    label:
-                      parentTaskQuery.data?.title ?? t("viewParent"),
-                    href: `/tasks/${task.parentTaskId}`,
                   },
                 ]
               : []),
@@ -600,29 +498,6 @@ export function TaskDetailClient({
                   {tReq("pendingExcusal")}
                 </Button>
               ) : null}
-              {canCreate && isRoot ? (
-                <Button
-                  type="button"
-                  onClick={() => {
-                    subtaskForm.reset({
-                      projectId: task.projectId,
-                      parentTaskId: task.id,
-                      title: "",
-                      description: "",
-                      status: "todo",
-                      priority: "medium",
-                      assignedTo: null,
-                      startDate: null,
-                      dueDate: null,
-                      estimatedHours: null,
-                      dependsOnTaskIds: [],
-                    });
-                    setSubtaskOpen(true);
-                  }}
-                >
-                  {t("addSubtask")}
-                </Button>
-              ) : null}
             </div>
           }
         />
@@ -661,10 +536,7 @@ export function TaskDetailClient({
                 <form
                   className="space-y-4"
                   onSubmit={editForm.handleSubmit((values) => {
-                    const payload = taskQuery.data?.parentTaskId
-                      ? values
-                      : { ...values, estimatedHours: undefined };
-                    patchMutation.mutate(payload);
+                    patchMutation.mutate(values);
                   })}
                 >
                   <div className="space-y-2">
@@ -757,33 +629,18 @@ export function TaskDetailClient({
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="edit-hours">{t("estimatedHours")}</Label>
-                      {!taskQuery.data?.parentTaskId ? (
-                        <>
-                          <Input
-                            id="edit-hours"
-                            type="number"
-                            value={taskQuery.data?.estimatedHours ?? 0}
-                            disabled
-                            readOnly
-                          />
-                          <p className="text-muted-foreground text-xs">
-                            {t("hoursFromSubtasks")}
-                          </p>
-                        </>
-                      ) : (
-                        <Input
-                          id="edit-hours"
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          {...editForm.register("estimatedHours", {
-                            setValueAs: (value) =>
-                              value === "" || value == null
-                                ? null
-                                : Number(value),
-                          })}
-                        />
-                      )}
+                      <Input
+                        id="edit-hours"
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        {...editForm.register("estimatedHours", {
+                          setValueAs: (value) =>
+                            value === "" || value == null
+                              ? null
+                              : Number(value),
+                        })}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="edit-progress">
@@ -886,17 +743,8 @@ export function TaskDetailClient({
                       {t("estimatedHours")}
                     </p>
                     <p className="mt-2 font-medium">
-                      {!task.parentTaskId
-                        ? (task.estimatedHours ?? 0)
-                        : task.estimatedHours != null
-                          ? task.estimatedHours
-                          : "—"}
+                      {task.estimatedHours != null ? task.estimatedHours : "—"}
                     </p>
-                    {!task.parentTaskId ? (
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {t("hoursFromSubtasks")}
-                      </p>
-                    ) : null}
                   </div>
                   <div className="rounded-lg border p-4">
                     <p className="text-muted-foreground text-sm">
@@ -914,92 +762,6 @@ export function TaskDetailClient({
                 ) : null}
               </>
             )}
-
-            {task.parentTaskId ? (
-              <p className="text-sm">
-                <Link
-                  href={`/tasks/${task.parentTaskId}`}
-                  className="underline-offset-4 hover:underline"
-                >
-                  {t("viewParent")}
-                </Link>
-              </p>
-            ) : null}
-
-            {isRoot ? (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-lg font-semibold">{t("subtasks")}</h2>
-                  {canCreate ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        subtaskForm.reset({
-                          projectId: task.projectId,
-                          parentTaskId: task.id,
-                          title: "",
-                          description: "",
-                          status: "todo",
-                          priority: "medium",
-                          assignedTo: null,
-                          startDate: null,
-                          dueDate: null,
-                          estimatedHours: null,
-                          dependsOnTaskIds: [],
-                        });
-                        setSubtaskOpen(true);
-                      }}
-                    >
-                      {t("addSubtask")}
-                    </Button>
-                  ) : null}
-                </div>
-                {subtasksQuery.isLoading ? <LoadingState /> : null}
-                {subtasks.length === 0 && !subtasksQuery.isLoading ? (
-                  <EmptyState
-                    title={t("emptySubtasksTitle")}
-                    description={t("emptySubtasksDescription")}
-                  />
-                ) : (
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>{t("titleLabel")}</TableHead>
-                          <TableHead>{t("status")}</TableHead>
-                          <TableHead>{t("dueDate")}</TableHead>
-                          <TableHead>{t("assignee")}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {subtasks.map((subtask) => (
-                          <TableRow key={subtask.id}>
-                            <TableCell>
-                              <Link
-                                href={`/tasks/${subtask.id}`}
-                                className="font-medium underline-offset-4 hover:underline"
-                              >
-                                {subtask.title}
-                              </Link>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="secondary">
-                                {statusLabel(subtask.status)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{subtask.dueDate ?? "—"}</TableCell>
-                            <TableCell>
-                              {subtask.assignee?.fullName ?? "—"}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </section>
-            ) : null}
           </div>
         </TabPanel>
 
@@ -1007,7 +769,6 @@ export function TaskDetailClient({
           <TaskDependenciesPanel
             taskId={taskId}
             projectId={task.projectId}
-            parentTaskId={task.parentTaskId}
             canManage={canEditFull}
           />
         </TabPanel>
@@ -1032,128 +793,6 @@ export function TaskDetailClient({
           <TaskActivityPanel taskId={taskId} />
         </TabPanel>
       </Tabs>
-
-      <Dialog open={subtaskOpen} onOpenChange={setSubtaskOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t("addSubtask")}</DialogTitle>
-          </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={subtaskForm.handleSubmit((values) =>
-              createSubtaskMutation.mutate(values),
-            )}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="subtask-title">{t("titleLabel")}</Label>
-              <Input id="subtask-title" {...subtaskForm.register("title")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="subtask-description">
-                {t("descriptionLabel")}
-              </Label>
-              <textarea
-                id="subtask-description"
-                className="border-input bg-background min-h-20 w-full rounded-md border px-3 py-2 text-sm"
-                {...subtaskForm.register("description")}
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="subtask-priority">{t("priority")}</Label>
-                <select
-                  id="subtask-priority"
-                  className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                  {...subtaskForm.register("priority")}
-                >
-                  <option value="low">{priorityLabel("low")}</option>
-                  <option value="medium">{priorityLabel("medium")}</option>
-                  <option value="high">{priorityLabel("high")}</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="subtask-assignee">{t("assignee")}</Label>
-                <AssigneeSelect
-                  id="subtask-assignee"
-                  value={
-                    typeof watchedSubtaskAssignee === "string"
-                      ? watchedSubtaskAssignee
-                      : null
-                  }
-                  options={assignees}
-                  disabled={!canAssign}
-                  onChange={(userId) =>
-                    subtaskForm.setValue("assignedTo", userId, {
-                      shouldDirty: true,
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="subtask-start">{t("startDate")}</Label>
-                <Input
-                  id="subtask-start"
-                  type="date"
-                  {...subtaskForm.register("startDate")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="subtask-due">{t("dueDate")}</Label>
-                <Input
-                  id="subtask-due"
-                  type="date"
-                  {...subtaskForm.register("dueDate")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="subtask-hours">{t("estimatedHours")}</Label>
-                <Input
-                  id="subtask-hours"
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  {...subtaskForm.register("estimatedHours", {
-                    setValueAs: (value) =>
-                      value === "" || value == null ? null : Number(value),
-                  })}
-                />
-              </div>
-            </div>
-            <TaskDependencyPicker
-              projectId={task.projectId}
-              parentTaskId={task.id}
-              value={watchedSubtaskDependsOn}
-              onChange={(ids) =>
-                subtaskForm.setValue("dependsOnTaskIds", ids)
-              }
-            />
-            {createSubtaskMutation.isError ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {(createSubtaskMutation.error as Error).message}
-                </AlertDescription>
-              </Alert>
-            ) : null}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setSubtaskOpen(false)}
-              >
-                {tCommon("cancel")}
-              </Button>
-              <Button
-                type="submit"
-                disabled={createSubtaskMutation.isPending}
-              >
-                {createSubtaskMutation.isPending
-                  ? tCommon("saving")
-                  : tCommon("save")}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={extensionOpen} onOpenChange={setExtensionOpen}>
         <DialogContent>

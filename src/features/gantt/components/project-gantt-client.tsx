@@ -85,26 +85,7 @@ export function ProjectGanttClient({
   });
 
   const orderedTasks = useMemo(() => {
-    const tasks = ganttQuery.data?.tasks ?? [];
-    const roots = tasks.filter((task) => !task.parentTaskId);
-    const children = new Map<string, typeof tasks>();
-    for (const task of tasks) {
-      if (!task.parentTaskId) continue;
-      const list = children.get(task.parentTaskId) ?? [];
-      list.push(task);
-      children.set(task.parentTaskId, list);
-    }
-    const ordered: typeof tasks = [];
-    for (const root of roots) {
-      ordered.push(root);
-      ordered.push(...(children.get(root.id) ?? []));
-    }
-    for (const task of tasks) {
-      if (!ordered.some((item) => item.id === task.id)) {
-        ordered.push(task);
-      }
-    }
-    return ordered;
+    return ganttQuery.data?.tasks ?? [];
   }, [ganttQuery.data?.tasks]);
 
   const chart = useMemo(() => {
@@ -245,7 +226,7 @@ export function ProjectGanttClient({
                 >
                   <Link
                     href={`/tasks/${task.id}`}
-                    className={`truncate hover:underline ${task.parentTaskId ? "ps-4 text-muted-foreground" : "font-medium"}`}
+                    className="truncate font-medium hover:underline"
                   >
                     {task.title}
                   </Link>

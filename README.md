@@ -28,7 +28,7 @@ This section explains the live business rules as implemented — useful when wal
 ### Organization model
 
 - **One organization** per deployment (no multi-tenant org switcher).
-- Hierarchy: **Company → Department → Project → Task → (optional) one-level Subtask**.
+- Hierarchy: **Company → Department → Project → Task**.
 - Roles:
   - **Admin** — org-wide configuration and overrides
   - **Department manager** — scoped to the department they manage
@@ -51,9 +51,8 @@ This section explains the live business rules as implemented — useful when wal
 
 - **Admins** create/edit/archive projects and assign project members (members must belong to the project’s department).
 - **Managers** manage members and tasks on department projects; they do **not** create/archive the project entity.
-- Tasks: status `todo | in_progress | blocked | completed`, priority `low | medium | high`, optional dates and estimated hours.
-- **One level of subtasks** only. Parent estimated hours = sum of subtasks.
-- **Finish-to-start dependencies**: a task/subtask cannot progress while incomplete dependencies block it (status can lock to `blocked`).
+- Tasks: status `todo | in_progress | blocked | completed`, priority `low | medium | high`, optional dates and estimated hours. Any task can be assigned; estimated hours are editable on every task.
+- **Finish-to-start dependencies**: a task cannot progress while incomplete dependencies block it (status can lock to `blocked`). Dependencies are same-project only.
 - Assignee **workload hint** (active task count + estimated hours) appears when assigning — not a separate workload page.
 - Task **activity history** records create/assign/status/update/dependency events.
 
@@ -61,7 +60,7 @@ This section explains the live business rules as implemented — useful when wal
 
 - One attendance record per employee per calendar day (`Asia/Riyadh`).
 - Employees **submit** entry/exit times and break minutes in one step; total hours = elapsed time minus break.
-- Optional **subtask allocations** on submit create work logs (assigned subtasks only); leftover hours are general time.
+- Optional **task allocations** on submit create work logs (assigned tasks only); leftover hours are general time.
 - After submit, status is **pending** until manager/admin approves or rejects (with reason).
 - **No self-approval.** Managers approve only current members of their department; admins can approve anyone except themselves.
 - Rejected records can be corrected by the employee and return to pending; admins can correct timestamps.

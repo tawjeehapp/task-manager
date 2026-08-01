@@ -41,7 +41,7 @@ export type EmployeeTaskMetricCounts = {
   dueToday: number;
 };
 
-/** Counts assigned root tasks and subtasks for employee dashboard metrics. */
+/** Counts assigned tasks for employee dashboard metrics. */
 export function countEmployeeTaskMetrics(
   rows: Array<{ status: string; due_date: string | null }>,
   today: string,

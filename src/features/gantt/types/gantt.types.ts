@@ -1,7 +1,6 @@
 export type GanttTask = {
   id: string;
   title: string;
-  parentTaskId: string | null;
   status: string;
   priority: string;
   assignedTo: string | null;

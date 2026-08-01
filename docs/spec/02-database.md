@@ -116,8 +116,7 @@ Project: Website Redesign
 
 Will delete:
 
-- 34 tasks
-- 120 subtasks
+- 154 tasks
 - 45 comments
 - 20 attachments
 
@@ -400,7 +399,6 @@ Fields:
 ```
 id
 project_id
-parent_task_id
 title
 description
 status
@@ -418,8 +416,8 @@ updated_at
 
 Notes:
 
-- parent_task_id supports one level of subtasks.
-- Tasks can exist without subtasks.
+- Flat hierarchy: Project → Task only (no `parent_task_id` / subtasks).
+- Any task can be assigned; `estimated_hours` is editable on every task.
 - Tasks belong to one project.
 - Priority: `low | medium | high`
 - `progress_percentage` exists (default 0). Writable via task update API; displayed on Gantt bars (Milestone 9).
@@ -561,7 +559,7 @@ Constraints / rules (Milestone 5+):
 - `UNIQUE (user_id, date)` — one record per employee per calendar day.
 - Employees **submit** a full day in one step (`clock_in` + `clock_out` + `break_minutes`); interactive punch in/out is not used.
 - `total_hours` computed on submit / correction: `(clock_out - clock_in) - break_minutes`, rounded to 2 decimals.
-- Submit requires explicit time allocations: each row is either a **task** (assigned subtask) or **general** work with a required reason. Sum of allocation hours must equal `total_hours` exactly. Task rows and general rows are stored as `work_logs` (`task_id` null for general; `description` holds the reason).
+- Submit requires explicit time allocations: each row is either a **task** (assigned task) or **general** work with a required reason. Sum of allocation hours must equal `total_hours` exactly. Task rows and general rows are stored as `work_logs` (`task_id` null for general; `description` holds the reason).
 - Calendar `date` uses organization timezone `Asia/Riyadh`.
 - Approve/reject only when `clock_out` is set; actors cannot act on their own records.
 - Department managers approve/reject department members only; they cannot edit timestamps/break.
@@ -917,7 +915,7 @@ Frequently filtered fields:
 Composite / partial indexes for list and scope queries (`20260726121500_list_query_indexes.sql`):
 
 - `department_memberships (department_id) WHERE is_current = true`
-- `tasks (project_id, parent_task_id)`
+- `tasks (project_id)`
 - `projects (department_id, status)`
 
 ---

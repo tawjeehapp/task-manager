@@ -12,7 +12,6 @@ import type { TaskStatus } from "@/features/tasks/types/task.types";
 import { isOverdueTask } from "@/features/dashboard/services/leadership-aggregates";
 import { orgLocalTimeOfDay } from "@/features/attendance/services/compute-hours";
 import { formatDate } from "@/lib/dates";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -38,8 +37,6 @@ function toDashboardItem(task: Task): DashboardTaskItem {
     status: task.status,
     dueDate: task.dueDate,
     priority: task.priority,
-    parentTaskId: task.parentTaskId,
-    parentTitle: task.parentTitle ?? null,
     projectName: task.project?.name ?? null,
     href: `/tasks/${task.id}`,
   };
@@ -169,22 +166,7 @@ export function EmployeeStatusTasksDialog({
                             className="inline-flex min-w-0 flex-wrap items-center gap-1.5 font-medium underline-offset-4 hover:underline"
                           >
                             <span className="truncate">{task.title}</span>
-                            {task.parentTaskId ? (
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 text-[10px]"
-                              >
-                                {t("subtaskBadge")}
-                              </Badge>
-                            ) : null}
                           </Link>
-                          {task.parentTaskId ? (
-                            <p className="text-muted-foreground mt-1 text-xs">
-                              {tTasks("boardUnderParent", {
-                                title: task.parentTitle ?? "—",
-                              })}
-                            </p>
-                          ) : null}
                         </TableCell>
                         <TableCell className="hidden sm:table-cell">
                           {task.projectName ?? "—"}

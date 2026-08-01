@@ -30,7 +30,7 @@ Testing infrastructure was introduced in Milestone 1 (Vitest + React Testing Lib
 |---|---|---|
 | **1** | Auth, users, permissions, organization rules | **Completed** — unit/schema/service tests present |
 | **2** | Departments, memberships, manager constraints, scoped password reset | **Completed** |
-| **3** | Projects, tasks, access rules | **Completed** — schemas, access asserts, create-task (incl. subtask depth) |
+| **3** | Projects, tasks, access rules | **Completed** — schemas, access asserts, create-task |
 | **4** | Dependencies, workload, activity | **Partially completed** — dependency service tests present; dedicated workload/activity tests thin |
 | **5** | Attendance calculations, approval, work-log authz | **Completed** |
 | **6+** | Leave, approvals, and later workflows | **Completed for M6–M9** — leave + communication + report + gantt/comment/attachment schema tests |
@@ -186,7 +186,6 @@ Introduce core work management functionality.
 - Projects: admin create/edit/dates/priority/archive; assign members
 - Department managers: view department projects; manage members and tasks (not project entity create/edit/archive)
 - Tasks: create, assign, dates, priority, estimated hours, status
-- One level of subtasks
 - Views: task list, task details, Kanban board
 
 ## Implementation status
@@ -195,11 +194,11 @@ Introduce core work management functionality.
 |---|---|---|
 | Projects CRUD-ish (archive via status) | **Completed** | No permanent project delete API |
 | Project members (dept members only) | **Completed** | |
-| Tasks + one-level subtasks | **Completed** | Parent estimated hours = sum of subtasks |
-| Task list / detail / project Kanban | **Completed** | Kanban at `/projects/[id]/board` |
+| Flat tasks (Project → Task) | **Completed** | Any task assignable; estimated hours editable on every task |
+| Task list / detail / project Kanban | **Completed** | Kanban at `/projects/[id]/board`; flat cards (no subtask expand) |
 | Permissions | **Completed** | `project.view` all roles (scoped); `project.manage` **admin only**; managers get `task.create` / `task.assign` |
 | RLS helpers | **Completed** | `can_access_project`, `can_access_task`, `is_project_member` |
-| Inline list editing, expandable subtasks, breadcrumbs, tabs | **Completed** | Product/UX additions beyond original M3 bullet list (see project rules) |
+| Inline list editing, breadcrumbs, tabs | **Completed** | Product/UX additions beyond original M3 bullet list (see project rules) |
 
 ## Differences / additions vs original plan
 
@@ -227,7 +226,7 @@ Improve planning and execution via dependencies, workload visibility, and activi
 
 ## Planned features
 
-- Finish-to-start task dependencies (task/subtask cannot start before dependencies complete)
+- Finish-to-start task dependencies (task cannot start before dependencies complete)
 - Employee workload view before assigning (active task count + estimated hours)
 - Task activity history (assignment, status, updates)
 
@@ -235,7 +234,7 @@ Improve planning and execution via dependencies, workload visibility, and activi
 
 | Area | Status | Notes |
 |---|---|---|
-| Finish-to-start dependencies | **Completed** | Same project; hierarchy rules (root↔root, sibling subtasks); cycle/self guards |
+| Finish-to-start dependencies | **Completed** | Same project; cycle/self guards |
 | Incomplete deps → `blocked` + status lock | **Completed** | Stronger than original “cannot start” wording; dependents unlock to `todo` when satisfied |
 | Workload at assignment time | **Completed** | `GET /api/users/[id]/workload` + assignee UI hint (not a standalone `/workload` page) |
 | Activity history | **Completed** | `activity_logs` + task detail panel; create/assign/status/update/dependency events |
@@ -244,7 +243,7 @@ Improve planning and execution via dependencies, workload visibility, and activi
 ## Differences / additions vs original plan
 
 - Workload is an **inline hint when choosing an assignee**, not a separate employee workload screen.
-- Dependency rules include explicit hierarchy constraints and auto-`blocked` locking (documented in API spec).
+- Dependency rules include same-project finish-to-start constraints and auto-`blocked` locking (documented in API spec).
 - Status set simplified post-ship via follow-up migration.
 
 ## Migrations

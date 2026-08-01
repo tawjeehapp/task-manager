@@ -406,7 +406,6 @@ function emptyResult(query: ListProjectsQuery): ProjectsListResult {
 type TaskStatRow = {
   id: string;
   project_id: string;
-  parent_task_id: string | null;
   status: string;
   due_date: string | null;
 };
@@ -481,7 +480,7 @@ async function loadProjectTaskStats(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("tasks")
-    .select("id, project_id, parent_task_id, status, due_date")
+    .select("id, project_id, status, due_date")
     .in("project_id", projectIds);
 
   if (error) {
@@ -492,28 +491,20 @@ async function loadProjectTaskStats(
     );
   }
 
-  const rootsByProject = new Map<string, TaskStatRow[]>();
   const allByProject = new Map<string, TaskStatRow[]>();
 
   for (const row of (data ?? []) as TaskStatRow[]) {
     const all = allByProject.get(row.project_id) ?? [];
     all.push(row);
     allByProject.set(row.project_id, all);
-
-    if (row.parent_task_id == null) {
-      const roots = rootsByProject.get(row.project_id) ?? [];
-      roots.push(row);
-      rootsByProject.set(row.project_id, roots);
-    }
   }
 
   for (const projectId of projectIds) {
-    const roots = rootsByProject.get(projectId) ?? [];
     const all = allByProject.get(projectId) ?? [];
-    const completedTaskCount = roots.filter(
+    const completedTaskCount = all.filter(
       (task) => task.status === "completed",
     ).length;
-    const taskCount = roots.length;
+    const taskCount = all.length;
     const progressPercent =
       taskCount === 0
         ? 0

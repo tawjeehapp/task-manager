@@ -16,7 +16,7 @@ The platform enables organizations to:
 
 - Organize employees into departments.
 - Manage department projects.
-- Break projects into tasks and subtasks.
+- Break projects into tasks.
 - Track employee attendance.
 - Record work performed on each task.
 - Balance workloads across employees.
@@ -127,8 +127,6 @@ Company
 → Project
 
 → Task
-
-→ Subtask
 
 ---
 
@@ -384,10 +382,6 @@ Company
   └── Project
 
     └── Task
-
-      └── Subtask
-
-The MVP supports a maximum of one level of subtasks.
 
 ---
 

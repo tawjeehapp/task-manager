@@ -28,8 +28,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 type TaskDependenciesPanelProps = {
   taskId: string;
   projectId: string;
-  /** null for root tasks; parent id for subtasks */
-  parentTaskId?: string | null;
   canManage: boolean;
 };
 
@@ -45,16 +43,12 @@ async function fetchDependencies(taskId: string): Promise<TaskDependency[]> {
   return payload.data!.items;
 }
 
-async function fetchDependencyCandidates(params: {
-  projectId: string;
-  parentTaskId: string | null;
-}): Promise<Task[]> {
+async function fetchDependencyCandidates(projectId: string): Promise<Task[]> {
   const searchParams = new URLSearchParams({
-    projectId: params.projectId,
+    projectId,
     pageSize: "100",
     sortBy: "title",
     sortDir: "asc",
-    parentTaskId: params.parentTaskId ?? "null",
   });
   const response = await fetch(`/api/tasks?${searchParams.toString()}`);
   const payload = (await response.json()) as {
@@ -70,7 +64,6 @@ async function fetchDependencyCandidates(params: {
 export function TaskDependenciesPanel({
   taskId,
   projectId,
-  parentTaskId = null,
   canManage,
 }: TaskDependenciesPanelProps) {
   const t = useTranslations("tasks");
@@ -78,7 +71,6 @@ export function TaskDependenciesPanel({
   const queryClient = useQueryClient();
   const [dependsOnTaskId, setDependsOnTaskId] = useState("");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const scopeParentId = parentTaskId ?? null;
 
   const depsQuery = useQuery({
     queryKey: ["tasks", taskId, "dependencies"],
@@ -86,15 +78,8 @@ export function TaskDependenciesPanel({
   });
 
   const candidatesQuery = useQuery({
-    queryKey: [
-      "tasks",
-      { projectId, parentTaskId: scopeParentId, forDependencies: true },
-    ],
-    queryFn: () =>
-      fetchDependencyCandidates({
-        projectId,
-        parentTaskId: scopeParentId,
-      }),
+    queryKey: ["tasks", { projectId, forDependencies: true }],
+    queryFn: () => fetchDependencyCandidates(projectId),
     enabled: canManage,
   });
 

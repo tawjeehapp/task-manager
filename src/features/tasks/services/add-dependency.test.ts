@@ -110,7 +110,6 @@ describe("addTaskDependency", () => {
           id: "task-1",
           project_id: "proj-1",
           status: "todo",
-          parent_task_id: null,
         },
         error: null,
       },
@@ -120,7 +119,6 @@ describe("addTaskDependency", () => {
           project_id: "proj-other",
           status: "todo",
           title: "Other",
-          parent_task_id: null,
         },
         error: null,
       },
@@ -155,24 +153,22 @@ describe("addTaskDependency", () => {
     ).rejects.toMatchObject({ code: "DEPENDENCY_PROJECT_MISMATCH" });
   });
 
-  it("rejects root depending on a subtask", async () => {
+  it("rejects cyclic dependency", async () => {
     const taskResults = [
       {
         data: {
           id: "task-1",
           project_id: "proj-1",
           status: "todo",
-          parent_task_id: null,
         },
         error: null,
       },
       {
         data: {
-          id: "sub-1",
+          id: "task-2",
           project_id: "proj-1",
           status: "todo",
-          title: "Sub",
-          parent_task_id: "parent-1",
+          title: "Other",
         },
         error: null,
       },
@@ -197,13 +193,20 @@ describe("addTaskDependency", () => {
               },
             );
           }
+          if (table === "task_dependencies") {
+            // task-2 already depends on task-1 → adding task-1 → task-2 cycles
+            return chain({
+              data: [{ depends_on_task_id: "task-1" }],
+              error: null,
+            });
+          }
           return chain({ data: [], error: null });
         },
       } as never;
     });
 
     await expect(
-      addTaskDependency(manager, "task-1", { dependsOnTaskId: "sub-1" }),
-    ).rejects.toMatchObject({ code: "DEPENDENCY_ROOT_ON_SUBTASK" });
+      addTaskDependency(manager, "task-1", { dependsOnTaskId: "task-2" }),
+    ).rejects.toMatchObject({ code: "DEPENDENCY_CYCLE" });
   });
 });

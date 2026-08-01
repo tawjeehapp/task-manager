@@ -6,7 +6,8 @@
  *   npm run seed:dev -- --reset
  *
  * Does not replace scripts/seed-admin.ts.
- * Never overwrites existing Auth passwords.
+ * Always resets seed Auth passwords to the employee number and clears
+ * must_change_password for easy QA login.
  * --reset deletes only fixed seed UUIDs listed in the catalog.
  */
 
@@ -19,6 +20,7 @@ import {
   calendarDateInOrgTimezone,
   computeTotalHours,
   countWorkingDays,
+  deleteAttendanceByUserDates,
   deleteByIds,
   ensureSeedUser,
   nextWorkingDayOnOrAfter,
@@ -303,15 +305,14 @@ async function main() {
     },
   ]);
 
-  // --- Tasks (parents first, then subtasks) ---
+  // --- Tasks ---
   const now = new Date().toISOString();
   await upsertRows(admin, "tasks", [
     {
       id: IDS.taskAttendanceUi,
       project_id: IDS.projectPlatform,
-      parent_task_id: null,
       title: "إعداد واجهة الحضور",
-      description: "مهمة أب لواجهة الحضور",
+      description: "واجهة الحضور",
       status: "in_progress",
       priority: "high",
       assigned_to: users["1003"],
@@ -325,7 +326,6 @@ async function main() {
     {
       id: IDS.taskReviewPerms,
       project_id: IDS.projectPlatform,
-      parent_task_id: null,
       title: "مراجعة الصلاحيات",
       description: "تعتمد على واجهة الحضور",
       status: "todo",
@@ -341,7 +341,6 @@ async function main() {
     {
       id: IDS.taskDocsDeploy,
       project_id: IDS.projectPlatform,
-      parent_task_id: null,
       title: "توثيق النشر",
       description: "محجوبة حتى اكتمال مراجعة الصلاحيات",
       status: "blocked",
@@ -357,7 +356,6 @@ async function main() {
     {
       id: IDS.taskPerf,
       project_id: IDS.projectPlatform,
-      parent_task_id: null,
       title: "تحسين الأداء",
       description: "عبء إضافي على سارة",
       status: "todo",
@@ -372,7 +370,6 @@ async function main() {
     {
       id: IDS.taskUnassigned,
       project_id: IDS.projectPlatform,
-      parent_task_id: null,
       title: "مهمة غير معيّنة",
       description: "بدون معيّن",
       status: "todo",
@@ -387,7 +384,6 @@ async function main() {
     {
       id: IDS.taskGatherReqs,
       project_id: IDS.projectCurriculum,
-      parent_task_id: null,
       title: "جمع المتطلبات",
       description: null,
       status: "completed",
@@ -403,7 +399,6 @@ async function main() {
     {
       id: IDS.taskDraft,
       project_id: IDS.projectCurriculum,
-      parent_task_id: null,
       title: "صياغة المسودة",
       description: "تعتمد على جمع المتطلبات",
       status: "in_progress",
@@ -419,7 +414,6 @@ async function main() {
     {
       id: IDS.taskLangReview,
       project_id: IDS.projectCurriculum,
-      parent_task_id: null,
       title: "مراجعة لغوية",
       description: null,
       status: "todo",
@@ -438,9 +432,8 @@ async function main() {
     {
       id: IDS.taskDesignScreen,
       project_id: IDS.projectPlatform,
-      parent_task_id: IDS.taskAttendanceUi,
       title: "تصميم الشاشة",
-      description: "مهمة فرعية مكتملة",
+      description: "تصميم شاشة الحضور",
       status: "completed",
       priority: "high",
       assigned_to: users["1003"],
@@ -454,7 +447,6 @@ async function main() {
     {
       id: IDS.taskWireApi,
       project_id: IDS.projectPlatform,
-      parent_task_id: IDS.taskAttendanceUi,
       title: "ربط الـ API",
       description: "تعتمد على تصميم الشاشة",
       status: "in_progress",
@@ -522,14 +514,10 @@ async function main() {
   const omarOut = orgLocalDateTimeIso(daysAgo3, 14, 30);
   const omarHours = computeTotalHours(omarIn, omarOut, 0); // 5.50
 
-  // Relative dates: replace seed attendance rows each run (IDs only).
-  await deleteByIds(
-    admin,
-    "attendance_records",
-    RESET_ID_SETS.attendance_records,
-  );
-
-  await upsertRows(admin, "attendance_records", [
+  // Relative dates: replace seed attendance each run.
+  // 1) Drop prior seed rows by fixed IDs (may sit on older calendar dates).
+  // 2) Drop any (user_id, date) conflicts so UNIQUE (user_id, date) is free.
+  const attendanceRows = [
     {
       id: IDS.attSaraOpen,
       user_id: users["1003"],
@@ -628,7 +616,18 @@ async function main() {
       rejection_reason: null,
       updated_at: now,
     },
-  ]);
+  ];
+
+  await deleteByIds(
+    admin,
+    "attendance_records",
+    RESET_ID_SETS.attendance_records,
+  );
+  await deleteAttendanceByUserDates(
+    admin,
+    attendanceRows.map((row) => ({ userId: row.user_id, date: row.date })),
+  );
+  await upsertRows(admin, "attendance_records", attendanceRows);
 
   // --- Work logs ---
   await upsertRows(admin, "work_logs", [
@@ -876,7 +875,6 @@ async function main() {
     {
       id: IDS.taskDocsDeploy,
       project_id: IDS.projectPlatform,
-      parent_task_id: null,
       title: "توثيق النشر",
       description: "محجوبة حتى اكتمال مراجعة الصلاحيات",
       status: "blocked",
@@ -1040,10 +1038,10 @@ async function main() {
 
   // --- Summary ---
   console.log("\n=== Development seed complete ===\n");
-  console.log("Credentials (password = employee number for newly created Auth users).");
   console.log(
-    "Existing Auth passwords are never overwritten. Existing must_change_password is left unchanged.\n",
+    "Credentials: password = employee number for all seed users (reset on every run).",
   );
+  console.log("must_change_password = false (no forced change on login).\n");
   console.log("Employee | Name                 | Role");
   console.log("---------|----------------------|--------------------");
   for (const u of SEED_USERS) {
@@ -1087,13 +1085,13 @@ async function main() {
     `  • No attendance today (empty state): عمر المراجع (1008), فاطمة المخططة (1002)`,
   );
   console.log(
-    `  • Uneven workload: سارة has multiple active/todo tasks + subtasks`,
+    `  • Uneven workload: سارة has multiple active/todo tasks`,
   );
   console.log(
     `  • Dependencies: ربط الـ API ← تصميم الشاشة; توثيق النشر blocked; صياغة المسودة ← جمع المتطلبات`,
   );
   console.log(
-    `  • Work logs on parent + subtask + multiple days (سارة / خالد / يوسف / ليلى)`,
+    `  • Work logs on tasks across multiple days (سارة / خالد / يوسف / ليلى)`,
   );
   console.log(
     `  • Leave pending (approve as أحمد 1001): سارة / خالد — /approvals → Leave`,

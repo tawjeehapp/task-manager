@@ -1,16 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  ChevronDown,
-  ChevronLeft,
-  Lock,
-  Search,
-  TriangleAlert,
-} from "lucide-react";
+import { Lock, Search, TriangleAlert } from "lucide-react";
 
 import type {
   ProjectMember,
@@ -47,24 +41,6 @@ type EmployeeProjectTasksTableProps = {
 
 const selectClassName =
   "border-input bg-background h-9 rounded-md border px-3 text-sm";
-
-async function fetchSubtasks(parentTaskId: string): Promise<Task[]> {
-  const params = new URLSearchParams({
-    parentTaskId,
-    pageSize: "100",
-    sortBy: "createdAt",
-    sortDir: "asc",
-  });
-  const response = await fetch(`/api/tasks?${params.toString()}`);
-  const payload = (await response.json()) as {
-    data?: { items: Task[] };
-    error?: { message: string };
-  };
-  if (!response.ok) {
-    throw new Error(payload.error?.message ?? "Failed");
-  }
-  return payload.data!.items;
-}
 
 async function patchTaskStatus(
   taskId: string,
@@ -176,30 +152,20 @@ function WaitingBadge({ task }: { task: Task }) {
 
 function EmployeeTaskRow({
   task,
-  depth,
   viewerId,
   onRequest,
 }: {
   task: Task;
-  depth: number;
   viewerId: string;
   onRequest: (task: Pick<Task, "id" | "title" | "dueDate">) => void;
 }) {
   const t = useTranslations("tasks");
   const tDashboard = useTranslations("dashboard");
   const queryClient = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
   const today = todayInOrgTimezone();
   const canEditStatus = task.assignedTo === viewerId;
   const statusLocked = (task.incompleteDependencyCount ?? 0) > 0;
-  const subtaskCount = task.subtaskCount ?? 0;
   const duration = formatTaskDateRange(task);
-
-  const subtasksQuery = useQuery({
-    queryKey: ["tasks", "subtasks", task.id],
-    queryFn: () => fetchSubtasks(task.id),
-    enabled: expanded && subtaskCount > 0,
-  });
 
   const statusMutation = useMutation({
     mutationFn: (status: TaskStatus) => patchTaskStatus(task.id, status),
@@ -217,139 +183,96 @@ function EmployeeTaskRow({
   }
 
   return (
-    <>
-      <TableRow className={cn(isLateTask(task, today) && "bg-destructive/5")}>
-        <TableCell>
-          <div
-            className={cn("flex min-w-0 flex-col gap-0.5", depth > 0 && "ps-6")}
-          >
-            <div className="flex min-w-0 items-center gap-1.5">
-              {subtaskCount > 0 ? (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-expanded={expanded}
-                  aria-label={t("subtaskCount", { count: subtaskCount })}
-                  onClick={() => setExpanded((value) => !value)}
-                >
-                  {expanded ? (
-                    <ChevronDown className="size-4" />
-                  ) : (
-                    <ChevronLeft className="size-4 rtl:rotate-180" />
-                  )}
-                </Button>
-              ) : null}
-              <Link
-                href={`/tasks/${task.id}`}
-                className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
-              >
-                {task.title}
-              </Link>
-              {subtaskCount > 0 ? (
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {t("subtaskCount", { count: subtaskCount })}
-                </span>
-              ) : null}
-            </div>
-            <WaitingBadge task={task} />
+    <TableRow className={cn(isLateTask(task, today) && "bg-destructive/5")}>
+      <TableCell>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link
+              href={`/tasks/${task.id}`}
+              className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
+            >
+              {task.title}
+            </Link>
           </div>
-        </TableCell>
-        <TableCell>
-          <div className="flex items-center gap-2">
-            {task.assignee ? (
-              <>
-                <span
-                  className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground"
-                  aria-hidden
-                >
-                  {task.assignee.fullName.trim().charAt(0) || "?"}
-                </span>
-                <span className="truncate text-sm">
-                  {task.assignee.fullName}
-                </span>
-              </>
-            ) : (
-              <span className="text-muted-foreground">{t("unassigned")}</span>
-            )}
-          </div>
-        </TableCell>
-        <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-          {duration ?? "—"}
-        </TableCell>
-        <TableCell>
-          <PriorityPill
-            priority={task.priority}
-            label={priorityLabel(task.priority)}
-          />
-        </TableCell>
-        <TableCell>
-          <div className="flex flex-wrap items-center gap-2">
-            {canEditStatus && !statusLocked && task.status !== "completed" ? (
-              <select
-                className={selectClassName}
-                value={task.status}
-                disabled={statusMutation.isPending}
-                aria-label={t("status")}
-                onChange={(event) =>
-                  statusMutation.mutate(event.target.value as TaskStatus)
-                }
+          <WaitingBadge task={task} />
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          {task.assignee ? (
+            <>
+              <span
+                className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground"
+                aria-hidden
               >
-                {TASK_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {statusLabel(status)}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <StatusBadge
-                status={task.status}
-                label={statusLabel(task.status)}
-              />
-            )}
-            {canEditStatus && task.status !== "completed" ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  onRequest({
-                    id: task.id,
-                    title: task.title,
-                    dueDate: task.dueDate,
-                  })
-                }
-              >
-                {tDashboard("requestButton")}
-              </Button>
-            ) : null}
-          </div>
-          {statusMutation.isError ? (
-            <p className="mt-1 text-xs text-destructive">
-              {(statusMutation.error as Error).message}
-            </p>
-          ) : null}
-        </TableCell>
-      </TableRow>
-      {expanded && subtasksQuery.isLoading ? (
-        <TableRow>
-          <TableCell colSpan={5}>
-            <LoadingState />
-          </TableCell>
-        </TableRow>
-      ) : null}
-      {expanded
-        ? (subtasksQuery.data ?? []).map((subtask) => (
-            <EmployeeTaskRow
-              key={subtask.id}
-              task={subtask}
-              depth={depth + 1}
-              viewerId={viewerId}
-              onRequest={onRequest}
+                {task.assignee.fullName.trim().charAt(0) || "?"}
+              </span>
+              <span className="truncate text-sm">
+                {task.assignee.fullName}
+              </span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">{t("unassigned")}</span>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+        {duration ?? "—"}
+      </TableCell>
+      <TableCell>
+        <PriorityPill
+          priority={task.priority}
+          label={priorityLabel(task.priority)}
+        />
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-wrap items-center gap-2">
+          {canEditStatus && !statusLocked && task.status !== "completed" ? (
+            <select
+              className={selectClassName}
+              value={task.status}
+              disabled={statusMutation.isPending}
+              aria-label={t("status")}
+              onChange={(event) =>
+                statusMutation.mutate(event.target.value as TaskStatus)
+              }
+            >
+              {TASK_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {statusLabel(status)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <StatusBadge
+              status={task.status}
+              label={statusLabel(task.status)}
             />
-          ))
-        : null}
-    </>
+          )}
+          {canEditStatus && task.status !== "completed" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                onRequest({
+                  id: task.id,
+                  title: task.title,
+                  dueDate: task.dueDate,
+                })
+              }
+            >
+              {tDashboard("requestButton")}
+            </Button>
+          ) : null}
+        </div>
+        {statusMutation.isError ? (
+          <p className="mt-1 text-xs text-destructive">
+            {(statusMutation.error as Error).message}
+          </p>
+        ) : null}
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -486,7 +409,6 @@ export function EmployeeProjectTasksTable({
                 <EmployeeTaskRow
                   key={task.id}
                   task={task}
-                  depth={0}
                   viewerId={viewerId}
                   onRequest={setRequestTask}
                 />

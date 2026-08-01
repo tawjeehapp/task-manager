@@ -10,6 +10,14 @@ vi.mock("@/features/departments/services/membership-helpers", () => ({
   getManagedDepartmentId: vi.fn(),
 }));
 
+vi.mock("@/features/tasks/services/activity-logs", () => ({
+  logTaskActivity: vi.fn(),
+}));
+
+vi.mock("@/features/notifications/services/notifications", () => ({
+  notifySafe: vi.fn(async () => undefined),
+}));
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getManagedDepartmentId } from "@/features/departments/services/membership-helpers";
 import { createTask } from "@/features/tasks/services/tasks";
@@ -55,56 +63,36 @@ function chain(result: QueryResult, extras?: Record<string, unknown>) {
   return api;
 }
 
-describe("createTask subtask depth", () => {
+const createdRow = {
+  id: "task-1",
+  project_id: "proj-1",
+  title: "مهمة",
+  description: null,
+  status: "todo",
+  priority: "medium",
+  assigned_to: null,
+  created_by: "mgr-1",
+  start_date: null,
+  due_date: null,
+  estimated_hours: 5,
+  progress_percentage: 0,
+  completed_at: null,
+  created_at: "2026-07-31T00:00:00.000Z",
+  updated_at: "2026-07-31T00:00:00.000Z",
+  project: { id: "proj-1", name: "Project", department_id: "dept-1" },
+  assignee: null,
+  created_by_user: {
+    id: "mgr-1",
+    full_name: "Manager",
+    employee_number: "1001",
+  },
+};
+
+describe("createTask", () => {
   beforeEach(() => {
     createAdminClientMock.mockReset();
     getManagedDepartmentIdMock.mockReset();
     getManagedDepartmentIdMock.mockResolvedValue("dept-1");
-  });
-
-  it("rejects creating a subtask under another subtask", async () => {
-    createAdminClientMock.mockImplementation(() => {
-      return {
-        from: (table: string) => {
-          if (table === "projects") {
-            return chain({
-              data: { id: "proj-1", department_id: "dept-1", status: "active" },
-              error: null,
-            });
-          }
-          if (table === "tasks") {
-            return chain({
-              data: {
-                id: "parent-sub",
-                project_id: "proj-1",
-                parent_task_id: "root-1",
-              },
-              error: null,
-            });
-          }
-          return chain({ data: null, error: null });
-        },
-      } as never;
-    });
-
-    await expect(
-      createTask(manager, {
-        projectId: "proj-1",
-        parentTaskId: "parent-sub",
-        title: "مستوى ثالث",
-        description: null,
-        status: "todo",
-        priority: "medium",
-        assignedTo: null,
-        startDate: null,
-        dueDate: null,
-        estimatedHours: null,
-        dependsOnTaskIds: [],
-      }),
-    ).rejects.toMatchObject({
-      code: "SUBTASK_DEPTH_EXCEEDED",
-      status: 409,
-    });
   });
 
   it("rejects creating tasks on archived projects", async () => {
@@ -129,7 +117,6 @@ describe("createTask subtask depth", () => {
     await expect(
       createTask(manager, {
         projectId: "proj-1",
-        parentTaskId: null,
         title: "مهمة",
         description: null,
         status: "todo",
@@ -144,5 +131,61 @@ describe("createTask subtask depth", () => {
       code: "PROJECT_ARCHIVED",
       status: 409,
     });
+  });
+
+  it("persists estimatedHours on any task create", async () => {
+    let insertPayload: Record<string, unknown> | undefined;
+    let projectCalls = 0;
+
+    createAdminClientMock.mockImplementation(() => {
+      return {
+        from: (table: string) => {
+          if (table === "projects") {
+            projectCalls += 1;
+            return chain({
+              data: {
+                id: "proj-1",
+                department_id: "dept-1",
+                status: "active",
+              },
+              error: null,
+            });
+          }
+          if (table === "tasks") {
+            const api = chain({ data: createdRow, error: null });
+            api.insert = (payload: Record<string, unknown>) => {
+              insertPayload = payload;
+              return api;
+            };
+            return api;
+          }
+          if (table === "task_dependencies") {
+            return chain({ data: [], error: null });
+          }
+          return chain({ data: null, error: null });
+        },
+      } as never;
+    });
+
+    const result = await createTask(manager, {
+      projectId: "proj-1",
+      title: "مهمة",
+      description: null,
+      status: "todo",
+      priority: "medium",
+      assignedTo: null,
+      startDate: null,
+      dueDate: null,
+      estimatedHours: 5,
+      dependsOnTaskIds: [],
+    });
+
+    expect(projectCalls).toBeGreaterThanOrEqual(1);
+    expect(insertPayload).toMatchObject({
+      project_id: "proj-1",
+      title: "مهمة",
+      estimated_hours: 5,
+    });
+    expect(result.estimatedHours).toBe(5);
   });
 });

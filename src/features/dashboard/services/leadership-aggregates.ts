@@ -18,7 +18,6 @@ export type AggregateTaskRow = {
   dueDate: string | null;
   estimatedHours: number | null;
   progressPercentage: number;
-  parentTaskId: string | null;
 };
 
 export type AggregateAttendanceRow = {
@@ -138,24 +137,16 @@ export function aggregateLeadershipFromRows(input: {
     attendance,
   } = input;
 
-  const rootTasks = tasks.filter((t) => t.parentTaskId == null);
   const tasksByProject = new Map<string, AggregateTaskRow[]>();
-  const rootByProject = new Map<string, AggregateTaskRow[]>();
   for (const task of tasks) {
     const list = tasksByProject.get(task.projectId) ?? [];
     list.push(task);
     tasksByProject.set(task.projectId, list);
   }
-  for (const task of rootTasks) {
-    const list = rootByProject.get(task.projectId) ?? [];
-    list.push(task);
-    rootByProject.set(task.projectId, list);
-  }
 
   const projectRows: LeadershipProjectRow[] = projects.map((project) => {
     const all = tasksByProject.get(project.id) ?? [];
-    const roots = rootByProject.get(project.id) ?? [];
-    const progressPercent = computeProjectProgress(roots);
+    const progressPercent = computeProjectProgress(all);
     const overdueCount = all.filter((t) => isOverdueTask(t, today)).length;
     const inProgressCount = all.filter((t) => t.status === "in_progress").length;
     return {
@@ -166,7 +157,7 @@ export function aggregateLeadershipFromRows(input: {
       progressPercent,
       inProgressCount,
       overdueCount,
-      estimatedHoursSum: computeProjectEstimatedHours(roots),
+      estimatedHoursSum: computeProjectEstimatedHours(all),
       nearestDueDate: nearestOpenDueDate(all),
       health: computeProjectHealth(all, today),
       href: `/projects/${project.id}`,

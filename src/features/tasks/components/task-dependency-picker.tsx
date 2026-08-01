@@ -7,17 +7,12 @@ import type { Task } from "@/features/tasks/types/task.types";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-async function fetchDependencyCandidates(params: {
-  projectId: string;
-  /** null = root tasks only; string = sibling subtasks under that parent */
-  parentTaskId: string | null;
-}): Promise<Task[]> {
+async function fetchDependencyCandidates(projectId: string): Promise<Task[]> {
   const searchParams = new URLSearchParams({
-    projectId: params.projectId,
+    projectId,
     pageSize: "100",
     sortBy: "title",
     sortDir: "asc",
-    parentTaskId: params.parentTaskId ?? "null",
   });
   const response = await fetch(`/api/tasks?${searchParams.toString()}`);
   const payload = (await response.json()) as {
@@ -32,12 +27,6 @@ async function fetchDependencyCandidates(params: {
 
 type TaskDependencyPickerProps = {
   projectId: string | null | undefined;
-  /**
-   * Scope of the task being created/edited:
-   * - `null` / omitted → root task (only other roots are candidates)
-   * - parent id → subtask (only siblings under that parent)
-   */
-  parentTaskId?: string | null;
   value: string[];
   onChange: (ids: string[]) => void;
   excludeTaskIds?: string[];
@@ -47,7 +36,6 @@ type TaskDependencyPickerProps = {
 
 export function TaskDependencyPicker({
   projectId,
-  parentTaskId = null,
   value,
   onChange,
   excludeTaskIds = [],
@@ -56,18 +44,10 @@ export function TaskDependencyPicker({
 }: TaskDependencyPickerProps) {
   const t = useTranslations("tasks");
   const exclude = new Set(excludeTaskIds);
-  const scopeParentId = parentTaskId ?? null;
 
   const tasksQuery = useQuery({
-    queryKey: [
-      "tasks",
-      { projectId, parentTaskId: scopeParentId, forDependencyPicker: true },
-    ],
-    queryFn: () =>
-      fetchDependencyCandidates({
-        projectId: projectId!,
-        parentTaskId: scopeParentId,
-      }),
+    queryKey: ["tasks", { projectId, forDependencyPicker: true }],
+    queryFn: () => fetchDependencyCandidates(projectId!),
     enabled: Boolean(projectId),
   });
 
@@ -93,9 +73,7 @@ export function TaskDependencyPicker({
     <div className={cn("space-y-2", className)}>
       <Label>{t("dependencyDependsOn")}</Label>
       <p className="text-muted-foreground text-xs">
-        {scopeParentId
-          ? t("dependencyPickerHintSubtask")
-          : t("dependencyPickerHintRoot")}
+        {t("dependencyPickerHint")}
       </p>
       {tasksQuery.isLoading ? (
         <p className="text-muted-foreground text-xs">{t("workloadLoading")}</p>
