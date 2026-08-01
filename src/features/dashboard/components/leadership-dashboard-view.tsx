@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FolderKanban, Info } from "lucide-react";
 
 import type {
   AdminDashboard,
   ManagerDashboard,
 } from "@/features/dashboard/types/dashboard.types";
-import { LeadershipAttentionUrgentButton } from "@/features/dashboard/components/leadership-attention-urgent-button";
+import {
+  LeadershipAttentionLateProjectsButton,
+  LeadershipAttentionOverdueTasksButton,
+} from "@/features/dashboard/components/leadership-attention-urgent-button";
 import { LeadershipMetricsCardsClient } from "@/features/dashboard/components/leadership-metrics-cards-client";
 import { LeadershipTablesClient } from "@/features/dashboard/components/leadership-tables-client";
 import { PageHeader } from "@/components/shared/page-header";
@@ -31,9 +34,14 @@ export async function LeadershipDashboardView({
   const t = await getTranslations("dashboard");
   const isAdmin = data.role === "admin";
   const { metrics, attention, team, projects } = data;
+  const departments = isAdmin ? data.departments : undefined;
 
   const overdueNames = attention.overduePeople
     .map((p) => p.fullName)
+    .slice(0, 5)
+    .join("، ");
+  const lateProjectNames = attention.lateProjects
+    .map((p) => p.name)
     .slice(0, 5)
     .join("، ");
   const missingNames = attention.missingAttendanceToday
@@ -47,6 +55,11 @@ export async function LeadershipDashboardView({
           count:
             attention.pendingApprovals.extension +
             attention.pendingApprovals.excusal,
+        })
+      : null,
+    attention.pendingApprovals.projectExtension > 0
+      ? t("attentionPendingProjectExtensions", {
+          count: attention.pendingApprovals.projectExtension,
         })
       : null,
     attention.pendingApprovals.attendance > 0
@@ -80,7 +93,7 @@ export async function LeadershipDashboardView({
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
               <div className="text-sm">
                 <p className="font-medium text-destructive">
-                  {t("attentionUrgent")}
+                  {t("attentionUrgentTasks")}
                 </p>
                 <p className="text-muted-foreground">
                   {metrics.overdueCount === 0
@@ -93,7 +106,32 @@ export async function LeadershipDashboardView({
               </div>
             </div>
             {metrics.overdueCount > 0 ? (
-              <LeadershipAttentionUrgentButton today={data.today} />
+              <LeadershipAttentionOverdueTasksButton today={data.today} />
+            ) : null}
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex gap-2">
+              <FolderKanban className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <div className="text-sm">
+                <p className="font-medium text-destructive">
+                  {t("attentionUrgentProjects")}
+                </p>
+                <p className="text-muted-foreground">
+                  {attention.lateProjects.length === 0
+                    ? t("attentionNoLateProjects")
+                    : t("attentionLateProjectsDetail", {
+                        count: attention.lateProjects.length,
+                        names: lateProjectNames || "—",
+                      })}
+                </p>
+              </div>
+            </div>
+            {attention.lateProjects.length > 0 ? (
+              <LeadershipAttentionLateProjectsButton
+                today={data.today}
+                projects={attention.lateProjects}
+              />
             ) : null}
           </div>
 
@@ -145,6 +183,8 @@ export async function LeadershipDashboardView({
         today={data.today}
         team={team}
         projects={projects}
+        departments={departments}
+        preferManagersInTeam={isAdmin}
         canApproveAttendance={canApproveAttendance}
       />
     </div>

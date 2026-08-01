@@ -19,6 +19,7 @@ import {
   type EmployeeDashboard,
   type EmployeeDashboardMetrics,
   type LeadershipDashboardBase,
+  type LeadershipDepartmentRow,
   type ManagerDashboard,
   type PendingApprovalsBreakdown,
 } from "@/features/dashboard/types/dashboard.types";
@@ -29,7 +30,11 @@ import {
   sortOpenListTasks,
   sortTodayListTasks,
 } from "@/features/dashboard/lib/actionable-tasks";
-import { aggregateLeadershipFromRows } from "@/features/dashboard/services/leadership-aggregates";
+import {
+  aggregateDepartmentRows,
+  aggregateLeadershipFromRows,
+  type AggregateDepartmentMeta,
+} from "@/features/dashboard/services/leadership-aggregates";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import {
@@ -41,7 +46,14 @@ import { SYSTEM_ADMIN_EMPLOYEE_NUMBER } from "@/lib/table/constants";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function emptyPending(): PendingApprovalsBreakdown {
-  return { leave: 0, extension: 0, excusal: 0, attendance: 0, total: 0 };
+  return {
+    leave: 0,
+    extension: 0,
+    excusal: 0,
+    attendance: 0,
+    projectExtension: 0,
+    total: 0,
+  };
 }
 
 function emptyLeadershipBase(today: string): LeadershipDashboardBase {
@@ -67,6 +79,7 @@ function emptyLeadershipBase(today: string): LeadershipDashboardBase {
     },
     attention: {
       overduePeople: [],
+      lateProjects: [],
       pendingApprovals: emptyPending(),
       missingAttendanceToday: [],
     },
@@ -170,8 +183,29 @@ async function countPendingApprovals(
   }
   result.attendance = attendance.count ?? 0;
 
+  // Project due-date extensions are admin-approved (org-wide when userIds is null).
+  if (userIds === null) {
+    const projectExt = await admin
+      .from("project_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending")
+      .eq("type", "extension");
+    if (projectExt.error) {
+      throw new ApiError(
+        "تعذر جلب الاعتمادات المعلقة.",
+        500,
+        "DASHBOARD_PENDING_FAILED",
+      );
+    }
+    result.projectExtension = projectExt.count ?? 0;
+  }
+
   result.total =
-    result.leave + result.extension + result.excusal + result.attendance;
+    result.leave +
+    result.extension +
+    result.excusal +
+    result.attendance +
+    result.projectExtension;
   return result;
 }
 
@@ -180,8 +214,11 @@ async function buildLeadershipDashboard(input: {
   projectIds: string[];
   today: string;
   pendingUserIds: string[] | null;
-}): Promise<LeadershipDashboardBase> {
-  const { userIds, projectIds, today, pendingUserIds } = input;
+  departments?: AggregateDepartmentMeta[];
+}): Promise<
+  LeadershipDashboardBase & { departments?: LeadershipDepartmentRow[] }
+> {
+  const { userIds, projectIds, today, pendingUserIds, departments } = input;
   const { start: weekStart, end: weekEnd } = currentWeekBounds(today);
 
   if (userIds.length === 0 && projectIds.length === 0) {
@@ -190,6 +227,17 @@ async function buildLeadershipDashboard(input: {
     return {
       ...base,
       attention: { ...base.attention, pendingApprovals: pending },
+      ...(departments
+        ? {
+            departments: aggregateDepartmentRows({
+              today,
+              departments,
+              users: [],
+              projects: [],
+              tasks: [],
+            }),
+          }
+        : {}),
     };
   }
 
@@ -200,7 +248,7 @@ async function buildLeadershipDashboard(input: {
       ? Promise.resolve({ data: [] as unknown[], error: null })
       : admin
           .from("users")
-          .select("id, full_name, employee_number, avatar_url, weekly_capacity_hours")
+          .select("id, full_name, employee_number, avatar_url, role, weekly_capacity_hours")
           .in("id", userIds)
           .eq("is_active", true)
           .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER);
@@ -211,7 +259,7 @@ async function buildLeadershipDashboard(input: {
       : admin
           .from("projects")
           .select(
-            "id, name, status, department:departments!department_id(id, name)",
+            "id, name, status, end_date, department:departments!department_id(id, name)",
           )
           .in("id", projectIds);
 
@@ -316,6 +364,7 @@ async function buildLeadershipDashboard(input: {
       full_name: string;
       employee_number: string;
       avatar_url: string | null;
+      role: "admin" | "department_manager" | "employee";
       weekly_capacity_hours: number | string | null;
     };
     const dept = departmentByUser.get(r.id);
@@ -331,6 +380,7 @@ async function buildLeadershipDashboard(input: {
       fullName: r.full_name,
       employeeNumber: r.employee_number,
       avatarUrl: r.avatar_url,
+      role: r.role,
       departmentId: dept?.departmentId ?? null,
       departmentName: dept?.departmentName || null,
       weeklyCapacityHours:
@@ -343,6 +393,7 @@ async function buildLeadershipDashboard(input: {
       id: string;
       name: string;
       status: string;
+      end_date: string | null;
       department:
         | { id: string; name: string }
         | { id: string; name: string }[]
@@ -355,6 +406,7 @@ async function buildLeadershipDashboard(input: {
       id: r.id,
       name: r.name,
       status: r.status,
+      endDate: r.end_date ?? null,
       departmentId: department?.id ?? null,
       departmentName: department?.name ?? null,
     };
@@ -432,11 +484,23 @@ async function buildLeadershipDashboard(input: {
     metrics: aggregated.metrics,
     attention: {
       overduePeople: aggregated.overduePeople,
+      lateProjects: aggregated.lateProjects,
       pendingApprovals: pending,
       missingAttendanceToday: aggregated.missingAttendanceToday,
     },
     team: aggregated.team,
     projects: aggregated.projects,
+    ...(departments
+      ? {
+          departments: aggregateDepartmentRows({
+            today,
+            departments,
+            users,
+            projects,
+            tasks,
+          }),
+        }
+      : {}),
   };
 }
 
@@ -886,16 +950,20 @@ async function getAdminDashboard(): Promise<AdminDashboard> {
   const today = calendarDateInOrgTimezone(new Date(), ATTENDANCE_TIMEZONE);
   const admin = createAdminClient();
 
-  const [usersRes, projectsRes] = await Promise.all([
+  const [usersRes, projectsRes, departmentsRes] = await Promise.all([
     admin
       .from("users")
       .select("id")
       .eq("is_active", true)
       .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER),
     admin.from("projects").select("id").neq("status", "archived"),
+    admin
+      .from("departments")
+      .select("id, name, manager:users!manager_id(full_name)")
+      .eq("status", "active"),
   ]);
 
-  if (usersRes.error || projectsRes.error) {
+  if (usersRes.error || projectsRes.error || departmentsRes.error) {
     throw new ApiError(
       "تعذر جلب لوحة التحكم.",
       500,
@@ -905,16 +973,37 @@ async function getAdminDashboard(): Promise<AdminDashboard> {
 
   const userIds = (usersRes.data ?? []).map((u) => u.id as string);
   const projectIds = (projectsRes.data ?? []).map((p) => p.id as string);
+  const departments: AggregateDepartmentMeta[] = (departmentsRes.data ?? []).map(
+    (row) => {
+      const r = row as {
+        id: string;
+        name: string;
+        manager:
+          | { full_name: string }
+          | { full_name: string }[]
+          | null;
+      };
+      const manager = Array.isArray(r.manager) ? r.manager[0] : r.manager;
+      return {
+        id: r.id,
+        name: r.name,
+        managerName: manager?.full_name ?? null,
+      };
+    },
+  );
+
   const leadership = await buildLeadershipDashboard({
     userIds,
     projectIds,
     today,
     pendingUserIds: null,
+    departments,
   });
 
   return {
     role: "admin",
     ...leadership,
+    departments: leadership.departments ?? [],
   };
 }
 

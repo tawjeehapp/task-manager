@@ -18,11 +18,13 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata() {
   const t = await getTranslations("tasks");
   const user = await getCurrentUser();
-  return {
-    title: isPersonalWorkspaceRole(user?.role)
-      ? t("myTasksTitle")
-      : t("title"),
-  };
+  if (isPersonalWorkspaceRole(user?.role)) {
+    return { title: t("myTasksTitle") };
+  }
+  if (user?.role === "admin") {
+    return { title: t("orgTasksTitle") };
+  }
+  return { title: t("title") };
 }
 
 export default async function TasksPage() {

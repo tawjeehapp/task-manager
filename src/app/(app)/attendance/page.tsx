@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 
-import { AttendancePageClient } from "@/features/attendance/components/attendance-page-client";
 import { ManagerAttendanceLeavePageClient } from "@/features/attendance/components/manager-attendance-leave-page-client";
 import { PersonalAttendanceLeavePageClient } from "@/features/attendance/components/personal-attendance-leave-page-client";
 import { LoadingState } from "@/components/shared/loading-state";
@@ -39,45 +38,25 @@ export default async function AttendancePage() {
     );
   }
 
-  if (user.role === "department_manager") {
-    const canApproveAttendance = hasPermission(
-      user.role,
-      PERMISSIONS.ATTENDANCE_APPROVE,
-      permissions,
-    );
-    const canApproveLeave = hasPermission(
-      user.role,
-      PERMISSIONS.LEAVE_APPROVE,
-      permissions,
-    );
-    return (
-      <Suspense fallback={<LoadingState />}>
-        <ManagerAttendanceLeavePageClient
-          viewerId={user.id}
-          canApproveAttendance={canApproveAttendance}
-          canApproveLeave={canApproveLeave}
-        />
-      </Suspense>
-    );
-  }
-
-  const canApprove = hasPermission(
+  const canApproveAttendance = hasPermission(
     user.role,
     PERMISSIONS.ATTENDANCE_APPROVE,
     permissions,
   );
-  const canCreateWorkLog = hasPermission(
+  const canApproveLeave = hasPermission(
     user.role,
-    PERMISSIONS.WORK_LOG_CREATE,
+    PERMISSIONS.LEAVE_APPROVE,
     permissions,
   );
 
   return (
-    <AttendancePageClient
-      viewerId={user.id}
-      viewerRole={user.role}
-      canApprove={canApprove}
-      canCreateWorkLog={canCreateWorkLog}
-    />
+    <Suspense fallback={<LoadingState />}>
+      <ManagerAttendanceLeavePageClient
+        viewerId={user.id}
+        viewerRole={user.role}
+        canApproveAttendance={canApproveAttendance}
+        canApproveLeave={canApproveLeave}
+      />
+    </Suspense>
   );
 }

@@ -283,6 +283,7 @@ export function EmployeeWeekHoursDialog({
 export type MetricTasksQuery = {
   assignee?: string;
   projectId?: string;
+  departmentId?: string;
   status?: TaskStatus;
   dueFrom?: string;
   dueTo?: string;
@@ -383,6 +384,7 @@ async function fetchMetricTasks(
   });
   if (query.assignee) params.set("assignee", query.assignee);
   if (query.projectId) params.set("projectId", query.projectId);
+  if (query.departmentId) params.set("departmentId", query.departmentId);
   if (query.status) params.set("status", query.status);
   if (query.dueFrom) params.set("dueFrom", query.dueFrom);
   if (query.dueTo) params.set("dueTo", query.dueTo);

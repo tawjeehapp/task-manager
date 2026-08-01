@@ -6,6 +6,7 @@ export type PendingApprovalsBreakdown = {
   extension: number;
   excusal: number;
   attendance: number;
+  projectExtension: number;
   total: number;
 };
 
@@ -120,8 +121,16 @@ export type LeadershipPersonRef = {
   fullName: string;
 };
 
+export type LeadershipLateProject = {
+  id: string;
+  name: string;
+  endDate: string;
+  href: string;
+};
+
 export type LeadershipAttention = {
   overduePeople: LeadershipOverduePerson[];
+  lateProjects: LeadershipLateProject[];
   pendingApprovals: PendingApprovalsBreakdown;
   missingAttendanceToday: LeadershipPersonRef[];
 };
@@ -131,6 +140,7 @@ export type LeadershipTeamRow = {
   fullName: string;
   avatarUrl: string | null;
   employeeNumber: string;
+  role: "admin" | "department_manager" | "employee";
   departmentId: string | null;
   departmentName: string | null;
   openTaskCount: number;
@@ -168,6 +178,24 @@ export type LeadershipProjectRow = {
   href: string;
 };
 
+export type LeadershipDepartmentRow = {
+  id: string;
+  name: string;
+  managerName: string | null;
+  memberCount: number;
+  projectCount: number;
+  progressPercent: number;
+  todoCount: number;
+  inProgressCount: number;
+  blockedCount: number;
+  completedCount: number;
+  overdueCount: number;
+  dueTodayCount: number;
+  nearestDueDate: string | null;
+  health: LeadershipProjectHealth;
+  href: string;
+};
+
 export type LeadershipDashboardBase = {
   today: string;
   metrics: LeadershipMetrics;
@@ -178,6 +206,7 @@ export type LeadershipDashboardBase = {
 
 export type AdminDashboard = LeadershipDashboardBase & {
   role: "admin";
+  departments: LeadershipDepartmentRow[];
 };
 
 export type ManagerDashboard = LeadershipDashboardBase & {

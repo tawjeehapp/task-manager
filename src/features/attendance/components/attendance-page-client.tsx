@@ -51,6 +51,8 @@ type AttendancePageClientProps = {
   viewerRole: Role;
   canApprove: boolean;
   canCreateWorkLog: boolean;
+  /** When "extras", only records + work logs (for embedding in the manager hub). */
+  variant?: "full" | "extras";
 };
 
 type AttendanceListResult = {
@@ -105,12 +107,14 @@ export function AttendancePageClient({
   viewerRole,
   canApprove,
   canCreateWorkLog,
+  variant = "full",
 }: AttendancePageClientProps) {
   const t = useTranslations("attendance");
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
+  const isExtras = variant === "extras";
 
-  const [tab, setTab] = useState("today");
+  const [tab, setTab] = useState(isExtras ? "records" : "today");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -329,6 +333,13 @@ export function AttendancePageClient({
   });
 
   const tabItems = useMemo(() => {
+    if (isExtras) {
+      const items = [{ id: "records", label: t("tabRecords") }];
+      if (canCreateWorkLog) {
+        items.push({ id: "workLogs", label: t("tabWorkLogs") });
+      }
+      return items;
+    }
     const items = [
       { id: "today", label: t("tabToday") },
       { id: "records", label: t("tabRecords") },
@@ -338,7 +349,7 @@ export function AttendancePageClient({
     }
     items.push({ id: "workLogs", label: t("tabWorkLogs") });
     return items;
-  }, [canApprove, t]);
+  }, [canApprove, canCreateWorkLog, isExtras, t]);
 
   const today = todayQuery.data;
   const hasToday = Boolean(today);
@@ -352,7 +363,9 @@ export function AttendancePageClient({
 
   return (
     <div className="space-y-4">
-      <PageHeader title={t("title")} description={t("description")} />
+      {!isExtras ? (
+        <PageHeader title={t("title")} description={t("description")} />
+      ) : null}
 
       {successMessage ? (
         <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
@@ -366,6 +379,7 @@ export function AttendancePageClient({
       ) : null}
 
       <Tabs items={tabItems} value={tab} onValueChange={setTab}>
+        {!isExtras ? (
         <TabPanel when="today" active={tab}>
           {todayQuery.isLoading ? <LoadingState /> : null}
           {todayQuery.isError ? (
@@ -426,6 +440,7 @@ export function AttendancePageClient({
             </div>
           ) : null}
         </TabPanel>
+        ) : null}
 
         <TabPanel when="records" active={tab}>
           <div className="mb-4 flex flex-wrap gap-3">
@@ -572,7 +587,7 @@ export function AttendancePageClient({
           ) : null}
         </TabPanel>
 
-        {canApprove ? (
+        {!isExtras && canApprove ? (
           <TabPanel when="approvals" active={tab}>
             {approvalsQuery.isLoading ? <LoadingState /> : null}
             {approvalsQuery.isError ? (

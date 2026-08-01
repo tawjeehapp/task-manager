@@ -46,6 +46,8 @@ import {
 
 type ApprovalsPageClientProps = {
   viewerId: string;
+  /** When true (admin), default to department-manager requests with a show-all toggle. */
+  preferManagersFilter?: boolean;
   canApproveLeave: boolean;
   canApproveEmployeeRequest: boolean;
   canApproveAttendance: boolean;
@@ -79,6 +81,7 @@ async function readApi<T>(response: Response): Promise<T> {
 
 export function ApprovalsPageClient({
   viewerId,
+  preferManagersFilter = false,
   canApproveLeave,
   canApproveEmployeeRequest,
   canApproveAttendance,
@@ -91,6 +94,7 @@ export function ApprovalsPageClient({
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showAllEmployees, setShowAllEmployees] = useState(false);
   const [reviewRecord, setReviewRecord] = useState<AttendanceRecord | null>(
     null,
   );
@@ -101,8 +105,13 @@ export function ApprovalsPageClient({
   );
   const [excusalAssigneeId, setExcusalAssigneeId] = useState("");
 
+  const managersOnly = preferManagersFilter && !showAllEmployees;
+  const requesterRoleParam = managersOnly
+    ? "department_manager"
+    : undefined;
+
   const leaveQuery = useQuery({
-    queryKey: ["approvals-leave"],
+    queryKey: ["approvals-leave", requesterRoleParam ?? "all"],
     enabled: canApproveLeave,
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -110,13 +119,16 @@ export function ApprovalsPageClient({
         pageSize: "50",
         status: "pending",
       });
+      if (requesterRoleParam) {
+        params.set("requesterRole", requesterRoleParam);
+      }
       const response = await fetch(`/api/leave-requests?${params}`);
       return readApi<ListResult<LeaveRequest>>(response);
     },
   });
 
   const attendanceQuery = useQuery({
-    queryKey: ["approvals-attendance"],
+    queryKey: ["approvals-attendance", requesterRoleParam ?? "all"],
     enabled: canApproveAttendance,
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -126,13 +138,16 @@ export function ApprovalsPageClient({
         sortBy: "date",
         sortDir: "desc",
       });
+      if (requesterRoleParam) {
+        params.set("requesterRole", requesterRoleParam);
+      }
       const response = await fetch(`/api/attendance?${params}`);
       return readApi<ListResult<AttendanceRecord>>(response);
     },
   });
 
   const extensionsQuery = useQuery({
-    queryKey: ["approvals-extensions"],
+    queryKey: ["approvals-extensions", requesterRoleParam ?? "all"],
     enabled: canApproveEmployeeRequest,
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -141,13 +156,16 @@ export function ApprovalsPageClient({
         status: "pending",
         type: "extension",
       });
+      if (requesterRoleParam) {
+        params.set("requesterRole", requesterRoleParam);
+      }
       const response = await fetch(`/api/employee-requests?${params}`);
       return readApi<ListResult<EmployeeRequest>>(response);
     },
   });
 
   const excusalsQuery = useQuery({
-    queryKey: ["approvals-excusals"],
+    queryKey: ["approvals-excusals", requesterRoleParam ?? "all"],
     enabled: canApproveEmployeeRequest,
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -156,6 +174,9 @@ export function ApprovalsPageClient({
         status: "pending",
         type: "excusal",
       });
+      if (requesterRoleParam) {
+        params.set("requesterRole", requesterRoleParam);
+      }
       const response = await fetch(`/api/employee-requests?${params}`);
       return readApi<ListResult<EmployeeRequest>>(response);
     },
@@ -348,6 +369,18 @@ export function ApprovalsPageClient({
           totalPending === 0 ? t("descriptionEmpty") : t("description")
         }
       />
+
+      {preferManagersFilter ? (
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            className="size-4 rounded border"
+            checked={showAllEmployees}
+            onChange={(e) => setShowAllEmployees(e.target.checked)}
+          />
+          {t("showAllEmployees")}
+        </label>
+      ) : null}
 
       {successMessage ? (
         <Alert>

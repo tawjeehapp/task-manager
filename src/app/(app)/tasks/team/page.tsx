@@ -24,7 +24,11 @@ export default async function TeamTasksPage() {
     redirect("/login");
   }
 
-  if (user.role !== "department_manager" && user.role !== "admin") {
+  if (user.role === "admin") {
+    redirect("/tasks");
+  }
+
+  if (user.role !== "department_manager") {
     redirect("/tasks");
   }
 
@@ -33,9 +37,11 @@ export default async function TeamTasksPage() {
     redirect("/");
   }
 
-  const canCreate =
-    user.role === "admin" ||
-    hasPermission(user.role, PERMISSIONS.TASK_CREATE, permissions);
+  const canCreate = hasPermission(
+    user.role,
+    PERMISSIONS.TASK_CREATE,
+    permissions,
+  );
 
   const defaultQuery = listTasksQuerySchema.parse({});
   const initialTasks = await listTasksForViewer(user, defaultQuery);

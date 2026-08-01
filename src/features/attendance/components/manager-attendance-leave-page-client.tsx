@@ -13,6 +13,7 @@ import { TeamWeekSheet } from "@/features/attendance/components/team-week-sheet"
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import { EmployeeLeavePageClient } from "@/features/leave/components/employee-leave-page-client";
 import type { LeaveRequest } from "@/features/leave/types/leave.types";
+import type { Role } from "@/lib/permissions";
 import { formatDate } from "@/lib/dates";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -47,6 +48,7 @@ import {
 
 type ManagerAttendanceLeavePageClientProps = {
   viewerId: string;
+  viewerRole?: Role;
   canApproveAttendance: boolean;
   canApproveLeave: boolean;
 };
@@ -74,16 +76,20 @@ async function readApi<T>(response: Response): Promise<T> {
   return payload.data as T;
 }
 
-function tabFromParam(param: string | null): string {
+function tabFromParam(param: string | null, isAdmin: boolean): string {
+  if (isAdmin && (param === "mine" || param === "records" || param === "workLogs")) {
+    return "approve";
+  }
   if (param === "team" || param === "mine" || param === "approve") {
     return param;
   }
-  if (param === "leave") return "mine";
+  if (param === "leave") return isAdmin ? "approve" : "mine";
   return "approve";
 }
 
 export function ManagerAttendanceLeavePageClient({
   viewerId,
+  viewerRole,
   canApproveAttendance,
   canApproveLeave,
 }: ManagerAttendanceLeavePageClientProps) {
@@ -94,8 +100,9 @@ export function ManagerAttendanceLeavePageClient({
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isAdmin = viewerRole === "admin";
 
-  const tab = tabFromParam(searchParams.get("tab"));
+  const tab = tabFromParam(searchParams.get("tab"), isAdmin);
   const mineSection =
     searchParams.get("section") === "leave" ? "leave" : "attendance";
 
@@ -127,14 +134,24 @@ export function ManagerAttendanceLeavePageClient({
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showAllEmployees, setShowAllEmployees] = useState(false);
   const [reviewRecord, setReviewRecord] = useState<AttendanceRecord | null>(
     null,
   );
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
+  const managersOnly = isAdmin && !showAllEmployees;
+  const requesterRoleParam = managersOnly
+    ? "department_manager"
+    : undefined;
+
   const pendingAttendanceQuery = useQuery({
-    queryKey: ["attendance", "manager-pending"],
+    queryKey: [
+      "attendance",
+      "manager-pending",
+      requesterRoleParam ?? "all",
+    ],
     enabled: tab === "approve" && canApproveAttendance,
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -144,13 +161,20 @@ export function ManagerAttendanceLeavePageClient({
         sortBy: "date",
         sortDir: "desc",
       });
+      if (requesterRoleParam) {
+        params.set("requesterRole", requesterRoleParam);
+      }
       const response = await fetch(`/api/attendance?${params}`);
       return readApi<ListResult<AttendanceRecord>>(response);
     },
   });
 
   const pendingLeaveQuery = useQuery({
-    queryKey: ["leave-requests", "manager-pending"],
+    queryKey: [
+      "leave-requests",
+      "manager-pending",
+      requesterRoleParam ?? "all",
+    ],
     enabled: tab === "approve" && canApproveLeave,
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -158,6 +182,9 @@ export function ManagerAttendanceLeavePageClient({
         pageSize: "50",
         status: "pending",
       });
+      if (requesterRoleParam) {
+        params.set("requesterRole", requesterRoleParam);
+      }
       const response = await fetch(`/api/leave-requests?${params}`);
       return readApi<ListResult<LeaveRequest>>(response);
     },
@@ -230,13 +257,18 @@ export function ManagerAttendanceLeavePageClient({
 
   const tabs = [
     { id: "approve", label: t("tabApprove") },
-    { id: "team", label: t("tabTeam") },
-    { id: "mine", label: t("tabMine") },
+    { id: "team", label: isAdmin ? t("tabOrg") : t("tabTeam") },
+    ...(!isAdmin ? [{ id: "mine", label: t("tabMine") }] : []),
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("title")} description={t("managerDescription")} />
+      <PageHeader
+        title={t("title")}
+        description={
+          isAdmin ? t("adminDescription") : t("managerDescription")
+        }
+      />
 
       {successMessage ? (
         <Alert>
@@ -251,7 +283,19 @@ export function ManagerAttendanceLeavePageClient({
 
       <Tabs items={tabs} value={tab} onValueChange={setTab}>
         <TabPanel when="approve" active={tab}>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-4">
+            {isAdmin ? (
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="size-4 rounded border"
+                  checked={showAllEmployees}
+                  onChange={(e) => setShowAllEmployees(e.target.checked)}
+                />
+                {t("showAllEmployees")}
+              </label>
+            ) : null}
+            <div className="grid gap-4 md:grid-cols-2">
             {canApproveAttendance ? (
               <Card>
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -433,30 +477,36 @@ export function ManagerAttendanceLeavePageClient({
                 </CardContent>
               </Card>
             ) : null}
+            </div>
           </div>
         </TabPanel>
 
         <TabPanel when="team" active={tab}>
-          <TeamWeekSheet onOpenRecord={setReviewRecord} />
+          <TeamWeekSheet
+            onOpenRecord={setReviewRecord}
+            preferManagersFilter={isAdmin}
+          />
         </TabPanel>
 
-        <TabPanel when="mine" active={tab}>
-          <Tabs
-            items={[
-              { id: "attendance", label: t("tabMyAttendance") },
-              { id: "leave", label: t("tabMyLeave") },
-            ]}
-            value={mineSection}
-            onValueChange={setMineSection}
-          >
-            <TabPanel when="attendance" active={mineSection}>
-              <EmployeeAttendancePageClient viewerId={viewerId} embedded />
-            </TabPanel>
-            <TabPanel when="leave" active={mineSection}>
-              <EmployeeLeavePageClient viewerId={viewerId} embedded />
-            </TabPanel>
-          </Tabs>
-        </TabPanel>
+        {!isAdmin ? (
+          <TabPanel when="mine" active={tab}>
+            <Tabs
+              items={[
+                { id: "attendance", label: t("tabMyAttendance") },
+                { id: "leave", label: t("tabMyLeave") },
+              ]}
+              value={mineSection}
+              onValueChange={setMineSection}
+            >
+              <TabPanel when="attendance" active={mineSection}>
+                <EmployeeAttendancePageClient viewerId={viewerId} embedded />
+              </TabPanel>
+              <TabPanel when="leave" active={mineSection}>
+                <EmployeeLeavePageClient viewerId={viewerId} embedded />
+              </TabPanel>
+            </Tabs>
+          </TabPanel>
+        ) : null}
       </Tabs>
 
       <AttendanceReviewDialog

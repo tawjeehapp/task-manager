@@ -24,6 +24,7 @@ export async function GET(request: Request) {
       awaitingApproval: url.searchParams.get("awaitingApproval") ?? undefined,
       includeAllocations:
         url.searchParams.get("includeAllocations") ?? undefined,
+      requesterRole: url.searchParams.get("requesterRole") ?? undefined,
     });
 
     if (!parsed.success) {

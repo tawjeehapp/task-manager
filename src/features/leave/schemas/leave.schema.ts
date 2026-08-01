@@ -70,6 +70,10 @@ export const listLeaveRequestsQuerySchema = z.object({
   status: leaveRequestStatusSchema.optional(),
   userId: z.string().uuid().optional(),
   leaveTypeId: z.string().uuid().optional(),
+  /** Limit to requesters with this role (e.g. department_manager for admin inbox). */
+  requesterRole: z
+    .enum(["admin", "department_manager", "employee"])
+    .optional(),
 });
 
 export const listLeaveBalancesQuerySchema = z.object({

@@ -45,19 +45,31 @@ function StatusTimingFooter({
   overdueLabel: string;
   dueTodayLabel: string;
 }) {
+  const parts: ReactNode[] = [];
+  if (timing.overdue > 0) {
+    parts.push(
+      <span key="overdue" className="text-destructive tabular-nums">
+        {timing.overdue} {overdueLabel}
+      </span>,
+    );
+  }
+  if (timing.dueToday > 0) {
+    parts.push(
+      <span key="dueToday" className="tabular-nums text-amber-700">
+        {timing.dueToday} {dueTodayLabel}
+      </span>,
+    );
+  }
+  if (parts.length === 0) return null;
+
   return (
-    <p className="text-[11px] leading-snug text-muted-foreground">
-      <span
-        className={cn(
-          "tabular-nums",
-          timing.overdue > 0 && "text-destructive",
-        )}
-      >
-        {timing.overdue}
-      </span>{" "}
-      {overdueLabel}
-      {" · "}
-      <span className="tabular-nums">{timing.dueToday}</span> {dueTodayLabel}
+    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] leading-snug text-muted-foreground">
+      {parts.map((part, index) => (
+        <span key={index} className="inline-flex items-center gap-1.5">
+          {index > 0 ? <span aria-hidden>·</span> : null}
+          {part}
+        </span>
+      ))}
     </p>
   );
 }
@@ -197,22 +209,32 @@ export function LeadershipMetricsCardsClient({
           icon={<Clock3 className="size-5" />}
           iconClassName="text-sky-600"
           footer={
-            <p className="text-[11px] leading-snug text-muted-foreground">
-              <span className="text-emerald-700 tabular-nums">
-                {metrics.weekHoursApproved}
-              </span>{" "}
-              {t("metricHoursApproved")}
-              {" · "}
-              <span className="text-amber-700 tabular-nums">
-                {metrics.weekHoursPending}
-              </span>{" "}
-              {t("metricHoursPending")}
-              {" · "}
-              <span className="text-destructive tabular-nums">
-                {metrics.weekHoursRejected}
-              </span>{" "}
-              {t("metricHoursRejected")}
-            </p>
+            <div className="space-y-0.5 text-[11px] leading-snug text-muted-foreground">
+              {metrics.weekHoursApproved > 0 ? (
+                <p>
+                  <span className="text-emerald-700 tabular-nums">
+                    {metrics.weekHoursApproved}
+                  </span>{" "}
+                  {t("metricHoursApproved")}
+                </p>
+              ) : null}
+              {metrics.weekHoursPending > 0 ? (
+                <p>
+                  <span className="text-amber-700 tabular-nums">
+                    {metrics.weekHoursPending}
+                  </span>{" "}
+                  {t("metricHoursPending")}
+                </p>
+              ) : null}
+              {metrics.weekHoursRejected > 0 ? (
+                <p>
+                  <span className="text-destructive tabular-nums">
+                    {metrics.weekHoursRejected}
+                  </span>{" "}
+                  {t("metricHoursRejected")}
+                </p>
+              ) : null}
+            </div>
           }
         />
         <MetricCard
@@ -223,7 +245,7 @@ export function LeadershipMetricsCardsClient({
           footer={
             <p className="text-[11px] leading-snug text-muted-foreground">
               {t("metricAvgProgress", {
-                percent: metrics.avgProgressPercent,
+                percent: Math.round(metrics.avgProgressPercent),
               })}
             </p>
           }

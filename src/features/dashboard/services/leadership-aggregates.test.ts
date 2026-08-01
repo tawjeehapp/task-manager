@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aggregateDepartmentRows,
   aggregateLeadershipFromRows,
   computeProjectHealth,
   computeProjectProgress,
   deriveTodayStatus,
+  isLateProject,
   isOverdueTask,
   type AggregateTaskRow,
 } from "@/features/dashboard/services/leadership-aggregates";
@@ -66,6 +68,33 @@ describe("leadership aggregates", () => {
     ).toBe("on_track");
   });
 
+  it("detects late projects past end date with unfinished tasks", () => {
+    expect(
+      isLateProject(
+        { endDate: "2026-07-20" },
+        [task({ status: "in_progress" })],
+        "2026-07-26",
+      ),
+    ).toBe(true);
+    expect(
+      isLateProject(
+        { endDate: "2026-07-20" },
+        [task({ status: "completed" })],
+        "2026-07-26",
+      ),
+    ).toBe(false);
+    expect(
+      isLateProject(
+        { endDate: "2026-07-30" },
+        [task({ status: "todo" })],
+        "2026-07-26",
+      ),
+    ).toBe(false);
+    expect(isLateProject({ endDate: "2026-07-20" }, [], "2026-07-26")).toBe(
+      false,
+    );
+  });
+
   it("builds metrics, team, projects, and attention lists", () => {
     const result = aggregateLeadershipFromRows({
       today: "2026-07-26",
@@ -77,6 +106,7 @@ describe("leadership aggregates", () => {
           fullName: "سارة",
           employeeNumber: "1001",
           avatarUrl: null,
+          role: "employee",
           departmentId: "d1",
           departmentName: "المناهج",
           weeklyCapacityHours: 40,
@@ -86,6 +116,7 @@ describe("leadership aggregates", () => {
           fullName: "نورة",
           employeeNumber: "1002",
           avatarUrl: null,
+          role: "employee",
           departmentId: "d1",
           departmentName: "المناهج",
           weeklyCapacityHours: 40,
@@ -98,6 +129,7 @@ describe("leadership aggregates", () => {
           departmentId: "d1",
           departmentName: "المناهج",
           status: "active",
+          endDate: "2026-07-20",
         },
       ],
       tasks: [
@@ -214,5 +246,120 @@ describe("leadership aggregates", () => {
     expect(result.projects[0]?.blockedCount).toBe(1);
     expect(result.projects[0]?.completedCount).toBe(0);
     expect(result.projects[0]?.dueTodayCount).toBe(0);
+    expect(result.lateProjects).toEqual([
+      {
+        id: "p1",
+        name: "مشروع أ",
+        endDate: "2026-07-20",
+        href: "/projects/p1",
+      },
+    ]);
+  });
+
+  it("aggregates department rows with health sorting and rollups", () => {
+    const rows = aggregateDepartmentRows({
+      today: "2026-07-26",
+      departments: [
+        { id: "d1", name: "المناهج", managerName: "أحمد" },
+        { id: "d2", name: "التقنية", managerName: null },
+      ],
+      users: [
+        {
+          userId: "u1",
+          fullName: "سارة",
+          employeeNumber: "1001",
+          avatarUrl: null,
+          role: "employee",
+          departmentId: "d1",
+          departmentName: "المناهج",
+          weeklyCapacityHours: 40,
+        },
+        {
+          userId: "u2",
+          fullName: "نورة",
+          employeeNumber: "1002",
+          avatarUrl: null,
+          role: "department_manager",
+          departmentId: "d1",
+          departmentName: "المناهج",
+          weeklyCapacityHours: 40,
+        },
+        {
+          userId: "u3",
+          fullName: "خالد",
+          employeeNumber: "1003",
+          avatarUrl: null,
+          role: "employee",
+          departmentId: "d2",
+          departmentName: "التقنية",
+          weeklyCapacityHours: 40,
+        },
+      ],
+      projects: [
+        {
+          id: "p1",
+          name: "مشروع أ",
+          departmentId: "d1",
+          departmentName: "المناهج",
+          status: "active",
+          endDate: "2026-08-01",
+        },
+        {
+          id: "p2",
+          name: "مشروع ب",
+          departmentId: "d2",
+          departmentName: "التقنية",
+          status: "active",
+          endDate: "2026-08-15",
+        },
+      ],
+      tasks: [
+        task({
+          id: "t1",
+          projectId: "p1",
+          assignedTo: "u1",
+          status: "in_progress",
+          dueDate: "2026-07-20",
+          estimatedHours: 8,
+        }),
+        task({
+          id: "t2",
+          projectId: "p1",
+          assignedTo: "u2",
+          status: "completed",
+          dueDate: "2026-07-25",
+          estimatedHours: 2,
+        }),
+        task({
+          id: "t3",
+          projectId: "p2",
+          assignedTo: "u3",
+          status: "todo",
+          dueDate: "2026-07-30",
+          estimatedHours: 4,
+        }),
+      ],
+    });
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.id).toBe("d1");
+    expect(rows[0]?.health).toBe("overdue");
+    expect(rows[0]?.managerName).toBe("أحمد");
+    expect(rows[0]?.memberCount).toBe(2);
+    expect(rows[0]?.projectCount).toBe(1);
+    expect(rows[0]?.todoCount).toBe(0);
+    expect(rows[0]?.inProgressCount).toBe(1);
+    expect(rows[0]?.completedCount).toBe(1);
+    expect(rows[0]?.overdueCount).toBe(1);
+    expect(rows[0]?.progressPercent).toBe(20);
+    expect(rows[0]?.href).toBe("/departments/d1");
+
+    expect(rows[1]?.id).toBe("d2");
+    expect(rows[1]?.health).toBe("on_track");
+    expect(rows[1]?.managerName).toBeNull();
+    expect(rows[1]?.memberCount).toBe(1);
+    expect(rows[1]?.projectCount).toBe(1);
+    expect(rows[1]?.todoCount).toBe(1);
+    expect(rows[1]?.overdueCount).toBe(0);
   });
 });

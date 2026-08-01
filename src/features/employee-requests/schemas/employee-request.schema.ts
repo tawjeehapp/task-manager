@@ -72,6 +72,10 @@ export const listEmployeeRequestsQuerySchema = z.object({
   type: employeeRequestTypeSchema.optional(),
   userId: z.string().uuid().optional(),
   taskId: z.string().uuid().optional(),
+  /** Limit to requesters with this role (e.g. department_manager for admin inbox). */
+  requesterRole: z
+    .enum(["admin", "department_manager", "employee"])
+    .optional(),
 });
 
 export type CreateEmployeeRequestInput = z.infer<

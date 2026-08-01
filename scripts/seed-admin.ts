@@ -61,7 +61,7 @@ async function main() {
         email_confirm: true,
         user_metadata: {
           employee_number: EMPLOYEE_NUMBER,
-          full_name: "مسؤول النظام",
+          full_name: "المدير العام",
         },
       });
 
@@ -80,7 +80,7 @@ async function main() {
     .insert({
       auth_user_id: authUserId,
       employee_number: EMPLOYEE_NUMBER,
-      full_name: "مسؤول النظام",
+      full_name: "المدير العام",
       email: EMAIL,
       phone: null,
       role: "admin",

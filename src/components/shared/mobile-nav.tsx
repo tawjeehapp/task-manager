@@ -37,6 +37,7 @@ export function MobileNav({ initialMe }: MobileNavProps) {
   const role = (meQuery.data?.user.role ?? null) as Role | null;
   const useMyTasksLabel = isPersonalWorkspaceRole(role);
   const isManager = role === "department_manager";
+  const isAdmin = role === "admin";
 
   return (
     <nav
@@ -49,9 +50,13 @@ export function MobileNav({ initialMe }: MobileNavProps) {
           const labelKey =
             item.key === "dashboard" && isManager
               ? "departmentDashboard"
-              : useMyTasksLabel && item.key === "tasks"
-                ? "myTasks"
-                : item.key;
+              : item.key === "dashboard" && isAdmin
+                ? "dashboard"
+                : useMyTasksLabel && item.key === "tasks"
+                  ? "myTasks"
+                  : isAdmin && item.key === "tasks"
+                    ? "orgTasks"
+                    : item.key;
           const label = t(labelKey);
           const isActive = item.enabled && pathname === item.href;
 

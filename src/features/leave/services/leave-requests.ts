@@ -20,6 +20,7 @@ import {
 } from "@/features/departments/services/membership-helpers";
 import { notifySafe } from "@/features/notifications/services/notifications";
 import { listApproverUserIdsOrThrow } from "@/features/notifications/services/recipients";
+import { listUserIdsByRole } from "@/features/users/services/list-user-ids-by-role";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -173,6 +174,20 @@ export async function listLeaveRequests(
     }
   } else if (query.userId) {
     builder = builder.eq("user_id", query.userId);
+  }
+
+  if (query.requesterRole) {
+    const roleIds = await listUserIdsByRole(query.requesterRole);
+    if (roleIds.length === 0) {
+      return {
+        items: [],
+        total: 0,
+        page: query.page,
+        pageSize: query.pageSize,
+        totalPages: 0,
+      };
+    }
+    builder = builder.in("user_id", roleIds);
   }
 
   if (query.status) {

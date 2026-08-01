@@ -395,8 +395,14 @@ export function TasksPageClient({
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("teamTasksTitle")}
-        description={t("teamTasksDescription")}
+        title={
+          viewerRole === "admin" ? t("orgTasksTitle") : t("teamTasksTitle")
+        }
+        description={
+          viewerRole === "admin"
+            ? t("orgTasksDescription")
+            : t("teamTasksDescription")
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <div

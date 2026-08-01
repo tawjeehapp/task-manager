@@ -191,7 +191,7 @@ export function DepartmentsPageClient({
 
   const createForm = useForm<CreateDepartmentInput>({
     resolver: zodResolver(createDepartmentSchema) as never,
-    defaultValues: { name: "", description: "" },
+    defaultValues: { name: "", description: "", managerId: "" },
   });
 
   const createMutation = useMutation({
@@ -373,6 +373,11 @@ export function DepartmentsPageClient({
                   <div className="space-y-2">
                     <Label htmlFor="name">{t("name")}</Label>
                     <Input id="name" {...createForm.register("name")} />
+                    {createForm.formState.errors.name ? (
+                      <p className="text-destructive text-sm">
+                        {createForm.formState.errors.name.message}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="description">{t("descriptionLabel")}</Label>
@@ -380,6 +385,26 @@ export function DepartmentsPageClient({
                       id="description"
                       {...createForm.register("description")}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="managerId">{t("manager")}</Label>
+                    <select
+                      id="managerId"
+                      className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                      {...createForm.register("managerId")}
+                    >
+                      <option value="">{t("selectManager")}</option>
+                      {(managersQuery.data ?? []).map((manager) => (
+                        <option key={manager.id} value={manager.id}>
+                          {manager.fullName}
+                        </option>
+                      ))}
+                    </select>
+                    {createForm.formState.errors.managerId ? (
+                      <p className="text-destructive text-sm">
+                        {createForm.formState.errors.managerId.message}
+                      </p>
+                    ) : null}
                   </div>
                   {createForm.formState.errors.root ? (
                     <Alert variant="destructive">

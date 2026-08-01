@@ -11,6 +11,7 @@ import {
   type MetricTasksQuery,
 } from "@/features/dashboard/components/employee-metric-dialogs";
 import type {
+  LeadershipDepartmentRow,
   LeadershipProjectRow,
   LeadershipTeamRow,
 } from "@/features/dashboard/types/dashboard.types";
@@ -38,6 +39,9 @@ type LeadershipTablesClientProps = {
   today: string;
   team: LeadershipTeamRow[];
   projects: LeadershipProjectRow[];
+  departments?: LeadershipDepartmentRow[];
+  /** When true, Team table defaults to department managers only. */
+  preferManagersInTeam?: boolean;
   canApproveAttendance?: boolean;
 };
 
@@ -55,6 +59,12 @@ type OpenDetail =
     }
   | {
       kind: "project-tasks";
+      subject: string;
+      metric: string;
+      query: MetricTasksQuery;
+    }
+  | {
+      kind: "department-tasks";
       subject: string;
       metric: string;
       query: MetricTasksQuery;
@@ -89,19 +99,6 @@ function ProgressBar({
         {Math.round(clamped)}%
       </span>
     </div>
-  );
-}
-
-function Initials({ name }: { name: string }) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters =
-    parts.length >= 2
-      ? `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`
-      : (parts[0]?.slice(0, 2) ?? "?");
-  return (
-    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-      {letters}
-    </span>
   );
 }
 
@@ -141,12 +138,16 @@ export function LeadershipTablesClient({
   today,
   team,
   projects,
+  departments,
+  preferManagersInTeam = false,
   canApproveAttendance = false,
 }: LeadershipTablesClientProps) {
   const t = useTranslations("dashboard");
   const [teamSearch, setTeamSearch] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
+  const [departmentSearch, setDepartmentSearch] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [showEveryone, setShowEveryone] = useState(false);
   const [detail, setDetail] = useState<OpenDetail | null>(null);
 
   const { start: weekStart, end: weekEnd } = useMemo(
@@ -176,8 +177,9 @@ export function LeadershipTablesClient({
   }, [team, projects]);
 
   const showDepartmentFilter = departmentOptions.length >= 2;
+  const managersOnly = preferManagersInTeam && !showEveryone;
 
-  const filteredTeam = useMemo(() => {
+  const teamAfterDeptAndSearch = useMemo(() => {
     const q = teamSearch.trim().toLowerCase();
     return team.filter((row) => {
       if (!matchesDepartment(row, departmentId)) return false;
@@ -185,6 +187,13 @@ export function LeadershipTablesClient({
       return true;
     });
   }, [team, teamSearch, departmentId]);
+
+  const filteredTeam = useMemo(() => {
+    if (!managersOnly) return teamAfterDeptAndSearch;
+    return teamAfterDeptAndSearch.filter(
+      (row) => row.role === "department_manager",
+    );
+  }, [teamAfterDeptAndSearch, managersOnly]);
 
   const filteredProjects = useMemo(() => {
     const q = projectSearch.trim().toLowerCase();
@@ -195,17 +204,34 @@ export function LeadershipTablesClient({
     });
   }, [projects, projectSearch, departmentId]);
 
+  const filteredDepartments = useMemo(() => {
+    if (!departments) return [];
+    const q = departmentSearch.trim().toLowerCase();
+    return departments.filter((row) => {
+      if (q && !row.name.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [departments, departmentSearch]);
+
   const tasksDetailOpen =
-    detail?.kind === "team-tasks" || detail?.kind === "project-tasks";
+    detail?.kind === "team-tasks" ||
+    detail?.kind === "project-tasks" ||
+    detail?.kind === "department-tasks";
   const tasksTitle =
-    detail && (detail.kind === "team-tasks" || detail.kind === "project-tasks")
+    detail &&
+    (detail.kind === "team-tasks" ||
+      detail.kind === "project-tasks" ||
+      detail.kind === "department-tasks")
       ? t("detailModalTitle", {
           subject: detail.subject,
           metric: detail.metric,
         })
       : "";
   const tasksQuery =
-    detail && (detail.kind === "team-tasks" || detail.kind === "project-tasks")
+    detail &&
+    (detail.kind === "team-tasks" ||
+      detail.kind === "project-tasks" ||
+      detail.kind === "department-tasks")
       ? detail.query
       : null;
 
@@ -235,15 +261,28 @@ export function LeadershipTablesClient({
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>{t("teamTableTitle")}</CardTitle>
-          <div className="relative w-full sm:max-w-xs">
-            <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={teamSearch}
-              onChange={(e) => setTeamSearch(e.target.value)}
-              placeholder={t("searchEmployeePlaceholder")}
-              className="ps-8"
-              aria-label={t("searchEmployeePlaceholder")}
-            />
+          <div className="flex w-full flex-col gap-2 sm:max-w-md sm:items-end">
+            {preferManagersInTeam ? (
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="size-4 rounded border"
+                  checked={showEveryone}
+                  onChange={(e) => setShowEveryone(e.target.checked)}
+                />
+                {t("showAllEmployees")}
+              </label>
+            ) : null}
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={teamSearch}
+                onChange={(e) => setTeamSearch(e.target.value)}
+                placeholder={t("searchEmployeePlaceholder")}
+                className="ps-8"
+                aria-label={t("searchEmployeePlaceholder")}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -256,13 +295,14 @@ export function LeadershipTablesClient({
               <p className="mb-2 text-xs text-muted-foreground">
                 {t("filterResultCount", {
                   shown: filteredTeam.length,
-                  total: team.length,
+                  total: teamAfterDeptAndSearch.length,
                 })}
               </p>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("colMember")}</TableHead>
+                    <TableHead>{t("colDepartment")}</TableHead>
                     <TableHead>{t("colWorkload")}</TableHead>
                     <TableHead className="text-center">
                       {t("colTodo")}
@@ -294,20 +334,13 @@ export function LeadershipTablesClient({
                       <TableCell>
                         <Link
                           href={row.href}
-                          className="flex items-center gap-2 hover:underline"
+                          className="font-medium hover:underline"
                         >
-                          {row.avatarUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={row.avatarUrl}
-                              alt=""
-                              className="size-8 rounded-full object-cover"
-                            />
-                          ) : (
-                            <Initials name={row.fullName} />
-                          )}
-                          <span className="font-medium">{row.fullName}</span>
+                          {row.fullName}
                         </Link>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {row.departmentName ?? "—"}
                       </TableCell>
                       <TableCell>
                         <ProgressBar
@@ -484,6 +517,220 @@ export function LeadershipTablesClient({
         </CardContent>
       </Card>
 
+      {departments ? (
+        <Card>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <CardTitle>{t("departmentsTableTitle")}</CardTitle>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="pointer-events-none absolute start-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={departmentSearch}
+                onChange={(e) => setDepartmentSearch(e.target.value)}
+                placeholder={t("searchDepartmentPlaceholder")}
+                className="ps-8"
+                aria-label={t("searchDepartmentPlaceholder")}
+              />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {departments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t("noDepartments")}
+              </p>
+            ) : filteredDepartments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t("filterNoResults")}
+              </p>
+            ) : (
+              <>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {t("filterResultCount", {
+                    shown: filteredDepartments.length,
+                    total: departments.length,
+                  })}
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("colDepartment")}</TableHead>
+                      <TableHead>{t("colManager")}</TableHead>
+                      <TableHead className="text-center">
+                        {t("colMembers")}
+                      </TableHead>
+                      <TableHead className="text-center">
+                        {t("colProjects")}
+                      </TableHead>
+                      <TableHead>{t("colProgress")}</TableHead>
+                      <TableHead className="text-center">
+                        {t("colTodo")}
+                      </TableHead>
+                      <TableHead className="text-center">
+                        {t("colInProgress")}
+                      </TableHead>
+                      <TableHead className="text-center">
+                        {t("colBlocked")}
+                      </TableHead>
+                      <TableHead className="text-center">
+                        {t("colCompleted")}
+                      </TableHead>
+                      <TableHead className="text-center">
+                        {t("colOverdue")}
+                      </TableHead>
+                      <TableHead className="text-center">
+                        {t("colDueToday")}
+                      </TableHead>
+                      <TableHead>{t("colNearestDue")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredDepartments.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <Link
+                            href={row.href}
+                            className="font-medium hover:underline"
+                          >
+                            {row.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {row.managerName ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums">
+                          {row.memberCount}
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums">
+                          {row.projectCount}
+                        </TableCell>
+                        <TableCell>
+                          <ProgressBar
+                            value={row.progressPercent}
+                            tone={
+                              row.overdueCount > 0 ? "warn" : "default"
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <CountButton
+                            value={row.todoCount}
+                            onClick={() =>
+                              setDetail({
+                                kind: "department-tasks",
+                                subject: row.name,
+                                metric: t("colTodo"),
+                                query: {
+                                  departmentId: row.id,
+                                  status: "todo",
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <CountButton
+                            value={row.inProgressCount}
+                            onClick={() =>
+                              setDetail({
+                                kind: "department-tasks",
+                                subject: row.name,
+                                metric: t("colInProgress"),
+                                query: {
+                                  departmentId: row.id,
+                                  status: "in_progress",
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <CountButton
+                            value={row.blockedCount}
+                            onClick={() =>
+                              setDetail({
+                                kind: "department-tasks",
+                                subject: row.name,
+                                metric: t("colBlocked"),
+                                query: {
+                                  departmentId: row.id,
+                                  status: "blocked",
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <CountButton
+                            value={row.completedCount}
+                            onClick={() =>
+                              setDetail({
+                                kind: "department-tasks",
+                                subject: row.name,
+                                metric: t("colCompleted"),
+                                query: {
+                                  departmentId: row.id,
+                                  status: "completed",
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <CountButton
+                            value={row.overdueCount}
+                            className={
+                              row.overdueCount > 0
+                                ? "text-destructive"
+                                : undefined
+                            }
+                            onClick={() =>
+                              setDetail({
+                                kind: "department-tasks",
+                                subject: row.name,
+                                metric: t("colOverdue"),
+                                query: {
+                                  departmentId: row.id,
+                                  dueTo: yesterday,
+                                  predicate: "overdue",
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <CountButton
+                            value={row.dueTodayCount}
+                            onClick={() =>
+                              setDetail({
+                                kind: "department-tasks",
+                                subject: row.name,
+                                metric: t("colDueToday"),
+                                query: {
+                                  departmentId: row.id,
+                                  dueFrom: today,
+                                  dueTo: today,
+                                  predicate: "dueToday",
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="tabular-nums text-muted-foreground">
+                          {row.nearestDueDate
+                            ? row.nearestDueDate === today
+                              ? t("dueTodayLabel")
+                              : formatDate(row.nearestDueDate)
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>{t("projectsTableTitle")}</CardTitle>
@@ -536,7 +783,6 @@ export function LeadershipTablesClient({
                       {t("colDueToday")}
                     </TableHead>
                     <TableHead>{t("colNearestDue")}</TableHead>
-                    <TableHead>{t("colHealth")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -556,7 +802,7 @@ export function LeadershipTablesClient({
                       <TableCell>
                         <ProgressBar
                           value={row.progressPercent}
-                          tone={row.health === "overdue" ? "warn" : "default"}
+                          tone={row.overdueCount > 0 ? "warn" : "default"}
                         />
                       </TableCell>
                       <TableCell className="text-center">
@@ -667,17 +913,6 @@ export function LeadershipTablesClient({
                             ? t("dueTodayLabel")
                             : formatDate(row.nearestDueDate)
                           : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            row.health === "overdue"
-                              ? "destructive"
-                              : "secondary"
-                          }
-                        >
-                          {t(`health_${row.health}`)}
-                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}

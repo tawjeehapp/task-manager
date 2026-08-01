@@ -11,7 +11,26 @@ const UUID_B = "22222222-2222-4222-8222-222222222222";
 
 describe("department schemas", () => {
   it("requires department name on create", () => {
-    const result = createDepartmentSchema.safeParse({ name: "أ" });
+    const result = createDepartmentSchema.safeParse({
+      name: "أ",
+      managerId: UUID_A,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("requires managerId on create", () => {
+    const result = createDepartmentSchema.safeParse({
+      name: "المناهج",
+      description: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects empty managerId on create", () => {
+    const result = createDepartmentSchema.safeParse({
+      name: "المناهج",
+      managerId: "",
+    });
     expect(result.success).toBe(false);
   });
 
@@ -19,10 +38,12 @@ describe("department schemas", () => {
     const result = createDepartmentSchema.safeParse({
       name: "المناهج",
       description: "",
+      managerId: UUID_A,
     });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.description).toBeNull();
+      expect(result.data.managerId).toBe(UUID_A);
     }
   });
 

@@ -29,6 +29,7 @@ import {
 } from "@/features/departments/services/membership-helpers";
 import { notifySafe } from "@/features/notifications/services/notifications";
 import { listApproverUserIdsOrThrow } from "@/features/notifications/services/recipients";
+import { listUserIdsByRole } from "@/features/users/services/list-user-ids-by-role";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -821,6 +822,23 @@ export async function listAttendanceForViewer(
     await assertCanViewAttendanceUser(viewer, query.userId);
     q = q.eq("user_id", query.userId);
   }
+
+  let requesterRoleIds: string[] | null = null;
+  if (query.requesterRole) {
+    requesterRoleIds = await listUserIdsByRole(query.requesterRole);
+    if (requesterRoleIds.length === 0) {
+      return {
+        items: [],
+        total: 0,
+        page: query.page,
+        pageSize: query.pageSize,
+        totalPages: 0,
+        totalHoursSum: 0,
+      };
+    }
+    q = q.in("user_id", requesterRoleIds);
+  }
+
   if (query.status) {
     q = q.eq("status", query.status);
   }
@@ -883,6 +901,7 @@ export async function listAttendanceForViewer(
   }
 
   if (query.userId) sumQuery = sumQuery.eq("user_id", query.userId);
+  if (requesterRoleIds) sumQuery = sumQuery.in("user_id", requesterRoleIds);
   if (query.status) sumQuery = sumQuery.eq("status", query.status);
   if (query.dateFrom) sumQuery = sumQuery.gte("date", query.dateFrom);
   if (query.dateTo) sumQuery = sumQuery.lte("date", query.dateTo);

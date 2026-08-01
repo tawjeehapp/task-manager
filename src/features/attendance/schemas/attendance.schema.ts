@@ -133,6 +133,10 @@ export const listAttendanceQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((v) => v === "true"),
+  /** Limit to requesters with this role (e.g. department_manager for admin inbox). */
+  requesterRole: z
+    .enum(["admin", "department_manager", "employee"])
+    .optional(),
 });
 
 export type ListAttendanceQuery = z.infer<typeof listAttendanceQuerySchema>;

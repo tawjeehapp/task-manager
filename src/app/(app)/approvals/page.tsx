@@ -56,6 +56,7 @@ export default async function ApprovalsPage() {
   return (
     <ApprovalsPageClient
       viewerId={user.id}
+      preferManagersFilter={user.role === "admin"}
       canApproveLeave={canApproveLeave}
       canApproveEmployeeRequest={canApproveEmployeeRequest}
       canApproveAttendance={canApproveAttendance}

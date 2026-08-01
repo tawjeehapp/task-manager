@@ -40,6 +40,16 @@ const MANAGER_PERMS = [
   "work_log.view",
 ];
 
+const ADMIN_PERMS = [
+  ...MANAGER_PERMS,
+  "user.manage",
+  "department.manage",
+  "project.manage",
+  "leave.manage",
+  "project_request.approve",
+  "announcement.manage",
+];
+
 function allItems() {
   return navSections.flatMap((section) => section.items);
 }
@@ -108,6 +118,27 @@ describe("navItemIsVisible", () => {
     expect(
       navItemIsVisible(attendanceLeave!, MANAGER_PERMS, "department_manager"),
     ).toBe(true);
+  });
+
+  it("shows admin org dashboard and managerial items without DM dual-nav keys", () => {
+    const visible = allItems()
+      .filter((item) => navItemIsVisible(item, ADMIN_PERMS, "admin"))
+      .map((item) => item.key);
+
+    expect(visible).toEqual([
+      "dashboard",
+      "tasks",
+      "projects",
+      "notifications",
+      "attendanceLeave",
+      "departments",
+      "employees",
+      "requests",
+      "announcements",
+    ]);
+    expect(visible).not.toContain("departmentDashboard");
+    expect(visible).not.toContain("myDashboard");
+    expect(visible).not.toContain("teamTasks");
   });
 
   it("mobile nav is Dashboard, Tasks, Notifications", () => {

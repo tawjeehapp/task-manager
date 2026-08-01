@@ -79,7 +79,9 @@ export function AppSidebar({
                         ? "myDepartmentAndProjects"
                         : isPersonalWorkspaceRole(role) && item.key === "tasks"
                           ? "myTasks"
-                          : item.key;
+                          : role === "admin" && item.key === "tasks"
+                            ? "orgTasks"
+                            : item.key;
                     const label = t(labelKey);
                     // Prefer exact match; avoid `/tasks` matching `/tasks/team`.
                     const isActive =

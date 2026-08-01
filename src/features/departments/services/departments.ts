@@ -172,7 +172,14 @@ export async function createDepartment(
     throw new ApiError("تعذر إنشاء القسم.", 500, "CREATE_DEPARTMENT_FAILED");
   }
 
-  return mapDepartment(data as DepartmentRow, null, 0);
+  const departmentId = (data as DepartmentRow).id;
+
+  try {
+    return await assignDepartmentManager(departmentId, input.managerId);
+  } catch (assignError) {
+    await admin.from("departments").delete().eq("id", departmentId);
+    throw assignError;
+  }
 }
 
 export { loadDepartmentById };

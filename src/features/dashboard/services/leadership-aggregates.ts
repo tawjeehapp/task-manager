@@ -1,4 +1,6 @@
 import type {
+  LeadershipDepartmentRow,
+  LeadershipLateProject,
   LeadershipProjectHealth,
   LeadershipProjectRow,
   LeadershipTeamRow,
@@ -39,6 +41,7 @@ export type AggregateUserMeta = {
   fullName: string;
   employeeNumber: string;
   avatarUrl: string | null;
+  role: "admin" | "department_manager" | "employee";
   departmentId: string | null;
   departmentName: string | null;
   weeklyCapacityHours: number;
@@ -56,6 +59,13 @@ export type AggregateProjectMeta = {
   departmentId: string | null;
   departmentName: string | null;
   status: string;
+  endDate: string | null;
+};
+
+export type AggregateDepartmentMeta = {
+  id: string;
+  name: string;
+  managerName: string | null;
 };
 
 export function isOverdueTask(
@@ -108,6 +118,16 @@ export function computeProjectHealth(
     : "on_track";
 }
 
+/** Past project end date with at least one unfinished task. */
+export function isLateProject(
+  project: Pick<AggregateProjectMeta, "endDate">,
+  tasks: AggregateTaskRow[],
+  today: string,
+): boolean {
+  if (!project.endDate || project.endDate >= today) return false;
+  return tasks.some((task) => task.status !== "completed");
+}
+
 export function nearestOpenDueDate(
   tasks: AggregateTaskRow[],
 ): string | null {
@@ -133,6 +153,7 @@ export function aggregateLeadershipFromRows(input: {
 }): {
   metrics: LeadershipMetrics;
   overduePeople: LeadershipOverduePerson[];
+  lateProjects: LeadershipLateProject[];
   missingAttendanceToday: LeadershipPersonRef[];
   team: LeadershipTeamRow[];
   projects: LeadershipProjectRow[];
@@ -189,18 +210,16 @@ export function aggregateLeadershipFromRows(input: {
     return a.name.localeCompare(b.name, "ar");
   });
 
-  const activeProjects = projects.filter((p) => p.status === "active");
-  const activeProjectRows = projectRows.filter((p) =>
-    activeProjects.some((ap) => ap.id === p.id),
-  );
+  // Count all non-archived projects in scope (matches the projects table).
+  // Previously filtered to status === "active" only, which undercounted drafts/completed.
+  const scopedProjectRows = projectRows;
   const avgProgressPercent =
-    activeProjectRows.length === 0
+    scopedProjectRows.length === 0
       ? 0
       : Math.round(
-          (activeProjectRows.reduce((s, p) => s + p.progressPercent, 0) /
-            activeProjectRows.length) *
-            10,
-        ) / 10;
+          scopedProjectRows.reduce((s, p) => s + p.progressPercent, 0) /
+            scopedProjectRows.length,
+        );
 
   let todoCount = 0;
   let inProgressCount = 0;
@@ -300,6 +319,21 @@ export function aggregateLeadershipFromRows(input: {
     .sort((a, b) => b.overdueCount - a.overdueCount)
     .slice(0, ATTENTION_OVERDUE_PEOPLE_LIMIT);
 
+  const lateProjects: LeadershipLateProject[] = projects
+    .filter((project) =>
+      isLateProject(project, tasksByProject.get(project.id) ?? [], today),
+    )
+    .map((project) => ({
+      id: project.id,
+      name: project.name,
+      endDate: project.endDate!,
+      href: `/projects/${project.id}`,
+    }))
+    .sort((a, b) => {
+      if (a.endDate !== b.endDate) return a.endDate.localeCompare(b.endDate);
+      return a.name.localeCompare(b.name, "ar");
+    });
+
   const missingAttendanceToday: LeadershipPersonRef[] = users
     .filter((u) => !todayAttendanceByUser.has(u.userId))
     .map((u) => ({ userId: u.userId, fullName: u.fullName }))
@@ -341,6 +375,7 @@ export function aggregateLeadershipFromRows(input: {
       fullName: user.fullName,
       avatarUrl: user.avatarUrl,
       employeeNumber: user.employeeNumber,
+      role: user.role,
       departmentId: user.departmentId,
       departmentName: user.departmentName,
       openTaskCount,
@@ -370,7 +405,7 @@ export function aggregateLeadershipFromRows(input: {
   });
 
   const metrics: LeadershipMetrics = {
-    activeProjectsCount: activeProjects.length,
+    activeProjectsCount: projects.length,
     avgProgressPercent,
     todoCount,
     inProgressCount,
@@ -394,8 +429,96 @@ export function aggregateLeadershipFromRows(input: {
   return {
     metrics,
     overduePeople,
+    lateProjects,
     missingAttendanceToday,
     team,
     projects: projectRows,
   };
+}
+
+export function aggregateDepartmentRows(input: {
+  today: string;
+  departments: AggregateDepartmentMeta[];
+  users: AggregateUserMeta[];
+  projects: AggregateProjectMeta[];
+  tasks: AggregateTaskRow[];
+}): LeadershipDepartmentRow[] {
+  const { today, departments, users, projects, tasks } = input;
+
+  const projectIdsByDept = new Map<string, string[]>();
+  const activeProgressByDept = new Map<string, number[]>();
+  for (const project of projects) {
+    if (!project.departmentId) continue;
+    const ids = projectIdsByDept.get(project.departmentId) ?? [];
+    ids.push(project.id);
+    projectIdsByDept.set(project.departmentId, ids);
+  }
+
+  const tasksByProject = new Map<string, AggregateTaskRow[]>();
+  for (const task of tasks) {
+    const list = tasksByProject.get(task.projectId) ?? [];
+    list.push(task);
+    tasksByProject.set(task.projectId, list);
+  }
+
+  for (const project of projects) {
+    if (!project.departmentId || project.status === "archived") continue;
+    const projectTasks = tasksByProject.get(project.id) ?? [];
+    const progresses = activeProgressByDept.get(project.departmentId) ?? [];
+    progresses.push(computeProjectProgress(projectTasks));
+    activeProgressByDept.set(project.departmentId, progresses);
+  }
+
+  const memberCountByDept = new Map<string, number>();
+  for (const user of users) {
+    if (!user.departmentId) continue;
+    memberCountByDept.set(
+      user.departmentId,
+      (memberCountByDept.get(user.departmentId) ?? 0) + 1,
+    );
+  }
+
+  const rows: LeadershipDepartmentRow[] = departments.map((department) => {
+    const projectIds = projectIdsByDept.get(department.id) ?? [];
+    const all: AggregateTaskRow[] = [];
+    for (const projectId of projectIds) {
+      const projectTasks = tasksByProject.get(projectId);
+      if (projectTasks) all.push(...projectTasks);
+    }
+
+    const progresses = activeProgressByDept.get(department.id) ?? [];
+    const progressPercent =
+      progresses.length === 0
+        ? 0
+        : Math.round(
+            (progresses.reduce((s, p) => s + p, 0) / progresses.length) * 10,
+          ) / 10;
+
+    return {
+      id: department.id,
+      name: department.name,
+      managerName: department.managerName,
+      memberCount: memberCountByDept.get(department.id) ?? 0,
+      projectCount: projectIds.length,
+      progressPercent,
+      todoCount: all.filter((t) => t.status === "todo").length,
+      inProgressCount: all.filter((t) => t.status === "in_progress").length,
+      blockedCount: all.filter((t) => t.status === "blocked").length,
+      completedCount: all.filter((t) => t.status === "completed").length,
+      overdueCount: all.filter((t) => isOverdueTask(t, today)).length,
+      dueTodayCount: all.filter((t) => isDueTodayTask(t, today)).length,
+      nearestDueDate: nearestOpenDueDate(all),
+      health: computeProjectHealth(all, today),
+      href: `/departments/${department.id}`,
+    };
+  });
+
+  rows.sort((a, b) => {
+    if (a.health !== b.health) {
+      return a.health === "overdue" ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name, "ar");
+  });
+
+  return rows;
 }

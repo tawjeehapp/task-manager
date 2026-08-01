@@ -42,6 +42,8 @@ type ListResult<T> = {
 
 type TeamWeekSheetProps = {
   onOpenRecord: (record: AttendanceRecord) => void;
+  /** When true (admin), default to department managers with a show-all toggle. */
+  preferManagersFilter?: boolean;
 };
 
 async function readApi<T>(response: Response): Promise<T> {
@@ -76,17 +78,24 @@ function memberInitial(name: string): string {
   return trimmed ? trimmed.charAt(0) : "?";
 }
 
-export function TeamWeekSheet({ onOpenRecord }: TeamWeekSheetProps) {
+export function TeamWeekSheet({
+  onOpenRecord,
+  preferManagersFilter = false,
+}: TeamWeekSheetProps) {
   const t = useTranslations("attendanceLeave");
   const tCommon = useTranslations("common");
   const today = calendarDateInOrgTimezone();
   const [focusDate, setFocusDate] = useState(today);
+  const [showAllEmployees, setShowAllEmployees] = useState(false);
   const days = useMemo(() => weekDays(focusDate), [focusDate]);
   const weekStart = days[0]!;
   const weekEnd = days[6]!;
 
+  const managersOnly = preferManagersFilter && !showAllEmployees;
+  const membersRoleScope = managersOnly ? "department_manager" : "all";
+
   const membersQuery = useQuery({
-    queryKey: ["users", "team-week"],
+    queryKey: ["users", "team-week", membersRoleScope],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: "1",
@@ -95,6 +104,9 @@ export function TeamWeekSheet({ onOpenRecord }: TeamWeekSheetProps) {
         sortBy: "fullName",
         sortDir: "asc",
       });
+      if (managersOnly) {
+        params.set("role", "department_manager");
+      }
       const response = await fetch(`/api/users?${params}`);
       return readApi<UsersListResult>(response);
     },
@@ -166,9 +178,22 @@ export function TeamWeekSheet({ onOpenRecord }: TeamWeekSheetProps) {
   return (
     <Card>
       <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2">
-          <List className="size-5 text-muted-foreground" />
-          <CardTitle>{t("weekSheetTitle")}</CardTitle>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <List className="size-5 text-muted-foreground" />
+            <CardTitle>{t("weekSheetTitle")}</CardTitle>
+          </div>
+          {preferManagersFilter ? (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                className="size-4 rounded border"
+                checked={showAllEmployees}
+                onChange={(e) => setShowAllEmployees(e.target.checked)}
+              />
+              {t("showAllEmployees")}
+            </label>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button

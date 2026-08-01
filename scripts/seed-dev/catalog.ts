@@ -29,7 +29,7 @@ export type SeedUserDef = {
 export const SEED_USERS: SeedUserDef[] = [
   {
     employeeNumber: "0000",
-    fullName: "مسؤول النظام",
+    fullName: "المدير العام",
     role: "admin",
     phone: null,
   },

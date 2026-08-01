@@ -9,6 +9,7 @@ export const createDepartmentSchema = z.object({
     .optional()
     .nullable()
     .transform((value) => (value === "" || value === undefined ? null : value)),
+  managerId: z.string().uuid("يجب اختيار مدير للقسم"),
 });
 
 export const updateDepartmentSchema = z
