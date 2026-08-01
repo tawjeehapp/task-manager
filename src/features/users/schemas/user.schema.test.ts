@@ -39,3 +39,24 @@ describe("createUserSchema phone", () => {
     expect(parsed.phone).toBe("0912345678");
   });
 });
+
+describe("createUserSchema weeklyCapacityHours", () => {
+  it("defaults weekly capacity to 40", () => {
+    const parsed = createUserSchema.parse({
+      employeeNumber: "1234",
+      fullName: "موظف تجريبي",
+      role: "employee",
+    });
+    expect(parsed.weeklyCapacityHours).toBe(40);
+  });
+
+  it("accepts custom weekly capacity", () => {
+    const parsed = createUserSchema.parse({
+      employeeNumber: "1234",
+      fullName: "موظف تجريبي",
+      role: "employee",
+      weeklyCapacityHours: 32,
+    });
+    expect(parsed.weeklyCapacityHours).toBe(32);
+  });
+});

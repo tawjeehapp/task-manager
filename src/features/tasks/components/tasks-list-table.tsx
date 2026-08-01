@@ -479,6 +479,7 @@ function TaskInlineFields({
             type="date"
             className="h-8 w-[9.5rem]"
             defaultValue={task.dueDate ?? ""}
+            max={task.project?.endDate}
             disabled={patchMutation.isPending}
             aria-label={t("dueDate")}
             onBlur={(event) => {

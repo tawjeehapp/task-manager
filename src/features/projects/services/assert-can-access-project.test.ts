@@ -33,6 +33,7 @@ const adminUser: AppUser = {
   role: "admin",
   isActive: true,
   mustChangePassword: false,
+  weeklyCapacityHours: 40,
   createdAt: "",
   updatedAt: "",
 };
@@ -48,6 +49,7 @@ const managerUser: AppUser = {
   role: "department_manager",
   isActive: true,
   mustChangePassword: false,
+  weeklyCapacityHours: 40,
   createdAt: "",
   updatedAt: "",
 };

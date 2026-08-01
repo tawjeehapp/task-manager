@@ -14,6 +14,7 @@ export const NOTIFICATION_ENTITY_TYPES = [
   "employee_request",
   "attendance_record",
   "announcement",
+  "project_request",
 ] as const;
 
 export type NotificationEntityType =

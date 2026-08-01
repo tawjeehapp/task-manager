@@ -101,6 +101,9 @@ export async function updateUser(
       ...(input.phone !== undefined ? { phone: input.phone } : {}),
       ...(input.role !== undefined ? { role: input.role } : {}),
       ...(input.isActive !== undefined ? { is_active: input.isActive } : {}),
+      ...(input.weeklyCapacityHours !== undefined
+        ? { weekly_capacity_hours: input.weeklyCapacityHours }
+        : {}),
     })
     .eq("id", id)
     .select("*")

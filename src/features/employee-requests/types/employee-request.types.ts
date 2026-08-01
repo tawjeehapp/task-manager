@@ -14,6 +14,7 @@ export type EmployeeRequest = {
   taskId: string;
   taskTitle: string | null;
   projectId: string | null;
+  projectEndDate: string | null;
   type: EmployeeRequestType;
   reason: string | null;
   requestedDate: string | null;
@@ -53,6 +54,10 @@ export type EmployeeRequestRow = {
     id: string;
     title: string;
     project_id?: string;
+    project?:
+      | { end_date: string }
+      | { end_date: string }[]
+      | null;
   } | null;
 };
 
@@ -75,6 +80,9 @@ function mapUser(
 }
 
 export function mapEmployeeRequestRow(row: EmployeeRequestRow): EmployeeRequest {
+  const projectRel = row.task?.project;
+  const project = Array.isArray(projectRel) ? projectRel[0] : projectRel;
+
   return {
     id: row.id,
     userId: row.user_id,
@@ -82,6 +90,7 @@ export function mapEmployeeRequestRow(row: EmployeeRequestRow): EmployeeRequest 
     taskId: row.task_id,
     taskTitle: row.task?.title ?? null,
     projectId: row.task?.project_id ?? null,
+    projectEndDate: project?.end_date ?? null,
     type: row.type,
     reason: row.reason,
     requestedDate: row.requested_date,

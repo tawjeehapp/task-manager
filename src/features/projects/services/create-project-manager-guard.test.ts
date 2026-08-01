@@ -28,6 +28,7 @@ function makeAdmin(): AppUser {
     role: "admin",
     isActive: true,
     mustChangePassword: false,
+  weeklyCapacityHours: 40,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -64,7 +65,7 @@ describe("createProject manager guard", () => {
         status: "active",
         priority: "medium",
         startDate: null,
-        endDate: null,
+        endDate: "2026-12-31",
         memberIds: [],
       }),
     ).rejects.toMatchObject({

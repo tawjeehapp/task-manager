@@ -169,6 +169,7 @@ export function EmployeeProfileClient({
       fullName: user?.fullName ?? "",
       phone: user?.phone ?? "",
       role: user?.role ?? "employee",
+      weeklyCapacityHours: user?.weeklyCapacityHours ?? 40,
     },
   });
 
@@ -480,6 +481,12 @@ export function EmployeeProfileClient({
           <dd className="font-medium sm:text-end">{user.phone ?? "—"}</dd>
         </div>
         <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+          <dt className="text-muted-foreground text-sm">
+            {t("weeklyCapacityHours")}
+          </dt>
+          <dd className="font-medium sm:text-end">{user.weeklyCapacityHours}</dd>
+        </div>
+        <div className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
           <dt className="text-muted-foreground text-sm">{t("department")}</dt>
           <dd className="font-medium sm:text-end">
             {user.currentDepartment?.name ?? t("noDepartment")}
@@ -607,6 +614,7 @@ export function EmployeeProfileClient({
                 const body: Record<string, unknown> = {
                   fullName: values.fullName,
                   phone: values.phone,
+                  weeklyCapacityHours: values.weeklyCapacityHours,
                 };
                 if (!isSelf) {
                   body.role = values.role;
@@ -635,6 +643,25 @@ export function EmployeeProfileClient({
                 maxLength={10}
                 {...editForm.register("phone")}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-weeklyCapacityHours">
+                {t("weeklyCapacityHours")}
+              </Label>
+              <Input
+                id="edit-weeklyCapacityHours"
+                type="number"
+                inputMode="decimal"
+                min={0.5}
+                max={80}
+                step={0.5}
+                {...editForm.register("weeklyCapacityHours", {
+                  valueAsNumber: true,
+                })}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("weeklyCapacityHint")}
+              </p>
             </div>
             {!isSelf ? (
               <div className="space-y-2">

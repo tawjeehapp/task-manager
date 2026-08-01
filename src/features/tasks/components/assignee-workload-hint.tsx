@@ -53,9 +53,14 @@ export function AssigneeWorkloadHint({
 
   return (
     <p className={className ?? "text-muted-foreground text-xs"}>
-      {t("workloadActiveTasks", { count: query.data.activeTaskCount })}
+      {t("workloadCapacityPercent", {
+        percent: Math.round(query.data.capacityPercent),
+      })}
       {" · "}
-      {t("workloadEstimatedHours", { hours: query.data.estimatedHours })}
+      {t("workloadLoadAvailable", {
+        load: query.data.estimatedHours,
+        available: query.data.availableHours,
+      })}
     </p>
   );
 }

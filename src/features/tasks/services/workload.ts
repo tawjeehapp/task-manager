@@ -5,33 +5,35 @@ import type { AppUser } from "@/lib/auth/types";
 import { getPermissionsForRole } from "@/lib/permissions/get-role-permissions";
 import { hasPermission, PERMISSIONS } from "@/lib/permissions";
 import {
-  ACTIVE_TASK_STATUSES,
+  CAPACITY_LOAD_STATUSES,
   type EmployeeWorkload,
   type TaskStatus,
 } from "@/features/tasks/types/task.types";
+import {
+  computeEmployeeCapacity,
+  countApprovedLeaveDaysInRange,
+} from "@/features/tasks/services/capacity";
+import {
+  currentWeekBounds,
+  todayInOrgTimezone,
+} from "@/lib/org-calendar";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-/** Pure workload calculation from assigned task rows. */
+/** Pure workload/capacity calculation from assigned task rows. */
 export function computeEmployeeWorkload(
   userId: string,
   tasks: Array<{ status: TaskStatus | string; estimatedHours: number }>,
+  options?: {
+    weeklyCapacityHours?: number;
+    leaveDaysInWeek?: number;
+  },
 ): EmployeeWorkload {
-  let activeTaskCount = 0;
-  let estimatedHours = 0;
-
-  for (const task of tasks) {
-    if (!ACTIVE_TASK_STATUSES.includes(task.status as TaskStatus)) {
-      continue;
-    }
-    activeTaskCount += 1;
-    estimatedHours += task.estimatedHours;
-  }
-
-  return {
+  return computeEmployeeCapacity({
     userId,
-    activeTaskCount,
-    estimatedHours,
-  };
+    weeklyCapacityHours: options?.weeklyCapacityHours ?? 40,
+    leaveDaysInWeek: options?.leaveDaysInWeek ?? 0,
+    tasks,
+  });
 }
 
 export async function getEmployeeWorkload(
@@ -54,10 +56,12 @@ export async function getEmployeeWorkload(
   }
 
   const admin = createAdminClient();
+  const today = todayInOrgTimezone();
+  const { start: weekStart, end: weekEnd } = currentWeekBounds(today);
 
   const { data: user, error: userError } = await admin
     .from("users")
-    .select("id")
+    .select("id, weekly_capacity_hours")
     .eq("id", userId)
     .maybeSingle();
 
@@ -73,13 +77,32 @@ export async function getEmployeeWorkload(
     throw new ApiError("المستخدم غير موجود.", 404, "USER_NOT_FOUND");
   }
 
-  const { data, error } = await admin
-    .from("tasks")
-    .select("status, estimated_hours")
-    .eq("assigned_to", userId)
-    .in("status", [...ACTIVE_TASK_STATUSES]);
+  const rawCapacity = user.weekly_capacity_hours;
+  const capacityNum =
+    rawCapacity === null || rawCapacity === undefined
+      ? 40
+      : typeof rawCapacity === "number"
+        ? rawCapacity
+        : Number(rawCapacity);
+  const weeklyCapacityHours =
+    Number.isFinite(capacityNum) && capacityNum > 0 ? capacityNum : 40;
 
-  if (error) {
+  const [tasksRes, leaveRes] = await Promise.all([
+    admin
+      .from("tasks")
+      .select("status, estimated_hours")
+      .eq("assigned_to", userId)
+      .in("status", [...CAPACITY_LOAD_STATUSES]),
+    admin
+      .from("leave_requests")
+      .select("start_date, end_date")
+      .eq("user_id", userId)
+      .eq("status", "approved")
+      .lte("start_date", weekEnd)
+      .gte("end_date", weekStart),
+  ]);
+
+  if (tasksRes.error) {
     throw new ApiError(
       "تعذر جلب عبء العمل.",
       500,
@@ -87,7 +110,15 @@ export async function getEmployeeWorkload(
     );
   }
 
-  const tasks = (data ?? []).map((row) => {
+  if (leaveRes.error) {
+    throw new ApiError(
+      "تعذر جلب عبء العمل.",
+      500,
+      "WORKLOAD_LOOKUP_FAILED",
+    );
+  }
+
+  const tasks = (tasksRes.data ?? []).map((row) => {
     const raw = row.estimated_hours;
     const n =
       raw === null || raw === undefined
@@ -101,5 +132,17 @@ export async function getEmployeeWorkload(
     };
   });
 
-  return computeEmployeeWorkload(userId, tasks);
+  const leaveDaysInWeek = countApprovedLeaveDaysInRange(
+    weekStart,
+    weekEnd,
+    (leaveRes.data ?? []).map((row) => ({
+      startDate: row.start_date as string,
+      endDate: row.end_date as string,
+    })),
+  );
+
+  return computeEmployeeWorkload(userId, tasks, {
+    weeklyCapacityHours,
+    leaveDaysInWeek,
+  });
 }

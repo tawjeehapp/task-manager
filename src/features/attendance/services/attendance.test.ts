@@ -64,6 +64,7 @@ function makeUser(overrides: Partial<AppUser> = {}): AppUser {
     role: "employee",
     isActive: true,
     mustChangePassword: false,
+  weeklyCapacityHours: 40,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,

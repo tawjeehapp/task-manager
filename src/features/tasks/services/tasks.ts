@@ -51,6 +51,7 @@ type TaskWithRelations = TaskRow & {
     id: string;
     name: string;
     department_id: string;
+    end_date: string;
   } | null;
   assignee: {
     id: string;
@@ -65,7 +66,7 @@ type TaskWithRelations = TaskRow & {
 };
 
 const TASK_SELECT =
-  "id, project_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number)";
+  "id, project_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id, end_date), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number)";
 
 const SORT_COLUMN_MAP: Record<ListTasksQuery["sortBy"], string> = {
   title: "title",
@@ -104,6 +105,7 @@ function mapProject(
     id: row.id,
     name: row.name,
     departmentId: row.department_id,
+    endDate: String(row.end_date).slice(0, 10),
   };
 }
 
@@ -269,6 +271,22 @@ async function assertCanMutateTask(
   }
 }
 
+function assertTaskDueWithinProjectEnd(
+  dueDate: string | null | undefined,
+  projectEndDate: string,
+): void {
+  if (dueDate == null || dueDate === "") {
+    return;
+  }
+  if (dueDate > projectEndDate) {
+    throw new ApiError(
+      "تاريخ استحقاق المهمة لا يمكن أن يتجاوز تاريخ انتهاء المشروع.",
+      400,
+      "TASK_DUE_AFTER_PROJECT_END",
+    );
+  }
+}
+
 async function loadTaskById(id: string): Promise<Task> {
   const admin = createAdminClient();
   const { data, error } = await admin
@@ -348,7 +366,7 @@ export async function createTask(
 
   const { data: project, error: projectError } = await admin
     .from("projects")
-    .select("id, status")
+    .select("id, status, end_date")
     .eq("id", input.projectId)
     .maybeSingle();
 
@@ -363,6 +381,11 @@ export async function createTask(
       "PROJECT_ARCHIVED",
     );
   }
+
+  assertTaskDueWithinProjectEnd(
+    input.dueDate ?? null,
+    project.end_date as string,
+  );
 
   await assertAssigneeAllowed(
     input.projectId,
@@ -437,6 +460,13 @@ export async function createTask(
     .single();
 
   if (error || !data) {
+    if (error?.message?.includes("TASK_DUE_AFTER_PROJECT_END")) {
+      throw new ApiError(
+        "تاريخ استحقاق المهمة لا يمكن أن يتجاوز تاريخ انتهاء المشروع.",
+        400,
+        "TASK_DUE_AFTER_PROJECT_END",
+      );
+    }
     throw new ApiError("تعذر إنشاء المهمة.", 500, "CREATE_TASK_FAILED");
   }
 
@@ -525,13 +555,26 @@ export async function updateTask(
   const { data: existing, error: existingError } = await admin
     .from("tasks")
     .select(
-      "status, assigned_to, title, description, priority, start_date, due_date, estimated_hours",
+      "status, assigned_to, title, description, priority, start_date, due_date, estimated_hours, project_id, project:projects!project_id(end_date)",
     )
     .eq("id", taskId)
     .maybeSingle();
 
   if (existingError || !existing) {
     throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+  }
+
+  if (input.dueDate !== undefined) {
+    const projectRel = existing.project as
+      | { end_date: string }
+      | { end_date: string }[]
+      | null;
+    const project = Array.isArray(projectRel) ? projectRel[0] : projectRel;
+    const projectEnd = project?.end_date;
+    if (!projectEnd) {
+      throw new ApiError("المشروع غير موجود.", 404, "PROJECT_NOT_FOUND");
+    }
+    assertTaskDueWithinProjectEnd(input.dueDate, projectEnd);
   }
 
   await ensureBlockedWhenDependenciesIncomplete(taskId, viewer.id);
@@ -590,6 +633,13 @@ export async function updateTask(
   const { error } = await admin.from("tasks").update(patch).eq("id", taskId);
 
   if (error) {
+    if (error.message?.includes("TASK_DUE_AFTER_PROJECT_END")) {
+      throw new ApiError(
+        "تاريخ استحقاق المهمة لا يمكن أن يتجاوز تاريخ انتهاء المشروع.",
+        400,
+        "TASK_DUE_AFTER_PROJECT_END",
+      );
+    }
     throw new ApiError("تعذر تحديث المهمة.", 500, "UPDATE_TASK_FAILED");
   }
 

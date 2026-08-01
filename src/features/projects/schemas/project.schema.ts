@@ -9,28 +9,42 @@ export const projectStatusSchema = z.enum([
 
 export const projectPrioritySchema = z.enum(["low", "medium", "high"]);
 
-export const createProjectSchema = z.object({
-  departmentId: z.string().uuid("معرّف القسم غير صالح"),
-  name: z.string().min(2, "اسم المشروع مطلوب"),
-  description: z
-    .string()
-    .optional()
-    .nullable()
-    .transform((value) => (value === "" || value === undefined ? null : value)),
-  status: projectStatusSchema.optional().default("draft"),
-  priority: projectPrioritySchema.optional().default("medium"),
-  startDate: z
-    .string()
-    .optional()
-    .nullable()
-    .transform((value) => (value === "" || value === undefined ? null : value)),
-  endDate: z
-    .string()
-    .optional()
-    .nullable()
-    .transform((value) => (value === "" || value === undefined ? null : value)),
-  memberIds: z.array(z.string().uuid()).optional().default([]),
-});
+const requiredDateSchema = z
+  .string({ error: () => "تاريخ انتهاء المشروع مطلوب" })
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ انتهاء المشروع غير صالح");
+
+const optionalNullableDate = z
+  .string()
+  .optional()
+  .nullable()
+  .transform((value) => (value === "" || value === undefined ? null : value));
+
+export const createProjectSchema = z
+  .object({
+    departmentId: z.string().uuid("معرّف القسم غير صالح"),
+    name: z.string().min(2, "اسم المشروع مطلوب"),
+    description: z
+      .string()
+      .optional()
+      .nullable()
+      .transform((value) =>
+        value === "" || value === undefined ? null : value,
+      ),
+    status: projectStatusSchema.optional().default("draft"),
+    priority: projectPrioritySchema.optional().default("medium"),
+    startDate: optionalNullableDate,
+    endDate: requiredDateSchema,
+    memberIds: z.array(z.string().uuid()).optional().default([]),
+  })
+  .refine(
+    (data) =>
+      data.startDate == null ||
+      data.endDate >= data.startDate,
+    {
+      message: "تاريخ الانتهاء يجب أن يكون بعد أو يساوي تاريخ البداية",
+      path: ["endDate"],
+    },
+  );
 
 export const updateProjectSchema = z
   .object({
@@ -57,16 +71,7 @@ export const updateProjectSchema = z
         }
         return value === "" ? null : value;
       }),
-    endDate: z
-      .string()
-      .nullable()
-      .optional()
-      .transform((value) => {
-        if (value === undefined) {
-          return undefined;
-        }
-        return value === "" ? null : value;
-      }),
+    endDate: requiredDateSchema.optional(),
   })
   .refine(
     (data) =>
@@ -77,6 +82,18 @@ export const updateProjectSchema = z
       data.startDate !== undefined ||
       data.endDate !== undefined,
     { message: "لا توجد بيانات للتحديث" },
+  )
+  .refine(
+    (data) => {
+      if (data.startDate == null || data.endDate === undefined) {
+        return true;
+      }
+      return data.endDate >= data.startDate;
+    },
+    {
+      message: "تاريخ الانتهاء يجب أن يكون بعد أو يساوي تاريخ البداية",
+      path: ["endDate"],
+    },
   );
 
 export const listProjectsQuerySchema = z.object({

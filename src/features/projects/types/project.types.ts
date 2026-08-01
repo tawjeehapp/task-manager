@@ -22,7 +22,7 @@ export type Project = {
   status: ProjectStatus;
   priority: ProjectPriority;
   startDate: string | null;
-  endDate: string | null;
+  endDate: string;
   createdBy: string;
   createdByUser: ProjectUserSummary | null;
   memberCount: number;
@@ -55,7 +55,7 @@ export type ProjectRow = {
   status: ProjectStatus;
   priority: ProjectPriority;
   start_date: string | null;
-  end_date: string | null;
+  end_date: string;
   created_by: string;
   created_at: string;
   updated_at: string;

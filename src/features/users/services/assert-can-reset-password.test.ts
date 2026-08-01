@@ -31,6 +31,7 @@ function makeUser(overrides: Partial<AppUser>): AppUser {
     role: "employee",
     isActive: true,
     mustChangePassword: false,
+  weeklyCapacityHours: 40,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...overrides,
@@ -49,6 +50,7 @@ function mockTargetUser(target: Partial<AppUser> & { id: string }) {
     role: target.role ?? "employee",
     is_active: target.isActive ?? true,
     must_change_password: false,
+    weekly_capacity_hours: target.weeklyCapacityHours ?? 40,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };

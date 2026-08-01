@@ -55,6 +55,11 @@ function emptyLeadershipBase(today: string): LeadershipDashboardBase {
       blockedCount: 0,
       completedCount: 0,
       overdueCount: 0,
+      dueTodayCount: 0,
+      todoTiming: { overdue: 0, dueToday: 0 },
+      inProgressTiming: { overdue: 0, dueToday: 0 },
+      blockedTiming: { overdue: 0, dueToday: 0 },
+      completedTiming: { overdue: 0, dueToday: 0 },
       weekHours: 0,
       weekHoursApproved: 0,
       weekHoursPending: 0,
@@ -195,7 +200,7 @@ async function buildLeadershipDashboard(input: {
       ? Promise.resolve({ data: [] as unknown[], error: null })
       : admin
           .from("users")
-          .select("id, full_name, employee_number, avatar_url")
+          .select("id, full_name, employee_number, avatar_url, weekly_capacity_hours")
           .in("id", userIds)
           .eq("is_active", true)
           .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER);
@@ -230,12 +235,31 @@ async function buildLeadershipDashboard(input: {
           .gte("date", weekStart)
           .lte("date", weekEnd);
 
-  const [usersRes, projectsRes, tasksRes, attendanceRes, membershipsRes, pending] =
-    await Promise.all([
+  const leavePromise =
+    userIds.length === 0
+      ? Promise.resolve({ data: [] as unknown[], error: null })
+      : admin
+          .from("leave_requests")
+          .select("user_id, start_date, end_date")
+          .in("user_id", userIds)
+          .eq("status", "approved")
+          .lte("start_date", weekEnd)
+          .gte("end_date", weekStart);
+
+  const [
+    usersRes,
+    projectsRes,
+    tasksRes,
+    attendanceRes,
+    leaveRes,
+    membershipsRes,
+    pending,
+  ] = await Promise.all([
       usersPromise,
       projectsPromise,
       tasksPromise,
       attendancePromise,
+      leavePromise,
       userIds.length === 0
         ? Promise.resolve({ data: [] as unknown[], error: null })
         : admin
@@ -253,6 +277,7 @@ async function buildLeadershipDashboard(input: {
     projectsRes.error ||
     tasksRes.error ||
     attendanceRes.error ||
+    leaveRes.error ||
     membershipsRes.error
   ) {
     throw new ApiError(
@@ -291,8 +316,16 @@ async function buildLeadershipDashboard(input: {
       full_name: string;
       employee_number: string;
       avatar_url: string | null;
+      weekly_capacity_hours: number | string | null;
     };
     const dept = departmentByUser.get(r.id);
+    const rawCapacity = r.weekly_capacity_hours;
+    const capacityNum =
+      rawCapacity === null || rawCapacity === undefined
+        ? 40
+        : typeof rawCapacity === "number"
+          ? rawCapacity
+          : Number(rawCapacity);
     return {
       userId: r.id,
       fullName: r.full_name,
@@ -300,6 +333,8 @@ async function buildLeadershipDashboard(input: {
       avatarUrl: r.avatar_url,
       departmentId: dept?.departmentId ?? null,
       departmentName: dept?.departmentName || null,
+      weeklyCapacityHours:
+        Number.isFinite(capacityNum) && capacityNum > 0 ? capacityNum : 40,
     };
   });
 
@@ -368,6 +403,19 @@ async function buildLeadershipDashboard(input: {
     };
   });
 
+  const approvedLeave = (leaveRes.data ?? []).map((row) => {
+    const r = row as {
+      user_id: string;
+      start_date: string;
+      end_date: string;
+    };
+    return {
+      userId: r.user_id,
+      startDate: r.start_date,
+      endDate: r.end_date,
+    };
+  });
+
   const aggregated = aggregateLeadershipFromRows({
     today,
     weekStart,
@@ -376,6 +424,7 @@ async function buildLeadershipDashboard(input: {
     projects,
     tasks,
     attendance,
+    approvedLeave,
   });
 
   return {

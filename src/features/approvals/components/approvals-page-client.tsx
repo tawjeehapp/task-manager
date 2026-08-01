@@ -3,13 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { CalendarDays, Clock3, ClipboardList } from "lucide-react";
+import { CalendarDays, Clock3, ClipboardList, FolderKanban } from "lucide-react";
 
 import { AttendanceReviewDialog } from "@/features/attendance/components/attendance-review-dialog";
 import { summarizeAllocations } from "@/features/attendance/components/attendance-display-utils";
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import type { ProjectMember } from "@/features/projects/types/project.types";
 import type { EmployeeRequest } from "@/features/employee-requests/types/employee-request.types";
+import type { ProjectRequest } from "@/features/project-requests/types/project-request.types";
 import type { LeaveRequest } from "@/features/leave/types/leave.types";
 import { formatDate } from "@/lib/dates";
 import { PageHeader } from "@/components/shared/page-header";
@@ -48,6 +49,7 @@ type ApprovalsPageClientProps = {
   canApproveLeave: boolean;
   canApproveEmployeeRequest: boolean;
   canApproveAttendance: boolean;
+  canApproveProjectRequest: boolean;
 };
 
 type ListResult<T> = {
@@ -61,7 +63,8 @@ type ListResult<T> = {
 type RejectTarget =
   | { kind: "leave"; id: string }
   | { kind: "employee"; id: string }
-  | { kind: "attendance"; id: string };
+  | { kind: "attendance"; id: string }
+  | { kind: "project"; id: string };
 
 async function readApi<T>(response: Response): Promise<T> {
   const payload = (await response.json()) as {
@@ -79,6 +82,7 @@ export function ApprovalsPageClient({
   canApproveLeave,
   canApproveEmployeeRequest,
   canApproveAttendance,
+  canApproveProjectRequest,
 }: ApprovalsPageClientProps) {
   const t = useTranslations("approvals");
   const tAttendance = useTranslations("attendance");
@@ -157,6 +161,21 @@ export function ApprovalsPageClient({
     },
   });
 
+  const projectExtensionsQuery = useQuery({
+    queryKey: ["approvals-project-extensions"],
+    enabled: canApproveProjectRequest,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "50",
+        status: "pending",
+        type: "extension",
+      });
+      const response = await fetch(`/api/project-requests?${params}`);
+      return readApi<ListResult<ProjectRequest>>(response);
+    },
+  });
+
   const attendanceItems = useMemo(
     () =>
       (attendanceQuery.data?.items ?? []).filter(
@@ -173,10 +192,13 @@ export function ApprovalsPageClient({
     );
   }, [extensionsQuery.data, excusalsQuery.data]);
 
+  const projectItems = projectExtensionsQuery.data?.items ?? [];
+
   const totalPending =
     (canApproveLeave ? (leaveQuery.data?.total ?? 0) : 0) +
     (canApproveAttendance ? attendanceItems.length : 0) +
-    (canApproveEmployeeRequest ? taskItems.length : 0);
+    (canApproveEmployeeRequest ? taskItems.length : 0) +
+    (canApproveProjectRequest ? projectItems.length : 0);
 
   const projectMembersQuery = useQuery({
     queryKey: ["project-members", excusalTarget?.projectId],
@@ -254,6 +276,25 @@ export function ApprovalsPageClient({
     onError: (error: Error) => setActionError(error.message),
   });
 
+  const approveProjectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/project-requests/${id}/approve`, {
+        method: "POST",
+      });
+      return readApi(response);
+    },
+    onSuccess: async () => {
+      setSuccessMessage(t("approveSuccess"));
+      setActionError(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["approvals-project-extensions"],
+      });
+      await queryClient.invalidateQueries({ queryKey: ["approvals-extensions"] });
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (error: Error) => setActionError(error.message),
+  });
+
   const rejectMutation = useMutation({
     mutationFn: async () => {
       if (!rejectTarget) return;
@@ -262,7 +303,9 @@ export function ApprovalsPageClient({
           ? `/api/leave-requests/${rejectTarget.id}/reject`
           : rejectTarget.kind === "attendance"
             ? `/api/attendance/${rejectTarget.id}/reject`
-            : `/api/employee-requests/${rejectTarget.id}/reject`;
+            : rejectTarget.kind === "project"
+              ? `/api/project-requests/${rejectTarget.id}/reject`
+              : `/api/employee-requests/${rejectTarget.id}/reject`;
       const response = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -280,8 +323,12 @@ export function ApprovalsPageClient({
       await queryClient.invalidateQueries({ queryKey: ["approvals-attendance"] });
       await queryClient.invalidateQueries({ queryKey: ["approvals-extensions"] });
       await queryClient.invalidateQueries({ queryKey: ["approvals-excusals"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["approvals-project-extensions"],
+      });
       await queryClient.invalidateQueries({ queryKey: ["leave-requests"] });
       await queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
     onError: (error: Error) => setActionError(error.message),
   });
@@ -353,7 +400,14 @@ export function ApprovalsPageClient({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {taskItems.map((row) => (
+                    {taskItems.map((row) => {
+                      const blockedByProjectEnd =
+                        row.type === "extension" &&
+                        Boolean(row.requestedDate) &&
+                        Boolean(row.projectEndDate) &&
+                        (row.requestedDate as string) >
+                          (row.projectEndDate as string);
+                      return (
                       <TableRow key={row.id}>
                         <TableCell>{row.user?.fullName ?? "—"}</TableCell>
                         <TableCell>{row.taskTitle ?? "—"}</TableCell>
@@ -362,11 +416,33 @@ export function ApprovalsPageClient({
                             ? formatDate(row.requestedDate)
                             : "—"}
                         </TableCell>
-                        <TableCell>{row.reason ?? "—"}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <span>{row.reason ?? "—"}</span>
+                            {blockedByProjectEnd ? (
+                              <p className="text-xs text-amber-700 dark:text-amber-400">
+                                {t("extensionNeedsProjectEnd", {
+                                  date: formatDate(row.projectEndDate!),
+                                })}
+                              </p>
+                            ) : null}
+                          </div>
+                        </TableCell>
                         <TableCell className="space-x-2 space-x-reverse">
                           <Button
                             type="button"
                             size="sm"
+                            disabled={
+                              blockedByProjectEnd ||
+                              approveEmployeeMutation.isPending
+                            }
+                            title={
+                              blockedByProjectEnd
+                                ? t("extensionNeedsProjectEnd", {
+                                    date: formatDate(row.projectEndDate!),
+                                  })
+                                : undefined
+                            }
                             onClick={() => {
                               if (row.type === "excusal") {
                                 setExcusalAssigneeId("");
@@ -384,6 +460,88 @@ export function ApprovalsPageClient({
                             variant="destructive"
                             onClick={() =>
                               setRejectTarget({ kind: "employee", id: row.id })
+                            }
+                          >
+                            {t("reject")}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {canApproveProjectRequest ? (
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <FolderKanban className="mt-0.5 size-5 text-muted-foreground" />
+                <div>
+                  <CardTitle>{t("cardProjectExtensions")}</CardTitle>
+                  <CardDescription>
+                    {t("requestCount", { count: projectItems.length })}
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {projectExtensionsQuery.isLoading ? <LoadingState /> : null}
+              {projectExtensionsQuery.isError ? (
+                <ErrorState
+                  title={tCommon("errorTitle")}
+                  onRetry={() => void projectExtensionsQuery.refetch()}
+                />
+              ) : null}
+              {!projectExtensionsQuery.isLoading &&
+              !projectExtensionsQuery.isError &&
+              projectItems.length === 0 ? (
+                <EmptyState title={t("cardProjectExtensionsEmpty")} />
+              ) : null}
+              {projectItems.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("requester")}</TableHead>
+                      <TableHead>{t("project")}</TableHead>
+                      <TableHead>{t("currentEndDate")}</TableHead>
+                      <TableHead>{t("requestedDate")}</TableHead>
+                      <TableHead>{t("reason")}</TableHead>
+                      <TableHead>{t("actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {projectItems.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>{row.user?.fullName ?? "—"}</TableCell>
+                        <TableCell>{row.projectName ?? "—"}</TableCell>
+                        <TableCell>
+                          {row.projectEndDate
+                            ? formatDate(row.projectEndDate)
+                            : "—"}
+                        </TableCell>
+                        <TableCell>{formatDate(row.requestedDate)}</TableCell>
+                        <TableCell>{row.reason ?? "—"}</TableCell>
+                        <TableCell className="space-x-2 space-x-reverse">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={approveProjectMutation.isPending}
+                            onClick={() =>
+                              approveProjectMutation.mutate(row.id)
+                            }
+                          >
+                            {t("approve")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            onClick={() =>
+                              setRejectTarget({ kind: "project", id: row.id })
                             }
                           >
                             {t("reject")}

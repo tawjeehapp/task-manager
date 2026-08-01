@@ -277,6 +277,61 @@ export async function updateProject(
   await assertCanManageProject(viewer, projectId);
 
   const admin = createAdminClient();
+
+  if (input.endDate !== undefined || input.startDate !== undefined) {
+    const { data: existing, error: existingError } = await admin
+      .from("projects")
+      .select("start_date, end_date")
+      .eq("id", projectId)
+      .maybeSingle();
+
+    if (existingError || !existing) {
+      throw new ApiError("المشروع غير موجود.", 404, "PROJECT_NOT_FOUND");
+    }
+
+    const nextStart =
+      input.startDate !== undefined
+        ? input.startDate
+        : (existing.start_date as string | null);
+    const nextEnd =
+      input.endDate !== undefined
+        ? input.endDate
+        : (existing.end_date as string);
+
+    if (nextStart != null && nextEnd < nextStart) {
+      throw new ApiError(
+        "تاريخ الانتهاء يجب أن يكون بعد أو يساوي تاريخ البداية.",
+        400,
+        "INVALID_PROJECT_DATES",
+      );
+    }
+
+    if (input.endDate !== undefined && input.endDate !== existing.end_date) {
+      const { count, error: conflictError } = await admin
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("project_id", projectId)
+        .not("due_date", "is", null)
+        .gt("due_date", input.endDate);
+
+      if (conflictError) {
+        throw new ApiError(
+          "تعذر التحقق من مواعيد المهام.",
+          500,
+          "PROJECT_TASK_DUE_CHECK_FAILED",
+        );
+      }
+
+      if ((count ?? 0) > 0) {
+        throw new ApiError(
+          "لا يمكن تقديم تاريخ انتهاء المشروع قبل مواعيد استحقاق المهام الحالية.",
+          409,
+          "PROJECT_END_BEFORE_TASK_DUE",
+        );
+      }
+    }
+  }
+
   const patch: Record<string, unknown> = {};
 
   if (input.name !== undefined) {
@@ -304,6 +359,13 @@ export async function updateProject(
     .eq("id", projectId);
 
   if (error) {
+    if (error.message?.includes("PROJECT_END_BEFORE_TASK_DUE")) {
+      throw new ApiError(
+        "لا يمكن تقديم تاريخ انتهاء المشروع قبل مواعيد استحقاق المهام الحالية.",
+        409,
+        "PROJECT_END_BEFORE_TASK_DUE",
+      );
+    }
     throw new ApiError("تعذر تحديث المشروع.", 500, "UPDATE_PROJECT_FAILED");
   }
 

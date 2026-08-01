@@ -11,6 +11,7 @@ export type AppUser = {
   role: Role;
   isActive: boolean;
   mustChangePassword: boolean;
+  weeklyCapacityHours: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -34,9 +35,20 @@ export type UserRow = {
   role: Role;
   is_active: boolean;
   must_change_password: boolean;
+  weekly_capacity_hours: number | string;
   created_at: string;
   updated_at: string;
 };
+
+function toWeeklyCapacityHours(raw: number | string | null | undefined): number {
+  const n =
+    raw === null || raw === undefined
+      ? 40
+      : typeof raw === "number"
+        ? raw
+        : Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : 40;
+}
 
 export function mapUserRow(row: UserRow): AppUser {
   return {
@@ -50,6 +62,7 @@ export function mapUserRow(row: UserRow): AppUser {
     role: row.role,
     isActive: row.is_active,
     mustChangePassword: row.must_change_password,
+    weeklyCapacityHours: toWeeklyCapacityHours(row.weekly_capacity_hours),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

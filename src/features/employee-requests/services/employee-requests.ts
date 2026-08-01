@@ -28,7 +28,7 @@ import type { AppUser } from "@/lib/auth/types";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const SELECT =
-  "id, user_id, task_id, type, reason, requested_date, status, reviewed_by, reviewed_at, rejection_reason, created_at, updated_at, user:users!user_id(id, full_name, employee_number), reviewed_by_user:users!reviewed_by(id, full_name, employee_number), task:tasks!task_id(id, title, project_id)";
+  "id, user_id, task_id, type, reason, requested_date, status, reviewed_by, reviewed_at, rejection_reason, created_at, updated_at, user:users!user_id(id, full_name, employee_number), reviewed_by_user:users!reviewed_by(id, full_name, employee_number), task:tasks!task_id(id, title, project_id, project:projects!project_id(end_date))";
 
 export type EmployeeRequestListResult = {
   items: EmployeeRequest[];
@@ -60,6 +60,12 @@ function mapRpcError(message: string | undefined): ApiError {
         "تاريخ التمديد مطلوب.",
         400,
         "EXTENSION_DATE_REQUIRED",
+      );
+    case "TASK_DUE_AFTER_PROJECT_END":
+      return new ApiError(
+        "لا يمكن اعتماد التمديد قبل تمديد تاريخ انتهاء المشروع ليغطي الموعد المطلوب.",
+        409,
+        "TASK_DUE_AFTER_PROJECT_END",
       );
     default:
       return new ApiError(
@@ -300,6 +306,40 @@ async function validateExtensionDateForTask(
   }
 }
 
+/** Approvals require the project end date to already cover the requested due date. */
+async function assertExtensionFitsProjectEnd(
+  taskId: string,
+  requestedDate: string,
+): Promise<void> {
+  const admin = createAdminClient();
+  const { data: task, error: taskError } = await admin
+    .from("tasks")
+    .select("project:projects!project_id(end_date)")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (taskError) {
+    throw new ApiError("تعذر التحقق من المهمة.", 500, "TASK_LOOKUP_FAILED");
+  }
+  if (!task) {
+    throw new ApiError("المهمة غير موجودة.", 404, "TASK_NOT_FOUND");
+  }
+
+  const projectRel = task.project as
+    | { end_date: string }
+    | { end_date: string }[]
+    | null;
+  const project = Array.isArray(projectRel) ? projectRel[0] : projectRel;
+  const projectEnd = project?.end_date as string | undefined;
+  if (projectEnd && requestedDate > projectEnd) {
+    throw new ApiError(
+      "لا يمكن اعتماد التمديد قبل تمديد تاريخ انتهاء المشروع ليغطي الموعد المطلوب.",
+      409,
+      "TASK_DUE_AFTER_PROJECT_END",
+    );
+  }
+}
+
 export async function updateEmployeeRequest(
   actor: AppUser,
   id: string,
@@ -408,6 +448,13 @@ export async function approveEmployeeRequest(
       "يمكن اعتماد الطلبات المعلقة فقط.",
       409,
       "EMPLOYEE_REQUEST_NOT_PENDING",
+    );
+  }
+
+  if (existing.type === "extension" && existing.requested_date) {
+    await assertExtensionFitsProjectEnd(
+      existing.task_id,
+      existing.requested_date,
     );
   }
 

@@ -55,6 +55,7 @@ describe("createUser compensating transaction", () => {
         fullName: "Test User",
         phone: null,
         role: "employee",
+        weeklyCapacityHours: 40,
       }),
     ).rejects.toThrow();
 

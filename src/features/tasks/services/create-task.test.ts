@@ -37,6 +37,7 @@ const manager: AppUser = {
   role: "department_manager",
   isActive: true,
   mustChangePassword: false,
+  weeklyCapacityHours: 40,
   createdAt: "",
   updatedAt: "",
 };
@@ -78,7 +79,7 @@ const createdRow = {
   completed_at: null,
   created_at: "2026-07-31T00:00:00.000Z",
   updated_at: "2026-07-31T00:00:00.000Z",
-  project: { id: "proj-1", name: "Project", department_id: "dept-1" },
+  project: { id: "proj-1", name: "Project", department_id: "dept-1", end_date: "2026-12-31" },
   assignee: null,
   created_by_user: {
     id: "mgr-1",
@@ -146,6 +147,7 @@ describe("createTask", () => {
                 id: "proj-1",
                 department_id: "dept-1",
                 status: "active",
+                end_date: "2026-12-31",
               },
               error: null,
             });

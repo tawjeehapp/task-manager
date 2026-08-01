@@ -85,6 +85,11 @@ export type LeadershipTodayStatus = "missing" | "working" | "recorded";
 
 export type LeadershipProjectHealth = "on_track" | "overdue";
 
+export type LeadershipStatusTiming = {
+  overdue: number;
+  dueToday: number;
+};
+
 export type LeadershipMetrics = {
   activeProjectsCount: number;
   avgProgressPercent: number;
@@ -93,6 +98,11 @@ export type LeadershipMetrics = {
   blockedCount: number;
   completedCount: number;
   overdueCount: number;
+  dueTodayCount: number;
+  todoTiming: LeadershipStatusTiming;
+  inProgressTiming: LeadershipStatusTiming;
+  blockedTiming: LeadershipStatusTiming;
+  completedTiming: LeadershipStatusTiming;
   weekHours: number;
   weekHoursApproved: number;
   weekHoursPending: number;
@@ -126,8 +136,13 @@ export type LeadershipTeamRow = {
   openTaskCount: number;
   todoCount: number;
   inProgressCount: number;
+  blockedCount: number;
+  completedCount: number;
   overdueCount: number;
   dueTodayCount: number;
+  loadHours: number;
+  availableHours: number;
+  capacityPercent: number;
   weekHours: number;
   weekHoursApproved: number;
   weekHoursPending: number;
@@ -142,9 +157,12 @@ export type LeadershipProjectRow = {
   departmentId: string | null;
   departmentName: string | null;
   progressPercent: number;
+  todoCount: number;
   inProgressCount: number;
+  blockedCount: number;
+  completedCount: number;
   overdueCount: number;
-  estimatedHoursSum: number;
+  dueTodayCount: number;
   nearestDueDate: string | null;
   health: LeadershipProjectHealth;
   href: string;

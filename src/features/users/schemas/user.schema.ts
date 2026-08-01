@@ -23,11 +23,19 @@ const optionalPhoneSchema = z
   .nullable()
   .transform((value) => (value === "" || value === undefined ? null : value));
 
+/** Weekly capacity in hours (Sun–Thu week). Default 40. */
+export const weeklyCapacityHoursSchema = z.coerce
+  .number()
+  .finite()
+  .gt(0, "ساعات السعة الأسبوعية يجب أن تكون أكبر من صفر")
+  .lte(80, "ساعات السعة الأسبوعية يجب ألا تتجاوز 80");
+
 export const createUserSchema = z.object({
   employeeNumber: employeeNumberSchema,
   fullName: z.string().min(2, "الاسم مطلوب"),
   phone: optionalPhoneSchema,
   role: userRoleSchema,
+  weeklyCapacityHours: weeklyCapacityHoursSchema.default(40),
 });
 
 export const updateUserSchema = z.object({
@@ -43,6 +51,7 @@ export const updateUserSchema = z.object({
     }),
   role: userRoleSchema.optional(),
   isActive: z.boolean().optional(),
+  weeklyCapacityHours: weeklyCapacityHoursSchema.optional(),
 });
 
 export const userSortBySchema = z.enum([
@@ -81,6 +90,7 @@ export type UpdateUserInput = {
   phone?: string | null;
   role?: z.infer<typeof userRoleSchema>;
   isActive?: boolean;
+  weeklyCapacityHours?: number;
 };
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type UserSortBy = z.infer<typeof userSortBySchema>;

@@ -178,7 +178,7 @@ export function ProjectsPageClient({
       status: "draft",
       priority: "medium",
       startDate: null,
-      endDate: null,
+      endDate: "",
       memberIds: [],
     },
   });
@@ -208,7 +208,7 @@ export function ProjectsPageClient({
         status: "draft",
         priority: "medium",
         startDate: null,
-        endDate: null,
+        endDate: "",
         memberIds: [],
       });
       setSuccessMessage(t("createSuccess"));
@@ -360,8 +360,18 @@ export function ProjectsPageClient({
                       <Input
                         id="endDate"
                         type="date"
+                        required
                         {...createForm.register("endDate")}
                       />
+                      {createForm.formState.errors.endDate ? (
+                        <p className="text-destructive text-xs">
+                          {createForm.formState.errors.endDate.message}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          {t("endDateRequiredHint")}
+                        </p>
+                      )}
                     </div>
                   </div>
                   {createMutation.isError ? (
@@ -571,12 +581,16 @@ export function ProjectsPageClient({
                         <Input
                           type="date"
                           className="h-8 w-[9.5rem]"
-                          defaultValue={project.endDate ?? ""}
+                          defaultValue={project.endDate}
                           disabled={patchMutation.isPending}
+                          required
                           aria-label={t("endDate")}
                           onBlur={(event) => {
-                            const next = event.target.value || null;
-                            if (next === project.endDate) {
+                            const next = event.target.value;
+                            if (!next || next === project.endDate) {
+                              if (!next) {
+                                event.target.value = project.endDate;
+                              }
                               return;
                             }
                             patchMutation.mutate({
@@ -586,7 +600,7 @@ export function ProjectsPageClient({
                           }}
                         />
                       ) : (
-                        (project.endDate ?? "—")
+                        project.endDate
                       )}
                     </TableCell>
                     <TableCell

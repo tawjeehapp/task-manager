@@ -38,11 +38,17 @@ export default async function ApprovalsPage() {
     PERMISSIONS.ATTENDANCE_APPROVE,
     permissions,
   );
+  const canApproveProjectRequest = hasPermission(
+    user.role,
+    PERMISSIONS.PROJECT_REQUEST_APPROVE,
+    permissions,
+  );
 
   if (
     !canApproveLeave &&
     !canApproveEmployeeRequest &&
-    !canApproveAttendance
+    !canApproveAttendance &&
+    !canApproveProjectRequest
   ) {
     redirect("/");
   }
@@ -53,6 +59,7 @@ export default async function ApprovalsPage() {
       canApproveLeave={canApproveLeave}
       canApproveEmployeeRequest={canApproveEmployeeRequest}
       canApproveAttendance={canApproveAttendance}
+      canApproveProjectRequest={canApproveProjectRequest}
     />
   );
 }

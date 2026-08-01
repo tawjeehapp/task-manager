@@ -16,6 +16,8 @@ export function notificationHref(
       return "/leave";
     case "employee_request":
       return "/approvals";
+    case "project_request":
+      return "/approvals";
     case "attendance_record":
       return "/attendance";
     case "announcement":

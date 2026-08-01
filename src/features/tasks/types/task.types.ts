@@ -21,6 +21,7 @@ export type TaskProjectSummary = {
   id: string;
   name: string;
   departmentId: string;
+  endDate: string;
 };
 
 /** Incomplete finish-to-start prerequisite shown on boards. */
@@ -101,12 +102,15 @@ export function selectableTaskStatuses(current: TaskStatus): TaskStatus[] {
   return [...MANUAL_TASK_STATUSES];
 }
 
-/** Statuses that count toward employee workload (active work). */
+/** Statuses that count toward employee workload (open work including blocked). */
 export const ACTIVE_TASK_STATUSES: TaskStatus[] = [
   "todo",
   "in_progress",
   "blocked",
 ];
+
+/** Statuses that count toward capacity load (available-to-work commitment). */
+export const CAPACITY_LOAD_STATUSES: TaskStatus[] = ["todo", "in_progress"];
 
 export type TaskDependency = {
   id: string;
@@ -151,4 +155,8 @@ export type EmployeeWorkload = {
   userId: string;
   activeTaskCount: number;
   estimatedHours: number;
+  weeklyCapacityHours: number;
+  leaveDaysInWeek: number;
+  availableHours: number;
+  capacityPercent: number;
 };

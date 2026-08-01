@@ -98,7 +98,7 @@ describe("dependency schemas", () => {
 });
 
 describe("computeEmployeeWorkload", () => {
-  it("counts non-terminal tasks and sums hours", () => {
+  it("counts todo and in_progress only and sums hours", () => {
     const result = computeEmployeeWorkload(TASK_A, [
       { status: "todo", estimatedHours: 4 },
       { status: "in_progress", estimatedHours: 6 },
@@ -106,22 +106,28 @@ describe("computeEmployeeWorkload", () => {
       { status: "completed", estimatedHours: 99 },
     ]);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       userId: TASK_A,
-      activeTaskCount: 3,
-      estimatedHours: 12,
+      activeTaskCount: 2,
+      estimatedHours: 10,
+      weeklyCapacityHours: 40,
+      leaveDaysInWeek: 0,
+      availableHours: 40,
+      capacityPercent: 25,
     });
   });
 
-  it("returns zeros when no active tasks", () => {
+  it("returns zeros when no capacity-load tasks", () => {
     expect(
       computeEmployeeWorkload(TASK_B, [
         { status: "completed", estimatedHours: 10 },
+        { status: "blocked", estimatedHours: 5 },
       ]),
-    ).toEqual({
+    ).toMatchObject({
       userId: TASK_B,
       activeTaskCount: 0,
       estimatedHours: 0,
+      capacityPercent: 0,
     });
   });
 });

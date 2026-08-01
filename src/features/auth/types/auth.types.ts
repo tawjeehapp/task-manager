@@ -16,6 +16,7 @@ export type PublicUser = {
   role: Role;
   isActive: boolean;
   mustChangePassword: boolean;
+  weeklyCapacityHours: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -31,6 +32,7 @@ export function toPublicUser(user: AppUser): PublicUser {
     role: user.role,
     isActive: user.isActive,
     mustChangePassword: user.mustChangePassword,
+    weeklyCapacityHours: user.weeklyCapacityHours,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

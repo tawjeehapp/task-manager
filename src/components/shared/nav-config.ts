@@ -151,6 +151,7 @@ export const navSections: NavSection[] = [
           "leave.approve",
           "employee_request.approve",
           "attendance.approve",
+          "project_request.approve",
         ],
       },
       {

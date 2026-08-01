@@ -195,12 +195,6 @@ export function LeadershipTablesClient({
     });
   }, [projects, projectSearch, departmentId]);
 
-  const maxOpen = Math.max(
-    1,
-    ...filteredTeam.map((row) => row.openTaskCount),
-    0,
-  );
-
   const tasksDetailOpen =
     detail?.kind === "team-tasks" || detail?.kind === "project-tasks";
   const tasksTitle =
@@ -277,6 +271,12 @@ export function LeadershipTablesClient({
                       {t("colInProgress")}
                     </TableHead>
                     <TableHead className="text-center">
+                      {t("colBlocked")}
+                    </TableHead>
+                    <TableHead className="text-center">
+                      {t("colCompleted")}
+                    </TableHead>
+                    <TableHead className="text-center">
                       {t("colOverdue")}
                     </TableHead>
                     <TableHead className="text-center">
@@ -311,10 +311,14 @@ export function LeadershipTablesClient({
                       </TableCell>
                       <TableCell>
                         <ProgressBar
-                          value={(row.openTaskCount / maxOpen) * 100}
+                          value={row.capacityPercent}
+                          tone={row.capacityPercent > 100 ? "warn" : "default"}
                         />
                         <span className="sr-only">
-                          {t("openTasksCount", { count: row.openTaskCount })}
+                          {t("capacityLoadAvailable", {
+                            load: row.loadHours,
+                            available: row.availableHours,
+                          })}
                         </span>
                       </TableCell>
                       <TableCell className="text-center">
@@ -344,6 +348,38 @@ export function LeadershipTablesClient({
                               query: {
                                 assignee: row.userId,
                                 status: "in_progress",
+                              },
+                            })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.blockedCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "team-tasks",
+                              subject: row.fullName,
+                              metric: t("colBlocked"),
+                              query: {
+                                assignee: row.userId,
+                                status: "blocked",
+                              },
+                            })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.completedCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "team-tasks",
+                              subject: row.fullName,
+                              metric: t("colCompleted"),
+                              query: {
+                                assignee: row.userId,
+                                status: "completed",
                               },
                             })
                           }
@@ -482,13 +518,22 @@ export function LeadershipTablesClient({
                     <TableHead>{t("colDepartment")}</TableHead>
                     <TableHead>{t("colProgress")}</TableHead>
                     <TableHead className="text-center">
+                      {t("colTodo")}
+                    </TableHead>
+                    <TableHead className="text-center">
                       {t("colInProgress")}
+                    </TableHead>
+                    <TableHead className="text-center">
+                      {t("colBlocked")}
+                    </TableHead>
+                    <TableHead className="text-center">
+                      {t("colCompleted")}
                     </TableHead>
                     <TableHead className="text-center">
                       {t("colOverdue")}
                     </TableHead>
                     <TableHead className="text-center">
-                      {t("colEstimated")}
+                      {t("colDueToday")}
                     </TableHead>
                     <TableHead>{t("colNearestDue")}</TableHead>
                     <TableHead>{t("colHealth")}</TableHead>
@@ -516,6 +561,22 @@ export function LeadershipTablesClient({
                       </TableCell>
                       <TableCell className="text-center">
                         <CountButton
+                          value={row.todoCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "project-tasks",
+                              subject: row.name,
+                              metric: t("colTodo"),
+                              query: {
+                                projectId: row.id,
+                                status: "todo",
+                              },
+                            })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <CountButton
                           value={row.inProgressCount}
                           onClick={() =>
                             setDetail({
@@ -525,6 +586,38 @@ export function LeadershipTablesClient({
                               query: {
                                 projectId: row.id,
                                 status: "in_progress",
+                              },
+                            })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.blockedCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "project-tasks",
+                              subject: row.name,
+                              metric: t("colBlocked"),
+                              query: {
+                                projectId: row.id,
+                                status: "blocked",
+                              },
+                            })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.completedCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "project-tasks",
+                              subject: row.name,
+                              metric: t("colCompleted"),
+                              query: {
+                                projectId: row.id,
+                                status: "completed",
                               },
                             })
                           }
@@ -552,13 +645,18 @@ export function LeadershipTablesClient({
                       </TableCell>
                       <TableCell className="text-center">
                         <CountButton
-                          value={row.estimatedHoursSum}
+                          value={row.dueTodayCount}
                           onClick={() =>
                             setDetail({
                               kind: "project-tasks",
                               subject: row.name,
-                              metric: t("colEstimated"),
-                              query: { projectId: row.id },
+                              metric: t("colDueToday"),
+                              query: {
+                                projectId: row.id,
+                                dueFrom: today,
+                                dueTo: today,
+                                predicate: "dueToday",
+                              },
                             })
                           }
                         />

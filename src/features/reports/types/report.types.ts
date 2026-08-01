@@ -32,6 +32,9 @@ export type EmployeeWorkloadRow = {
   departmentName: string | null;
   activeTaskCount: number;
   estimatedHours: number;
+  weeklyCapacityHours: number;
+  availableHours: number;
+  capacityPercent: number;
 };
 
 export type AttendanceSummaryRow = {

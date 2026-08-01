@@ -101,7 +101,7 @@ export function ReportsPageClient({
       case "task-completion":
         return "completionRate";
       case "employee-workload":
-        return "estimatedHours";
+        return "capacityPercent";
       case "attendance-summary":
         return "totalHours";
       case "work-log-summary":
@@ -315,6 +315,20 @@ export function ReportsPageClient({
                               sortDir={sortDir}
                               onSort={onSort}
                             />
+                            <SortableTableHead
+                              label={t("colAvailableHours")}
+                              column="availableHours"
+                              sortBy={sortBy}
+                              sortDir={sortDir}
+                              onSort={onSort}
+                            />
+                            <SortableTableHead
+                              label={t("colCapacityPercent")}
+                              column="capacityPercent"
+                              sortBy={sortBy}
+                              sortDir={sortDir}
+                              onSort={onSort}
+                            />
                           </>
                         ) : null}
                         {id === "attendance-summary" ? (
@@ -394,6 +408,15 @@ export function ReportsPageClient({
                               </TableCell>
                               <TableCell className="tabular-nums">
                                 {(row as EmployeeWorkloadRow).estimatedHours}
+                              </TableCell>
+                              <TableCell className="tabular-nums">
+                                {(row as EmployeeWorkloadRow).availableHours}
+                              </TableCell>
+                              <TableCell className="tabular-nums">
+                                {Math.round(
+                                  (row as EmployeeWorkloadRow).capacityPercent,
+                                )}
+                                %
                               </TableCell>
                             </>
                           ) : null}

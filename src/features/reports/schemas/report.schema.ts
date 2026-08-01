@@ -44,8 +44,14 @@ export const employeeWorkloadQuerySchema = baseReportQuerySchema
   .omit({ dateFrom: true, dateTo: true })
   .extend({
     sortBy: z
-      .enum(["fullName", "activeTaskCount", "estimatedHours"])
-      .default("estimatedHours"),
+      .enum([
+        "fullName",
+        "activeTaskCount",
+        "estimatedHours",
+        "availableHours",
+        "capacityPercent",
+      ])
+      .default("capacityPercent"),
     sortDir: z.enum(["asc", "desc"]).default("desc"),
   });
 

@@ -23,6 +23,7 @@ describe("project schemas", () => {
       departmentId: DEPT,
       name: "مشروع المناهج",
       description: "",
+      endDate: "2026-12-31",
       memberIds: [USER],
     });
     expect(result.success).toBe(true);
@@ -30,8 +31,22 @@ describe("project schemas", () => {
       expect(result.data.description).toBeNull();
       expect(result.data.status).toBe("draft");
       expect(result.data.priority).toBe("medium");
+      expect(result.data.endDate).toBe("2026-12-31");
       expect(result.data.memberIds).toEqual([USER]);
     }
+  });
+
+  it("requires endDate on create", () => {
+    const result = createProjectSchema.safeParse({
+      departmentId: DEPT,
+      name: "مشروع المناهج",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects task-style empty endDate on update", () => {
+    const result = updateProjectSchema.safeParse({ endDate: "" });
+    expect(result.success).toBe(false);
   });
 
   it("rejects empty update", () => {

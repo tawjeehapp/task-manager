@@ -630,12 +630,22 @@ export function TaskDetailClient({
                     />
                   </PropertyRow>
                   <PropertyRow label={t("dueDate")}>
-                    <Input
-                      id="edit-due"
-                      type="date"
-                      className="h-8 sm:max-w-40"
-                      {...editForm.register("dueDate")}
-                    />
+                    <div className="space-y-1 sm:max-w-40">
+                      <Input
+                        id="edit-due"
+                        type="date"
+                        className="h-8"
+                        max={task.project?.endDate}
+                        {...editForm.register("dueDate")}
+                      />
+                      {task.project?.endDate ? (
+                        <p className="text-xs text-muted-foreground">
+                          {t("dueDateWithinProjectHint", {
+                            date: task.project.endDate,
+                          })}
+                        </p>
+                      ) : null}
+                    </div>
                   </PropertyRow>
                   <PropertyRow label={t("estimatedHours")}>
                     <Input
@@ -750,6 +760,11 @@ export function TaskDetailClient({
                 value={requestedDate}
                 onChange={(e) => setRequestedDate(e.target.value)}
               />
+              {task.project?.endDate ? (
+                <p className="text-xs text-muted-foreground">
+                  {tReq("extensionBeyondProjectHint")}
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="extension-reason">

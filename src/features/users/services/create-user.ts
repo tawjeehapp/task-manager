@@ -63,6 +63,7 @@ export async function createUser(input: CreateUserInput) {
       email,
       phone: input.phone ?? null,
       role: input.role,
+      weekly_capacity_hours: input.weeklyCapacityHours,
       is_active: true,
       must_change_password: true,
     })

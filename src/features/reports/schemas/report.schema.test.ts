@@ -33,7 +33,7 @@ describe("report schemas", () => {
 
   it("defaults employee workload sort", () => {
     const parsed = employeeWorkloadQuerySchema.parse({});
-    expect(parsed.sortBy).toBe("estimatedHours");
+    expect(parsed.sortBy).toBe("capacityPercent");
   });
 
   it("accepts work log project and task filters", () => {

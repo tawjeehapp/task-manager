@@ -221,6 +221,7 @@ export function EmployeesPageClient({
       fullName: "",
       phone: "",
       role: "employee",
+      weeklyCapacityHours: 40,
     },
   });
 
@@ -514,6 +515,25 @@ export function EmployeesPageClient({
                     />
                     <p className="text-xs text-muted-foreground">
                       {t("phoneHint")}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weeklyCapacityHours">
+                      {t("weeklyCapacityHours")}
+                    </Label>
+                    <Input
+                      id="weeklyCapacityHours"
+                      type="number"
+                      inputMode="decimal"
+                      min={0.5}
+                      max={80}
+                      step={0.5}
+                      {...createForm.register("weeklyCapacityHours", {
+                        valueAsNumber: true,
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("weeklyCapacityHint")}
                     </p>
                   </div>
                   <div className="space-y-2">

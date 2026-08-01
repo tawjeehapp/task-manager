@@ -21,6 +21,7 @@ import type {
   Project,
   ProjectMember,
 } from "@/features/projects/types/project.types";
+import type { ProjectRequest } from "@/features/project-requests/types/project-request.types";
 import { computeHoursWeightedProgress } from "@/features/projects/lib/project-progress";
 import type { Task } from "@/features/tasks/types/task.types";
 import { EmployeeProjectTasksTable } from "@/features/projects/components/employee-project-tasks-table";
@@ -55,6 +56,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { formatDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
 type ProjectDetailClientProps = {
@@ -62,6 +64,7 @@ type ProjectDetailClientProps = {
   canManageProject: boolean;
   canManageMembers: boolean;
   canCreateTask: boolean;
+  canRequestProjectExtension?: boolean;
   managedDepartmentId: string | null;
   viewerId: string;
   isEmployee?: boolean;
@@ -137,6 +140,7 @@ export function ProjectDetailClient({
   canManageProject,
   canManageMembers,
   canCreateTask,
+  canRequestProjectExtension = false,
   managedDepartmentId,
   viewerId,
   isEmployee = false,
@@ -154,6 +158,10 @@ export function ProjectDetailClient({
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"tasks" | "members">("tasks");
+  const [extensionOpen, setExtensionOpen] = useState(false);
+  const [extensionDate, setExtensionDate] = useState("");
+  const [extensionReason, setExtensionReason] = useState("");
+  const [extensionError, setExtensionError] = useState<string | null>(null);
 
   const projectQuery = useQuery({
     queryKey: ["projects", projectId],
@@ -176,6 +184,29 @@ export function ProjectDetailClient({
     enabled:
       Boolean(projectQuery.data?.departmentId) &&
       (addMemberOpen || createTaskOpen),
+  });
+
+  const pendingExtensionQuery = useQuery({
+    queryKey: ["project-requests", projectId, "pending"],
+    enabled: canRequestProjectExtension,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "10",
+        status: "pending",
+        type: "extension",
+        projectId,
+      });
+      const response = await fetch(`/api/project-requests?${params}`);
+      const payload = (await response.json()) as {
+        data?: { items: ProjectRequest[] };
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "Failed");
+      }
+      return payload.data!.items[0] ?? null;
+    },
   });
 
   const editForm = useForm<UpdateProjectInput>({
@@ -211,6 +242,37 @@ export function ProjectDetailClient({
       setSuccessMessage(t("updateSuccess"));
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
+  });
+
+  const extensionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/project-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          requestedDate: extensionDate,
+          reason: extensionReason,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: { message: string };
+      };
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? t("createFailed"));
+      }
+    },
+    onSuccess: async () => {
+      setExtensionOpen(false);
+      setExtensionDate("");
+      setExtensionReason("");
+      setExtensionError(null);
+      setSuccessMessage(t("extensionSuccess"));
+      await queryClient.invalidateQueries({
+        queryKey: ["project-requests", projectId, "pending"],
+      });
+    },
+    onError: (error: Error) => setExtensionError(error.message),
   });
 
   const addMemberMutation = useMutation({
@@ -341,6 +403,12 @@ export function ProjectDetailClient({
       (managedDepartmentId != null &&
         managedDepartmentId === project.departmentId));
   const allowProjectEdit = canManageProject;
+  const allowExtensionRequest =
+    canRequestProjectExtension &&
+    managedDepartmentId != null &&
+    managedDepartmentId === project.departmentId &&
+    project.status !== "archived";
+  const pendingExtension = pendingExtensionQuery.data ?? null;
 
   const completedTaskCount = tasks.filter(
     (task) => task.status === "completed",
@@ -522,7 +590,32 @@ export function ProjectDetailClient({
           </div>
           <div className="rounded-lg border p-4">
             <p className="text-muted-foreground text-sm">{t("endDate")}</p>
-            <p className="mt-2 font-medium">{project.endDate ?? "—"}</p>
+            <p className="mt-2 font-medium">{project.endDate}</p>
+            {allowExtensionRequest ? (
+              <div className="mt-3 space-y-2">
+                {pendingExtension ? (
+                  <Badge variant="secondary">
+                    {t("pendingExtension", {
+                      date: formatDate(pendingExtension.requestedDate),
+                    })}
+                  </Badge>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setExtensionError(null);
+                      setExtensionDate("");
+                      setExtensionReason("");
+                      setExtensionOpen(true);
+                    }}
+                  >
+                    {t("requestExtension")}
+                  </Button>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -650,6 +743,78 @@ export function ProjectDetailClient({
         </TabPanel>
       </Tabs>
 
+      <Dialog
+        open={extensionOpen}
+        onOpenChange={(open) => {
+          setExtensionOpen(open);
+          if (!open) {
+            setExtensionError(null);
+            setExtensionDate("");
+            setExtensionReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("requestExtensionTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("requestExtensionDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {extensionError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{extensionError}</AlertDescription>
+              </Alert>
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="extension-date">{t("requestedEndDate")}</Label>
+              <Input
+                id="extension-date"
+                type="date"
+                min={(() => {
+                  const d = new Date(`${project.endDate}T00:00:00Z`);
+                  d.setUTCDate(d.getUTCDate() + 1);
+                  return d.toISOString().slice(0, 10);
+                })()}
+                value={extensionDate}
+                onChange={(event) => setExtensionDate(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="extension-reason">{t("extensionReason")}</Label>
+              <textarea
+                id="extension-reason"
+                className="border-input bg-background min-h-20 w-full rounded-md border px-3 py-2 text-sm"
+                value={extensionReason}
+                onChange={(event) => setExtensionReason(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setExtensionOpen(false)}
+            >
+              {tCommon("cancel")}
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                extensionMutation.isPending ||
+                !extensionDate ||
+                extensionDate <= project.endDate ||
+                extensionReason.trim().length < 1
+              }
+              onClick={() => extensionMutation.mutate()}
+            >
+              {t("submitExtension")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
@@ -705,8 +870,18 @@ export function ProjectDetailClient({
                 <Input
                   id="edit-end"
                   type="date"
+                  required
                   {...editForm.register("endDate")}
                 />
+                {editForm.formState.errors.endDate ? (
+                  <p className="text-destructive text-xs">
+                    {editForm.formState.errors.endDate.message}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t("endDateRequiredHint")}
+                  </p>
+                )}
               </div>
             </div>
             {patchMutation.isError ? (
@@ -919,8 +1094,16 @@ export function ProjectDetailClient({
                 <Input
                   id="task-due"
                   type="date"
+                  max={projectQuery.data?.endDate}
                   {...createTaskForm.register("dueDate")}
                 />
+                {projectQuery.data?.endDate ? (
+                  <p className="text-xs text-muted-foreground">
+                    {tTasks("dueDateWithinProjectHint", {
+                      date: projectQuery.data.endDate,
+                    })}
+                  </p>
+                ) : null}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="task-hours">{tTasks("estimatedHours")}</Label>

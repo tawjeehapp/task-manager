@@ -19,7 +19,7 @@ function project(
     status: "active",
     priority: "medium",
     startDate: null,
-    endDate: null,
+    endDate: "2026-12-31",
     createdBy: "u1",
     createdByUser: null,
     memberCount: 1,

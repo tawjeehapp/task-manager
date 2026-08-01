@@ -27,6 +27,7 @@ function user(
     avatarUrl: null,
     isActive: true,
     mustChangePassword: false,
+  weeklyCapacityHours: 40,
     createdAt: "",
     updatedAt: "",
     ...overrides,

@@ -260,6 +260,9 @@ export function TasksPageClient({
 
   const watchedProjectId = createForm.watch("projectId");
   const watchedDependsOn = createForm.watch("dependsOnTaskIds") ?? [];
+  const selectedProjectEndDate =
+    projectsQuery.data?.find((project) => project.id === watchedProjectId)
+      ?.endDate ?? undefined;
 
   const createMutation = useMutation({
     mutationFn: async (values: CreateTaskInput) => {
@@ -411,8 +414,16 @@ export function TasksPageClient({
                         <Input
                           id="dueDate"
                           type="date"
+                          max={selectedProjectEndDate}
                           {...createForm.register("dueDate")}
                         />
+                        {selectedProjectEndDate ? (
+                          <p className="text-xs text-muted-foreground">
+                            {t("dueDateWithinProjectHint", {
+                              date: selectedProjectEndDate,
+                            })}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="estimatedHours">

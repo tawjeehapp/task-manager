@@ -79,6 +79,7 @@ describe("leadership aggregates", () => {
           avatarUrl: null,
           departmentId: "d1",
           departmentName: "المناهج",
+          weeklyCapacityHours: 40,
         },
         {
           userId: "u2",
@@ -87,6 +88,7 @@ describe("leadership aggregates", () => {
           avatarUrl: null,
           departmentId: "d1",
           departmentName: "المناهج",
+          weeklyCapacityHours: 40,
         },
       ],
       projects: [
@@ -111,6 +113,13 @@ describe("leadership aggregates", () => {
           status: "todo",
           dueDate: "2026-07-28",
           estimatedHours: 2,
+        }),
+        task({
+          id: "t3",
+          assignedTo: "u1",
+          status: "blocked",
+          dueDate: "2026-07-30",
+          estimatedHours: 20,
         }),
       ],
       attendance: [
@@ -143,14 +152,24 @@ describe("leadership aggregates", () => {
           status: "rejected",
         },
       ],
+      approvedLeave: [
+        {
+          userId: "u2",
+          startDate: "2026-07-27",
+          endDate: "2026-07-27",
+        },
+      ],
     });
 
     expect(result.metrics.activeProjectsCount).toBe(1);
     expect(result.metrics.todoCount).toBe(1);
     expect(result.metrics.inProgressCount).toBe(1);
-    expect(result.metrics.blockedCount).toBe(0);
+    expect(result.metrics.blockedCount).toBe(1);
     expect(result.metrics.completedCount).toBe(0);
     expect(result.metrics.overdueCount).toBe(1);
+    expect(result.metrics.dueTodayCount).toBe(0);
+    expect(result.metrics.inProgressTiming.overdue).toBe(1);
+    expect(result.metrics.todoTiming.dueToday).toBe(0);
     expect(result.metrics.weekHours).toBe(10.5);
     expect(result.metrics.weekHoursApproved).toBe(7.5);
     expect(result.metrics.weekHoursPending).toBe(2);
@@ -169,10 +188,15 @@ describe("leadership aggregates", () => {
     expect(sarah?.overdueCount).toBe(1);
     expect(sarah?.inProgressCount).toBe(1);
     expect(sarah?.todoCount).toBe(0);
+    expect(sarah?.blockedCount).toBe(1);
+    expect(sarah?.completedCount).toBe(0);
     expect(sarah?.weekHours).toBe(7.5);
     expect(sarah?.weekHoursApproved).toBe(7.5);
     expect(sarah?.weekHoursPending).toBe(0);
     expect(sarah?.weekHoursRejected).toBe(0);
+    expect(sarah?.loadHours).toBe(4);
+    expect(sarah?.availableHours).toBe(40);
+    expect(sarah?.capacityPercent).toBe(10);
 
     const nora = result.team.find((r) => r.userId === "u2");
     expect(nora?.todoCount).toBe(1);
@@ -180,8 +204,15 @@ describe("leadership aggregates", () => {
     expect(nora?.weekHoursApproved).toBe(0);
     expect(nora?.weekHoursPending).toBe(2);
     expect(nora?.weekHoursRejected).toBe(1);
+    expect(nora?.loadHours).toBe(2);
+    expect(nora?.availableHours).toBe(32);
+    expect(nora?.capacityPercent).toBe(6.3);
 
     expect(result.projects[0]?.health).toBe("overdue");
-    expect(result.projects[0]?.estimatedHoursSum).toBe(6);
+    expect(result.projects[0]?.todoCount).toBe(1);
+    expect(result.projects[0]?.inProgressCount).toBe(1);
+    expect(result.projects[0]?.blockedCount).toBe(1);
+    expect(result.projects[0]?.completedCount).toBe(0);
+    expect(result.projects[0]?.dueTodayCount).toBe(0);
   });
 });

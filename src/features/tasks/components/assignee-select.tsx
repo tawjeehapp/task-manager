@@ -97,9 +97,10 @@ export function AssigneeSelect({
     if (!workload) {
       return name;
     }
-    return `${name} — ${t("workloadOptionLabel", {
-      count: workload.activeTaskCount,
-      hours: workload.estimatedHours,
+    return `${name} — ${t("workloadOptionCapacityLabel", {
+      percent: Math.round(workload.capacityPercent),
+      load: workload.estimatedHours,
+      available: workload.availableHours,
     })}`;
   }
 

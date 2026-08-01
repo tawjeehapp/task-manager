@@ -29,6 +29,8 @@ const MANAGER_PERMS = [
   "employee_request.view",
   "employee_request.create",
   "employee_request.approve",
+  "project_request.view",
+  "project_request.create",
   "announcement.view",
   "notification.view",
   "report.view",

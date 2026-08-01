@@ -1,27 +1,18 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import {
-  AlertTriangle,
-  Ban,
-  CheckCircle2,
-  Circle,
-  Clock3,
-  FolderKanban,
-  Info,
-  Loader2,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info } from "lucide-react";
 
 import type {
   AdminDashboard,
   ManagerDashboard,
 } from "@/features/dashboard/types/dashboard.types";
+import { LeadershipMetricsCardsClient } from "@/features/dashboard/components/leadership-metrics-cards-client";
 import { LeadershipTablesClient } from "@/features/dashboard/components/leadership-tables-client";
 import { PageHeader } from "@/components/shared/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -88,100 +79,7 @@ export async function LeadershipDashboardView({
         }
       />
 
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
-        <Card size="sm">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div className="min-w-0 space-y-1">
-              <CardDescription>{t("metricTodo")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
-                {metrics.todoCount}
-              </CardTitle>
-            </div>
-            <Circle className="mt-1 size-5 shrink-0 text-muted-foreground" />
-          </CardHeader>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div className="min-w-0 space-y-1">
-              <CardDescription>{t("metricInProgress")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
-                {metrics.inProgressCount}
-              </CardTitle>
-            </div>
-            <Loader2 className="mt-1 size-5 shrink-0 text-amber-600" />
-          </CardHeader>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div className="min-w-0 space-y-1">
-              <CardDescription>{t("metricBlocked")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
-                {metrics.blockedCount}
-              </CardTitle>
-            </div>
-            <Ban className="mt-1 size-5 shrink-0 text-destructive" />
-          </CardHeader>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div className="min-w-0 space-y-1">
-              <CardDescription>{t("metricCompleted")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
-                {metrics.completedCount}
-              </CardTitle>
-            </div>
-            <CheckCircle2 className="mt-1 size-5 shrink-0 text-emerald-600" />
-          </CardHeader>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div className="min-w-0 space-y-1">
-              <CardDescription>{t("metricTeamWeekHours")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
-                {metrics.weekHours}
-              </CardTitle>
-              <p className="text-[11px] leading-snug text-muted-foreground">
-                <span className="text-emerald-700 tabular-nums">
-                  {metrics.weekHoursApproved}
-                </span>{" "}
-                {t("metricHoursApproved")}
-                {" · "}
-                <span className="text-amber-700 tabular-nums">
-                  {metrics.weekHoursPending}
-                </span>{" "}
-                {t("metricHoursPending")}
-                {" · "}
-                <span className="text-destructive tabular-nums">
-                  {metrics.weekHoursRejected}
-                </span>{" "}
-                {t("metricHoursRejected")}
-              </p>
-            </div>
-            <Clock3 className="mt-1 size-5 shrink-0 text-sky-600" />
-          </CardHeader>
-        </Card>
-
-        <Card size="sm">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div className="min-w-0 space-y-1">
-              <CardDescription>{t("metricProjects")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
-                {metrics.activeProjectsCount}
-              </CardTitle>
-              <p className="text-[11px] leading-snug text-muted-foreground">
-                {t("metricAvgProgress", {
-                  percent: metrics.avgProgressPercent,
-                })}
-              </p>
-            </div>
-            <FolderKanban className="mt-1 size-5 shrink-0 text-violet-600" />
-          </CardHeader>
-        </Card>
-      </div>
+      <LeadershipMetricsCardsClient today={data.today} metrics={metrics} />
 
       <Card>
         <CardHeader>

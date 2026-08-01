@@ -14,13 +14,15 @@ import type {
   TaskCompletionRow,
   WorkLogSummaryRow,
 } from "@/features/reports/types/report.types";
-import { ACTIVE_TASK_STATUSES } from "@/features/tasks/types/task.types";
+import { CAPACITY_LOAD_STATUSES } from "@/features/tasks/types/task.types";
 import { computeEmployeeWorkload } from "@/features/tasks/services/workload";
+import { countApprovedLeaveDaysInRange } from "@/features/tasks/services/capacity";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
 import {
   addCalendarDays,
   currentMonthBounds,
+  currentWeekBounds,
   todayInOrgTimezone,
 } from "@/lib/org-calendar";
 import { SYSTEM_ADMIN_EMPLOYEE_NUMBER } from "@/lib/table/constants";
@@ -31,7 +33,7 @@ type ScopedUsers = {
   departmentNameByUserId: Map<string, string | null>;
   userMeta: Map<
     string,
-    { fullName: string; employeeNumber: string }
+    { fullName: string; employeeNumber: string; weeklyCapacityHours: number }
   >;
 };
 
@@ -143,7 +145,7 @@ async function resolveScopedUsers(
 
   let usersQuery = admin
     .from("users")
-    .select("id, full_name, employee_number, is_active")
+    .select("id, full_name, employee_number, is_active, weekly_capacity_hours")
     .eq("is_active", true)
     .neq("employee_number", SYSTEM_ADMIN_EMPLOYEE_NUMBER);
 
@@ -171,14 +173,26 @@ async function resolveScopedUsers(
     );
   }
 
-  const userMeta = new Map<string, { fullName: string; employeeNumber: string }>();
+  const userMeta = new Map<
+    string,
+    { fullName: string; employeeNumber: string; weeklyCapacityHours: number }
+  >();
   const userIds: string[] = [];
   for (const row of users ?? []) {
     const id = row.id as string;
     userIds.push(id);
+    const rawCapacity = row.weekly_capacity_hours;
+    const capacityNum =
+      rawCapacity === null || rawCapacity === undefined
+        ? 40
+        : typeof rawCapacity === "number"
+          ? rawCapacity
+          : Number(rawCapacity);
     userMeta.set(id, {
       fullName: row.full_name as string,
       employeeNumber: row.employee_number as string,
+      weeklyCapacityHours:
+        Number.isFinite(capacityNum) && capacityNum > 0 ? capacityNum : 40,
     });
     if (!departmentNameByUserId.has(id)) {
       departmentNameByUserId.set(id, null);
@@ -335,13 +349,25 @@ export async function listEmployeeWorkloadReport(
   }
 
   const admin = createAdminClient();
-  const { data: tasks, error } = await admin
-    .from("tasks")
-    .select("assigned_to, status, estimated_hours")
-    .in("assigned_to", scoped.userIds)
-    .in("status", [...ACTIVE_TASK_STATUSES]);
+  const today = todayInOrgTimezone();
+  const { start: weekStart, end: weekEnd } = currentWeekBounds(today);
 
-  if (error) {
+  const [tasksRes, leaveRes] = await Promise.all([
+    admin
+      .from("tasks")
+      .select("assigned_to, status, estimated_hours")
+      .in("assigned_to", scoped.userIds)
+      .in("status", [...CAPACITY_LOAD_STATUSES]),
+    admin
+      .from("leave_requests")
+      .select("user_id, start_date, end_date")
+      .in("user_id", scoped.userIds)
+      .eq("status", "approved")
+      .lte("start_date", weekEnd)
+      .gte("end_date", weekStart),
+  ]);
+
+  if (tasksRes.error || leaveRes.error) {
     throw new ApiError(
       "تعذر جلب تقرير عبء العمل.",
       500,
@@ -354,7 +380,7 @@ export async function listEmployeeWorkloadReport(
     Array<{ status: string; estimatedHours: number }>
   >();
   for (const id of scoped.userIds) byUser.set(id, []);
-  for (const row of tasks ?? []) {
+  for (const row of tasksRes.data ?? []) {
     const assignee = row.assigned_to as string | null;
     if (!assignee || !byUser.has(assignee)) continue;
     const raw = row.estimated_hours;
@@ -366,11 +392,37 @@ export async function listEmployeeWorkloadReport(
     });
   }
 
+  const leaveByUser = new Map<
+    string,
+    Array<{ startDate: string; endDate: string }>
+  >();
+  for (const row of leaveRes.data ?? []) {
+    const userId = row.user_id as string;
+    const list = leaveByUser.get(userId) ?? [];
+    list.push({
+      startDate: row.start_date as string,
+      endDate: row.end_date as string,
+    });
+    leaveByUser.set(userId, list);
+  }
+
   let rows: EmployeeWorkloadRow[] = [];
   for (const userId of scoped.userIds) {
     const meta = scoped.userMeta.get(userId);
     if (!meta) continue;
-    const workload = computeEmployeeWorkload(userId, byUser.get(userId) ?? []);
+    const leaveDaysInWeek = countApprovedLeaveDaysInRange(
+      weekStart,
+      weekEnd,
+      leaveByUser.get(userId) ?? [],
+    );
+    const workload = computeEmployeeWorkload(
+      userId,
+      byUser.get(userId) ?? [],
+      {
+        weeklyCapacityHours: meta.weeklyCapacityHours,
+        leaveDaysInWeek,
+      },
+    );
     rows.push({
       userId,
       fullName: meta.fullName,
@@ -378,6 +430,9 @@ export async function listEmployeeWorkloadReport(
       departmentName: scoped.departmentNameByUserId.get(userId) ?? null,
       activeTaskCount: workload.activeTaskCount,
       estimatedHours: workload.estimatedHours,
+      weeklyCapacityHours: workload.weeklyCapacityHours,
+      availableHours: workload.availableHours,
+      capacityPercent: workload.capacityPercent,
     });
   }
 
