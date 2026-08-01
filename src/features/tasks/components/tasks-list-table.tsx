@@ -240,8 +240,7 @@ function TaskInlineFields({
     return t(`priority_${priority}` as "priority_low");
   }
 
-  const hoursDisplay =
-    task.estimatedHours != null ? String(task.estimatedHours) : "—";
+  const hoursDisplay = String(task.estimatedHours);
 
   const statusLockedByDeps = (task.incompleteDependencyCount ?? 0) > 0;
 
@@ -448,19 +447,22 @@ function TaskInlineFields({
           <Input
             type="number"
             step="0.5"
-            min="0"
+            min="0.5"
             className="h-8 w-20"
-            defaultValue={task.estimatedHours ?? ""}
+            defaultValue={task.estimatedHours}
             disabled={patchMutation.isPending}
             aria-label={t("estimatedHours")}
             onBlur={(event) => {
-              const raw = event.target.value;
-              const next =
-                raw === ""
-                  ? null
-                  : Number.isFinite(Number(raw))
-                    ? Number(raw)
-                    : null;
+              const raw = event.target.value.trim();
+              if (raw === "") {
+                event.target.value = String(task.estimatedHours);
+                return;
+              }
+              const next = Number(raw);
+              if (!Number.isFinite(next) || next <= 0) {
+                event.target.value = String(task.estimatedHours);
+                return;
+              }
               if (next === task.estimatedHours) {
                 return;
               }

@@ -52,9 +52,9 @@ describe("navItemIsVisible", () => {
     expect(visible).toEqual([
       "dashboard",
       "tasks",
-      "attendanceLeave",
       "projects",
       "notifications",
+      "attendanceLeave",
       "announcements",
     ]);
   });
@@ -85,15 +85,15 @@ describe("navItemIsVisible", () => {
       "departmentDashboard",
       "myDashboard",
       "tasks",
-      "teamTasks",
-      "attendanceLeave",
       "projects",
       "notifications",
+      "teamTasks",
+      "attendanceLeave",
       "departments",
       "employees",
       "requests",
-      "announcements",
       "reports",
+      "announcements",
     ]);
   });
 

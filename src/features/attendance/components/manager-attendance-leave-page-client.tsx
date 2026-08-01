@@ -4,27 +4,23 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { CalendarDays, Clock3, Inbox, List, UserRound } from "lucide-react";
+import { CalendarDays, Clock3 } from "lucide-react";
 
 import { EmployeeAttendancePageClient } from "@/features/attendance/components/employee-attendance-page-client";
 import { AttendanceReviewDialog } from "@/features/attendance/components/attendance-review-dialog";
+import { summarizeAllocations } from "@/features/attendance/components/attendance-display-utils";
+import { TeamWeekSheet } from "@/features/attendance/components/team-week-sheet";
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import { EmployeeLeavePageClient } from "@/features/leave/components/employee-leave-page-client";
 import type { LeaveRequest } from "@/features/leave/types/leave.types";
-import {
-  DEFAULT_TABLE_PAGE_SIZE,
-  type TablePageSize,
-} from "@/lib/table/constants";
 import { formatDate } from "@/lib/dates";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
-import { TablePagination } from "@/components/shared/table-pagination";
 import { Tabs, TabPanel } from "@/components/shared/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -100,12 +96,30 @@ export function ManagerAttendanceLeavePageClient({
   const searchParams = useSearchParams();
 
   const tab = tabFromParam(searchParams.get("tab"));
+  const mineSection =
+    searchParams.get("section") === "leave" ? "leave" : "attendance";
+
   const setTab = (value: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (value === "approve") {
       params.delete("tab");
     } else {
       params.set("tab", value);
+    }
+    if (value !== "mine") {
+      params.delete("section");
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/attendance?${qs}` : "/attendance");
+  };
+
+  const setMineSection = (value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "mine");
+    if (value === "attendance") {
+      params.delete("section");
+    } else {
+      params.set("section", value);
     }
     const qs = params.toString();
     router.replace(qs ? `/attendance?${qs}` : "/attendance");
@@ -118,13 +132,6 @@ export function ManagerAttendanceLeavePageClient({
   );
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-
-  const [teamPage, setTeamPage] = useState(1);
-  const [teamPageSize, setTeamPageSize] =
-    useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
 
   const pendingAttendanceQuery = useQuery({
     queryKey: ["attendance", "manager-pending"],
@@ -153,32 +160,6 @@ export function ManagerAttendanceLeavePageClient({
       });
       const response = await fetch(`/api/leave-requests?${params}`);
       return readApi<ListResult<LeaveRequest>>(response);
-    },
-  });
-
-  const teamQuery = useQuery({
-    queryKey: [
-      "attendance",
-      "team-sheet",
-      teamPage,
-      teamPageSize,
-      dateFrom,
-      dateTo,
-      statusFilter,
-    ],
-    enabled: tab === "team",
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        page: String(teamPage),
-        pageSize: String(teamPageSize),
-        sortBy: "date",
-        sortDir: "desc",
-      });
-      if (dateFrom) params.set("dateFrom", dateFrom);
-      if (dateTo) params.set("dateTo", dateTo);
-      if (statusFilter) params.set("status", statusFilter);
-      const response = await fetch(`/api/attendance?${params}`);
-      return readApi<ListResult<AttendanceRecord>>(response);
     },
   });
 
@@ -248,21 +229,9 @@ export function ManagerAttendanceLeavePageClient({
   });
 
   const tabs = [
-    {
-      id: "approve",
-      label: t("tabApprove"),
-      icon: Inbox,
-    },
-    {
-      id: "team",
-      label: t("tabTeam"),
-      icon: List,
-    },
-    {
-      id: "mine",
-      label: t("tabMine"),
-      icon: UserRound,
-    },
+    { id: "approve", label: t("tabApprove") },
+    { id: "team", label: t("tabTeam") },
+    { id: "mine", label: t("tabMine") },
   ];
 
   return (
@@ -280,13 +249,9 @@ export function ManagerAttendanceLeavePageClient({
         </Alert>
       ) : null}
 
-      <Tabs
-        items={tabs.map(({ id, label }) => ({ id, label }))}
-        value={tab}
-        onValueChange={setTab}
-      >
+      <Tabs items={tabs} value={tab} onValueChange={setTab}>
         <TabPanel when="approve" active={tab}>
-          <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
             {canApproveAttendance ? (
               <Card>
                 <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -324,26 +289,50 @@ export function ManagerAttendanceLeavePageClient({
                           <TableHead>{tApprovals("date")}</TableHead>
                           <TableHead>{tApprovals("employee")}</TableHead>
                           <TableHead>{tApprovals("totalHours")}</TableHead>
+                          <TableHead>{tApprovals("breakdown")}</TableHead>
                           <TableHead>{tApprovals("actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {pendingAttendanceItems.map((row) => (
-                          <TableRow key={row.id}>
-                            <TableCell>{formatDate(row.date)}</TableCell>
-                            <TableCell>{row.user?.fullName ?? "—"}</TableCell>
-                            <TableCell>{row.totalHours ?? "—"}</TableCell>
-                            <TableCell>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => setReviewRecord(row)}
-                              >
-                                {tAttendance("review")}
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {pendingAttendanceItems.map((row) => {
+                          const breakdown = summarizeAllocations(row);
+                          const generalReasonText =
+                            breakdown.generalReasons.join(" · ");
+                          return (
+                            <TableRow key={row.id}>
+                              <TableCell>{formatDate(row.date)}</TableCell>
+                              <TableCell>
+                                {row.user?.fullName ?? "—"}
+                              </TableCell>
+                              <TableCell>{row.totalHours ?? "—"}</TableCell>
+                              <TableCell className="max-w-48">
+                                <div className="text-sm">
+                                  {tAttendance("allocationSummary", {
+                                    allocated: breakdown.taskHours,
+                                    remaining: breakdown.generalHours,
+                                  })}
+                                </div>
+                                {generalReasonText ? (
+                                  <p
+                                    className="mt-0.5 truncate text-xs text-muted-foreground"
+                                    title={generalReasonText}
+                                  >
+                                    {generalReasonText}
+                                  </p>
+                                ) : null}
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => setReviewRecord(row)}
+                                >
+                                  {tAttendance("review")}
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   ) : null}
@@ -390,6 +379,7 @@ export function ManagerAttendanceLeavePageClient({
                           <TableHead>{tApprovals("leaveType")}</TableHead>
                           <TableHead>{tApprovals("dates")}</TableHead>
                           <TableHead>{tApprovals("days")}</TableHead>
+                          <TableHead>{tApprovals("reason")}</TableHead>
                           <TableHead>{tApprovals("actions")}</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -405,6 +395,12 @@ export function ManagerAttendanceLeavePageClient({
                               {formatDate(row.endDate)}
                             </TableCell>
                             <TableCell>{row.days}</TableCell>
+                            <TableCell
+                              className="max-w-40 truncate"
+                              title={row.reason ?? undefined}
+                            >
+                              {row.reason ?? "—"}
+                            </TableCell>
                             <TableCell className="space-x-2 space-x-reverse">
                               <Button
                                 type="button"
@@ -418,7 +414,7 @@ export function ManagerAttendanceLeavePageClient({
                               <Button
                                 type="button"
                                 size="sm"
-                                variant="outline"
+                                variant="destructive"
                                 onClick={() =>
                                   setRejectTarget({
                                     kind: "leave",
@@ -441,132 +437,25 @@ export function ManagerAttendanceLeavePageClient({
         </TabPanel>
 
         <TabPanel when="team" active={tab}>
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="teamDateFrom">{tAttendance("dateFrom")}</Label>
-                <Input
-                  id="teamDateFrom"
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => {
-                    setDateFrom(e.target.value);
-                    setTeamPage(1);
-                  }}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="teamDateTo">{tAttendance("dateTo")}</Label>
-                <Input
-                  id="teamDateTo"
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => {
-                    setDateTo(e.target.value);
-                    setTeamPage(1);
-                  }}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="teamStatus">{tAttendance("status")}</Label>
-                <select
-                  id="teamStatus"
-                  className="flex h-9 w-full min-w-40 rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                  value={statusFilter}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.value);
-                    setTeamPage(1);
-                  }}
-                >
-                  <option value="">{t("filterAll")}</option>
-                  <option value="pending">
-                    {tAttendance("status_pending")}
-                  </option>
-                  <option value="approved">
-                    {tAttendance("status_approved")}
-                  </option>
-                  <option value="rejected">
-                    {tAttendance("status_rejected")}
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            {teamQuery.isLoading ? <LoadingState /> : null}
-            {teamQuery.isError ? (
-              <ErrorState
-                title={tCommon("errorTitle")}
-                onRetry={() => void teamQuery.refetch()}
-              />
-            ) : null}
-            {teamQuery.data && teamQuery.data.items.length === 0 ? (
-              <EmptyState
-                title={tAttendance("recordsEmptyTitle")}
-                description={tAttendance("recordsEmptyDescription")}
-              />
-            ) : null}
-            {teamQuery.data && teamQuery.data.items.length > 0 ? (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{tAttendance("dayLabel")}</TableHead>
-                      <TableHead>{tAttendance("employee")}</TableHead>
-                      <TableHead>{tAttendance("entryTime")}</TableHead>
-                      <TableHead>{tAttendance("exitTime")}</TableHead>
-                      <TableHead>{tAttendance("totalHours")}</TableHead>
-                      <TableHead>{tAttendance("status")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {teamQuery.data.items.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell>{formatDate(row.date)}</TableCell>
-                        <TableCell>{row.user?.fullName ?? "—"}</TableCell>
-                        <TableCell>
-                          {row.clockIn
-                            ? new Date(row.clockIn).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "—"}
-                        </TableCell>
-                        <TableCell>
-                          {row.clockOut
-                            ? new Date(row.clockOut).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "—"}
-                        </TableCell>
-                        <TableCell>{row.totalHours ?? "—"}</TableCell>
-                        <TableCell>
-                          {tAttendance(`status_${row.status}` as never)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <TablePagination
-                  page={teamQuery.data.page}
-                  pageSize={teamPageSize}
-                  total={teamQuery.data.total}
-                  onPageChange={setTeamPage}
-                  onPageSizeChange={(size) => {
-                    setTeamPageSize(size);
-                    setTeamPage(1);
-                  }}
-                />
-              </>
-            ) : null}
-          </div>
+          <TeamWeekSheet onOpenRecord={setReviewRecord} />
         </TabPanel>
 
         <TabPanel when="mine" active={tab}>
-          <div className="space-y-10">
-            <EmployeeAttendancePageClient viewerId={viewerId} embedded />
-            <EmployeeLeavePageClient viewerId={viewerId} embedded />
-          </div>
+          <Tabs
+            items={[
+              { id: "attendance", label: t("tabMyAttendance") },
+              { id: "leave", label: t("tabMyLeave") },
+            ]}
+            value={mineSection}
+            onValueChange={setMineSection}
+          >
+            <TabPanel when="attendance" active={mineSection}>
+              <EmployeeAttendancePageClient viewerId={viewerId} embedded />
+            </TabPanel>
+            <TabPanel when="leave" active={mineSection}>
+              <EmployeeLeavePageClient viewerId={viewerId} embedded />
+            </TabPanel>
+          </Tabs>
         </TabPanel>
       </Tabs>
 
@@ -602,8 +491,9 @@ export function ManagerAttendanceLeavePageClient({
             <Label htmlFor="rejectReason">
               {tApprovals("rejectionReasonLabel")}
             </Label>
-            <Input
+            <textarea
               id="rejectReason"
+              className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-[3px] focus-visible:outline-none"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
@@ -618,6 +508,7 @@ export function ManagerAttendanceLeavePageClient({
             </Button>
             <Button
               type="button"
+              variant="destructive"
               disabled={
                 rejectReason.trim().length < 2 || rejectMutation.isPending
               }

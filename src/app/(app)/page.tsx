@@ -43,8 +43,17 @@ export default async function DashboardPage() {
       PERMISSIONS.REPORT_VIEW,
       permissions,
     );
+    const canApproveAttendance = hasPermission(
+      user.role,
+      PERMISSIONS.ATTENDANCE_APPROVE,
+      permissions,
+    );
     return (
-      <LeadershipDashboardView data={data} canViewReports={canViewReports} />
+      <LeadershipDashboardView
+        data={data}
+        canViewReports={canViewReports}
+        canApproveAttendance={canApproveAttendance}
+      />
     );
   }
 
@@ -69,12 +78,21 @@ export default async function DashboardPage() {
     PERMISSIONS.REPORT_VIEW,
     permissions,
   );
+  const canApproveAttendance = hasPermission(
+    user.role,
+    PERMISSIONS.ATTENDANCE_APPROVE,
+    permissions,
+  );
 
   if (data.role !== "admin") {
     redirect("/");
   }
 
   return (
-    <LeadershipDashboardView data={data} canViewReports={canViewReports} />
+    <LeadershipDashboardView
+      data={data}
+      canViewReports={canViewReports}
+      canApproveAttendance={canApproveAttendance}
+    />
   );
 }

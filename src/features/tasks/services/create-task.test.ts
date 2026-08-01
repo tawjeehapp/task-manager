@@ -75,7 +75,6 @@ const createdRow = {
   start_date: null,
   due_date: null,
   estimated_hours: 5,
-  progress_percentage: 0,
   completed_at: null,
   created_at: "2026-07-31T00:00:00.000Z",
   updated_at: "2026-07-31T00:00:00.000Z",
@@ -124,7 +123,7 @@ describe("createTask", () => {
         assignedTo: null,
         startDate: null,
         dueDate: null,
-        estimatedHours: null,
+        estimatedHours: 1,
         dependsOnTaskIds: [],
       }),
     ).rejects.toMatchObject({

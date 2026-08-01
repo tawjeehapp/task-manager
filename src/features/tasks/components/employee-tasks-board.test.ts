@@ -28,8 +28,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     createdByUser: null,
     startDate: null,
     dueDate: "2026-07-20",
-    estimatedHours: null,
-    progressPercentage: 0,
+    estimatedHours: 1,
     completedAt: null,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
@@ -160,5 +159,35 @@ describe("filterEmployeeBoardTasks", () => {
         today: "2026-07-26",
       }).map((t) => t.id),
     ).toEqual(["1", "3"]);
+  });
+
+  it("filters by assignee", () => {
+    const withAssignees = [
+      makeTask({ id: "1", assignedTo: "u1", assignee: { id: "u1", fullName: "Sara", employeeNumber: "1" } }),
+      makeTask({ id: "2", assignedTo: "u2", assignee: { id: "u2", fullName: "Omar", employeeNumber: "2" } }),
+      makeTask({ id: "3", assignedTo: null, assignee: null }),
+    ];
+
+    expect(
+      filterEmployeeBoardTasks(withAssignees, {
+        search: "",
+        status: "",
+        priority: "",
+        assignee: "u1",
+        lateOnly: false,
+        today: "2026-07-26",
+      }).map((t) => t.id),
+    ).toEqual(["1"]);
+
+    expect(
+      filterEmployeeBoardTasks(withAssignees, {
+        search: "",
+        status: "",
+        priority: "",
+        assignee: "__unassigned__",
+        lateOnly: false,
+        today: "2026-07-26",
+      }).map((t) => t.id),
+    ).toEqual(["3"]);
   });
 });

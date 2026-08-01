@@ -31,6 +31,24 @@ export function timeRangeLabel(
   }
 }
 
+export function summarizeAllocations(record: {
+  allocations?: AttendanceRecord["allocations"];
+}) {
+  const allocations = record.allocations ?? [];
+  let taskHours = 0;
+  let generalHours = 0;
+  const generalReasons: string[] = [];
+  for (const row of allocations) {
+    if (row.kind === "task") {
+      taskHours += row.hours;
+    } else {
+      generalHours += row.hours;
+      if (row.reason) generalReasons.push(row.reason);
+    }
+  }
+  return { taskHours, generalHours, generalReasons };
+}
+
 export function groupAllocationsByDate(
   logs: {
     date: string;

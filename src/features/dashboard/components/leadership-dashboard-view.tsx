@@ -2,7 +2,9 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import {
   AlertTriangle,
+  Ban,
   CheckCircle2,
+  Circle,
   Clock3,
   FolderKanban,
   Info,
@@ -28,11 +30,13 @@ import { cn } from "@/lib/utils";
 type LeadershipDashboardViewProps = {
   data: AdminDashboard | ManagerDashboard;
   canViewReports: boolean;
+  canApproveAttendance: boolean;
 };
 
 export async function LeadershipDashboardView({
   data,
   canViewReports,
+  canApproveAttendance,
 }: LeadershipDashboardViewProps) {
   const t = await getTranslations("dashboard");
   const isAdmin = data.role === "admin";
@@ -84,57 +88,97 @@ export async function LeadershipDashboardView({
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card size="sm" className="border-violet-200/60 bg-violet-50/40">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 xl:grid-cols-6">
+        <Card size="sm">
           <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div>
+            <div className="min-w-0 space-y-1">
+              <CardDescription>{t("metricTodo")}</CardDescription>
+              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
+                {metrics.todoCount}
+              </CardTitle>
+            </div>
+            <Circle className="mt-1 size-5 shrink-0 text-muted-foreground" />
+          </CardHeader>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
+            <div className="min-w-0 space-y-1">
+              <CardDescription>{t("metricInProgress")}</CardDescription>
+              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
+                {metrics.inProgressCount}
+              </CardTitle>
+            </div>
+            <Loader2 className="mt-1 size-5 shrink-0 text-amber-600" />
+          </CardHeader>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
+            <div className="min-w-0 space-y-1">
+              <CardDescription>{t("metricBlocked")}</CardDescription>
+              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
+                {metrics.blockedCount}
+              </CardTitle>
+            </div>
+            <Ban className="mt-1 size-5 shrink-0 text-destructive" />
+          </CardHeader>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
+            <div className="min-w-0 space-y-1">
+              <CardDescription>{t("metricCompleted")}</CardDescription>
+              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
+                {metrics.completedCount}
+              </CardTitle>
+            </div>
+            <CheckCircle2 className="mt-1 size-5 shrink-0 text-emerald-600" />
+          </CardHeader>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
+            <div className="min-w-0 space-y-1">
+              <CardDescription>{t("metricTeamWeekHours")}</CardDescription>
+              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
+                {metrics.weekHours}
+              </CardTitle>
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                <span className="text-emerald-700 tabular-nums">
+                  {metrics.weekHoursApproved}
+                </span>{" "}
+                {t("metricHoursApproved")}
+                {" · "}
+                <span className="text-amber-700 tabular-nums">
+                  {metrics.weekHoursPending}
+                </span>{" "}
+                {t("metricHoursPending")}
+                {" · "}
+                <span className="text-destructive tabular-nums">
+                  {metrics.weekHoursRejected}
+                </span>{" "}
+                {t("metricHoursRejected")}
+              </p>
+            </div>
+            <Clock3 className="mt-1 size-5 shrink-0 text-sky-600" />
+          </CardHeader>
+        </Card>
+
+        <Card size="sm">
+          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
+            <div className="min-w-0 space-y-1">
               <CardDescription>{t("metricProjects")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums">
+              <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
                 {metrics.activeProjectsCount}
               </CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="text-[11px] leading-snug text-muted-foreground">
                 {t("metricAvgProgress", {
                   percent: metrics.avgProgressPercent,
                 })}
               </p>
             </div>
-            <FolderKanban className="size-5 text-violet-600" />
-          </CardHeader>
-        </Card>
-
-        <Card size="sm" className="border-amber-200/60 bg-amber-50/40">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div>
-              <CardDescription>{t("metricInProgress")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums">
-                {metrics.inProgressCount}
-              </CardTitle>
-            </div>
-            <Loader2 className="size-5 text-amber-600" />
-          </CardHeader>
-        </Card>
-
-        <Card size="sm" className="border-red-200/60 bg-red-50/40">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div>
-              <CardDescription>{t("metricOverdue")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums">
-                {metrics.overdueCount}
-              </CardTitle>
-            </div>
-            <AlertTriangle className="size-5 text-destructive" />
-          </CardHeader>
-        </Card>
-
-        <Card size="sm" className="border-sky-200/60 bg-sky-50/40">
-          <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-            <div>
-              <CardDescription>{t("metricTeamWeekHours")}</CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums">
-                {t("hoursValue", { hours: metrics.weekHours })}
-              </CardTitle>
-            </div>
-            <Clock3 className="size-5 text-sky-600" />
+            <FolderKanban className="mt-1 size-5 shrink-0 text-violet-600" />
           </CardHeader>
         </Card>
       </div>
@@ -189,24 +233,15 @@ export async function LeadershipDashboardView({
               </div>
             </div>
             {attention.pendingApprovals.total > 0 ? (
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Link
-                  href="/approvals"
-                  className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
-                >
-                  {t("attentionOpen")}
-                </Link>
-                {attention.pendingApprovals.attendance > 0 ? (
-                  <Link
-                    href="/approvals"
-                    className={cn(
-                      buttonVariants({ size: "sm", variant: "outline" }),
-                    )}
-                  >
-                    {t("viewAttendance")}
-                  </Link>
-                ) : null}
-              </div>
+              <Link
+                href="/approvals"
+                className={cn(
+                  buttonVariants({ size: "sm", variant: "outline" }),
+                  "shrink-0",
+                )}
+              >
+                {t("attentionOpen")}
+              </Link>
             ) : null}
           </div>
 
@@ -231,6 +266,7 @@ export async function LeadershipDashboardView({
         today={data.today}
         team={team}
         projects={projects}
+        canApproveAttendance={canApproveAttendance}
       />
     </div>
   );

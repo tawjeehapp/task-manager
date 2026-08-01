@@ -128,6 +128,11 @@ export const listAttendanceQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((v) => v === "true"),
+  /** When true, attach task/general work_log allocations to each row. */
+  includeAllocations: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
 });
 
 export type ListAttendanceQuery = z.infer<typeof listAttendanceQuerySchema>;

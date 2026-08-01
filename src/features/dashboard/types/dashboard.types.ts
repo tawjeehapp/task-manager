@@ -88,9 +88,15 @@ export type LeadershipProjectHealth = "on_track" | "overdue";
 export type LeadershipMetrics = {
   activeProjectsCount: number;
   avgProgressPercent: number;
+  todoCount: number;
   inProgressCount: number;
+  blockedCount: number;
+  completedCount: number;
   overdueCount: number;
   weekHours: number;
+  weekHoursApproved: number;
+  weekHoursPending: number;
+  weekHoursRejected: number;
 };
 
 export type LeadershipOverduePerson = {
@@ -118,10 +124,14 @@ export type LeadershipTeamRow = {
   departmentId: string | null;
   departmentName: string | null;
   openTaskCount: number;
+  todoCount: number;
   inProgressCount: number;
   overdueCount: number;
   dueTodayCount: number;
   weekHours: number;
+  weekHoursApproved: number;
+  weekHoursPending: number;
+  weekHoursRejected: number;
   todayStatus: LeadershipTodayStatus;
   href: string;
 };

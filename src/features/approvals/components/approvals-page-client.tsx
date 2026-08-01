@@ -5,8 +5,9 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { CalendarDays, Clock3, ClipboardList } from "lucide-react";
 
-import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import { AttendanceReviewDialog } from "@/features/attendance/components/attendance-review-dialog";
+import { summarizeAllocations } from "@/features/attendance/components/attendance-display-utils";
+import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import type { ProjectMember } from "@/features/projects/types/project.types";
 import type { EmployeeRequest } from "@/features/employee-requests/types/employee-request.types";
 import type { LeaveRequest } from "@/features/leave/types/leave.types";
@@ -17,7 +18,6 @@ import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -381,7 +381,7 @@ export function ApprovalsPageClient({
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant="destructive"
                             onClick={() =>
                               setRejectTarget({ kind: "employee", id: row.id })
                             }
@@ -431,7 +431,9 @@ export function ApprovalsPageClient({
                       <TableRow>
                         <TableHead>{t("employee")}</TableHead>
                         <TableHead>{t("leaveType")}</TableHead>
+                        <TableHead>{t("dates")}</TableHead>
                         <TableHead>{t("days")}</TableHead>
+                        <TableHead>{t("reason")}</TableHead>
                         <TableHead>{t("actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -440,7 +442,17 @@ export function ApprovalsPageClient({
                         <TableRow key={row.id}>
                           <TableCell>{row.user?.fullName ?? "—"}</TableCell>
                           <TableCell>{row.leaveType?.name ?? "—"}</TableCell>
+                          <TableCell>
+                            {formatDate(row.startDate)} –{" "}
+                            {formatDate(row.endDate)}
+                          </TableCell>
                           <TableCell>{row.days}</TableCell>
+                          <TableCell
+                            className="max-w-40 truncate"
+                            title={row.reason ?? undefined}
+                          >
+                            {row.reason ?? "—"}
+                          </TableCell>
                           <TableCell className="space-x-2 space-x-reverse">
                             <Button
                               type="button"
@@ -454,7 +466,7 @@ export function ApprovalsPageClient({
                             <Button
                               type="button"
                               size="sm"
-                              variant="outline"
+                              variant="destructive"
                               onClick={() =>
                                 setRejectTarget({ kind: "leave", id: row.id })
                               }
@@ -502,26 +514,48 @@ export function ApprovalsPageClient({
                         <TableHead>{t("date")}</TableHead>
                         <TableHead>{t("employee")}</TableHead>
                         <TableHead>{t("totalHours")}</TableHead>
+                        <TableHead>{t("breakdown")}</TableHead>
                         <TableHead>{t("actions")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {attendanceItems.map((row) => (
-                        <TableRow key={row.id}>
-                          <TableCell>{formatDate(row.date)}</TableCell>
-                          <TableCell>{row.user?.fullName ?? "—"}</TableCell>
-                          <TableCell>{row.totalHours ?? "—"}</TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => setReviewRecord(row)}
-                            >
-                              {tAttendance("review")}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {attendanceItems.map((row) => {
+                        const breakdown = summarizeAllocations(row);
+                        const generalReasonText =
+                          breakdown.generalReasons.join(" · ");
+                        return (
+                          <TableRow key={row.id}>
+                            <TableCell>{formatDate(row.date)}</TableCell>
+                            <TableCell>{row.user?.fullName ?? "—"}</TableCell>
+                            <TableCell>{row.totalHours ?? "—"}</TableCell>
+                            <TableCell className="max-w-48">
+                              <div className="text-sm">
+                                {tAttendance("allocationSummary", {
+                                  allocated: breakdown.taskHours,
+                                  remaining: breakdown.generalHours,
+                                })}
+                              </div>
+                              {generalReasonText ? (
+                                <p
+                                  className="mt-0.5 truncate text-xs text-muted-foreground"
+                                  title={generalReasonText}
+                                >
+                                  {generalReasonText}
+                                </p>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setReviewRecord(row)}
+                              >
+                                {tAttendance("review")}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 ) : null}
@@ -624,8 +658,9 @@ export function ApprovalsPageClient({
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="rejectReason">{t("rejectionReasonLabel")}</Label>
-            <Input
+            <textarea
               id="rejectReason"
+              className="border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring/50 flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-[3px] focus-visible:outline-none"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
             />
@@ -640,6 +675,7 @@ export function ApprovalsPageClient({
             </Button>
             <Button
               type="button"
+              variant="destructive"
               disabled={
                 rejectReason.trim().length < 2 || rejectMutation.isPending
               }

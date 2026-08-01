@@ -351,18 +351,18 @@ export async function listEmployeeWorkloadReport(
 
   const byUser = new Map<
     string,
-    Array<{ status: string; estimatedHours: number | null }>
+    Array<{ status: string; estimatedHours: number }>
   >();
   for (const id of scoped.userIds) byUser.set(id, []);
   for (const row of tasks ?? []) {
     const assignee = row.assigned_to as string | null;
     if (!assignee || !byUser.has(assignee)) continue;
+    const raw = row.estimated_hours;
+    const n =
+      raw === null || raw === undefined ? 1 : Number(raw);
     byUser.get(assignee)!.push({
       status: row.status as string,
-      estimatedHours:
-        row.estimated_hours === null || row.estimated_hours === undefined
-          ? null
-          : Number(row.estimated_hours),
+      estimatedHours: Number.isFinite(n) && n > 0 ? n : 1,
     });
   }
 

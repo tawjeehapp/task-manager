@@ -13,6 +13,24 @@ describe("task schemas", () => {
     const result = createTaskSchema.safeParse({
       projectId: PROJECT,
       title: "أ",
+      estimatedHours: 1,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("requires estimatedHours on create", () => {
+    const result = createTaskSchema.safeParse({
+      projectId: PROJECT,
+      title: "مهمة",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-positive estimatedHours on create", () => {
+    const result = createTaskSchema.safeParse({
+      projectId: PROJECT,
+      title: "مهمة",
+      estimatedHours: 0,
     });
     expect(result.success).toBe(false);
   });
@@ -35,6 +53,7 @@ describe("task schemas", () => {
     const result = createTaskSchema.safeParse({
       projectId: PROJECT,
       title: "مهمة",
+      estimatedHours: 2,
       assignedTo: "",
     });
     expect(result.success).toBe(true);
@@ -46,6 +65,16 @@ describe("task schemas", () => {
   it("rejects empty update", () => {
     const result = updateTaskSchema.safeParse({});
     expect(result.success).toBe(false);
+  });
+
+  it("rejects null estimatedHours on update", () => {
+    const result = updateTaskSchema.safeParse({ estimatedHours: null });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts positive estimatedHours on update", () => {
+    const result = updateTaskSchema.safeParse({ estimatedHours: 1.5 });
+    expect(result.success).toBe(true);
   });
 
   it("parses list query without hierarchy filters", () => {

@@ -14,7 +14,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 /** Pure workload calculation from assigned task rows. */
 export function computeEmployeeWorkload(
   userId: string,
-  tasks: Array<{ status: TaskStatus | string; estimatedHours: number | null }>,
+  tasks: Array<{ status: TaskStatus | string; estimatedHours: number }>,
 ): EmployeeWorkload {
   let activeTaskCount = 0;
   let estimatedHours = 0;
@@ -24,7 +24,7 @@ export function computeEmployeeWorkload(
       continue;
     }
     activeTaskCount += 1;
-    estimatedHours += task.estimatedHours ?? 0;
+    estimatedHours += task.estimatedHours;
   }
 
   return {
@@ -87,15 +87,19 @@ export async function getEmployeeWorkload(
     );
   }
 
-  const tasks = (data ?? []).map((row) => ({
-    status: row.status as string,
-    estimatedHours:
-      row.estimated_hours === null || row.estimated_hours === undefined
-        ? null
-        : typeof row.estimated_hours === "number"
-          ? row.estimated_hours
-          : Number(row.estimated_hours),
-  }));
+  const tasks = (data ?? []).map((row) => {
+    const raw = row.estimated_hours;
+    const n =
+      raw === null || raw === undefined
+        ? 1
+        : typeof raw === "number"
+          ? raw
+          : Number(raw);
+    return {
+      status: row.status as string,
+      estimatedHours: Number.isFinite(n) && n > 0 ? n : 1,
+    };
+  });
 
   return computeEmployeeWorkload(userId, tasks);
 }

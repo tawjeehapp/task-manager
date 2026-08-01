@@ -17,7 +17,6 @@ function task(overrides: Partial<AggregateTaskRow> = {}): AggregateTaskRow {
     status: "todo",
     dueDate: "2026-07-20",
     estimatedHours: 4,
-    progressPercentage: 25,
     ...overrides,
   };
 }
@@ -41,13 +40,19 @@ describe("leadership aggregates", () => {
     );
   });
 
-  it("averages task progress", () => {
+  it("computes hours-weighted project progress", () => {
     expect(
       computeProjectProgress([
-        task({ progressPercentage: 0 }),
-        task({ id: "t2", progressPercentage: 50 }),
+        task({ status: "completed", estimatedHours: 1 }),
+        task({ id: "t2", estimatedHours: 9 }),
       ]),
-    ).toBe(25);
+    ).toBe(10);
+    expect(
+      computeProjectProgress([
+        task({ status: "completed", estimatedHours: 2 }),
+        task({ id: "t2", status: "completed", estimatedHours: 2 }),
+      ]),
+    ).toBe(100);
     expect(computeProjectProgress([])).toBe(0);
   });
 
@@ -99,14 +104,12 @@ describe("leadership aggregates", () => {
           assignedTo: "u1",
           status: "in_progress",
           dueDate: "2026-07-20",
-          progressPercentage: 40,
         }),
         task({
           id: "t2",
           assignedTo: "u2",
           status: "todo",
           dueDate: "2026-07-28",
-          progressPercentage: 0,
           estimatedHours: 2,
         }),
       ],
@@ -116,21 +119,43 @@ describe("leadership aggregates", () => {
           date: "2026-07-26",
           clockOut: null,
           totalHours: null,
+          status: "pending",
         },
         {
           userId: "u1",
           date: "2026-07-27",
           clockOut: "x",
           totalHours: 7.5,
+          status: "approved",
+        },
+        {
+          userId: "u2",
+          date: "2026-07-27",
+          clockOut: "x",
+          totalHours: 2,
+          status: "pending",
+        },
+        {
+          userId: "u2",
+          date: "2026-07-28",
+          clockOut: "x",
+          totalHours: 1,
+          status: "rejected",
         },
       ],
     });
 
     expect(result.metrics.activeProjectsCount).toBe(1);
+    expect(result.metrics.todoCount).toBe(1);
     expect(result.metrics.inProgressCount).toBe(1);
+    expect(result.metrics.blockedCount).toBe(0);
+    expect(result.metrics.completedCount).toBe(0);
     expect(result.metrics.overdueCount).toBe(1);
-    expect(result.metrics.weekHours).toBe(7.5);
-    expect(result.metrics.avgProgressPercent).toBe(20);
+    expect(result.metrics.weekHours).toBe(10.5);
+    expect(result.metrics.weekHoursApproved).toBe(7.5);
+    expect(result.metrics.weekHoursPending).toBe(2);
+    expect(result.metrics.weekHoursRejected).toBe(1);
+    expect(result.metrics.avgProgressPercent).toBe(0);
 
     expect(result.overduePeople).toEqual([
       { userId: "u1", fullName: "سارة", overdueCount: 1 },
@@ -143,6 +168,18 @@ describe("leadership aggregates", () => {
     expect(sarah?.todayStatus).toBe("working");
     expect(sarah?.overdueCount).toBe(1);
     expect(sarah?.inProgressCount).toBe(1);
+    expect(sarah?.todoCount).toBe(0);
+    expect(sarah?.weekHours).toBe(7.5);
+    expect(sarah?.weekHoursApproved).toBe(7.5);
+    expect(sarah?.weekHoursPending).toBe(0);
+    expect(sarah?.weekHoursRejected).toBe(0);
+
+    const nora = result.team.find((r) => r.userId === "u2");
+    expect(nora?.todoCount).toBe(1);
+    expect(nora?.weekHours).toBe(3);
+    expect(nora?.weekHoursApproved).toBe(0);
+    expect(nora?.weekHoursPending).toBe(2);
+    expect(nora?.weekHoursRejected).toBe(1);
 
     expect(result.projects[0]?.health).toBe("overdue");
     expect(result.projects[0]?.estimatedHoursSum).toBe(6);

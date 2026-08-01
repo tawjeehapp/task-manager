@@ -337,24 +337,21 @@ export function TaskDetailClient({
           status: taskQuery.data.status,
           priority: taskQuery.data.priority,
           assignedTo: taskQuery.data.assignedTo,
-          startDate: taskQuery.data.startDate ?? "",
           dueDate: taskQuery.data.dueDate ?? "",
           estimatedHours: taskQuery.data.estimatedHours,
-          progressPercentage: taskQuery.data.progressPercentage,
         }
       : undefined,
   });
 
   const patchMutation = useMutation({
     mutationFn: async (values: UpdateTaskInput) => {
-      const { status: _status, ...rest } = values;
+      const { status: _status, startDate: _startDate, ...rest } = values;
       const response = await fetch(`/api/tasks/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...rest,
           assignedTo: rest.assignedTo || null,
-          startDate: rest.startDate || null,
           dueDate: rest.dueDate || null,
           description: rest.description || null,
         }),
@@ -632,14 +629,6 @@ export function TaskDetailClient({
                       }
                     />
                   </PropertyRow>
-                  <PropertyRow label={t("startDate")}>
-                    <Input
-                      id="edit-start"
-                      type="date"
-                      className="h-8 sm:max-w-40"
-                      {...editForm.register("startDate")}
-                    />
-                  </PropertyRow>
                   <PropertyRow label={t("dueDate")}>
                     <Input
                       id="edit-due"
@@ -653,23 +642,10 @@ export function TaskDetailClient({
                       id="edit-hours"
                       type="number"
                       step="0.5"
-                      min="0"
+                      min="0.5"
+                      required
                       className="h-8 sm:max-w-40"
                       {...editForm.register("estimatedHours", {
-                        setValueAs: (value) =>
-                          value === "" || value == null ? null : Number(value),
-                      })}
-                    />
-                  </PropertyRow>
-                  <PropertyRow label={t("progressPercentage")}>
-                    <Input
-                      id="edit-progress"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="1"
-                      className="h-8 sm:max-w-40"
-                      {...editForm.register("progressPercentage", {
                         setValueAs: (value) =>
                           value === "" || value == null
                             ? undefined
@@ -707,21 +683,11 @@ export function TaskDetailClient({
                     {task.assignee?.fullName ?? "—"}
                   </span>
                 </PropertyRow>
-                <PropertyRow label={t("startDate")}>
-                  <span className="font-medium">{task.startDate ?? "—"}</span>
-                </PropertyRow>
                 <PropertyRow label={t("dueDate")}>
                   <span className="font-medium">{task.dueDate ?? "—"}</span>
                 </PropertyRow>
                 <PropertyRow label={t("estimatedHours")}>
-                  <span className="font-medium">
-                    {task.estimatedHours != null ? task.estimatedHours : "—"}
-                  </span>
-                </PropertyRow>
-                <PropertyRow label={t("progressPercentage")}>
-                  <span className="font-medium">
-                    {task.progressPercentage ?? 0}%
-                  </span>
+                  <span className="font-medium">{task.estimatedHours}</span>
                 </PropertyRow>
               </dl>
             )}

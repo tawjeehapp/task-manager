@@ -6,7 +6,7 @@ import {
   MAX_ATTACHMENT_BYTES,
   attachmentFileMetaSchema,
 } from "@/features/tasks/schemas/attachment.schema";
-import { listTasksQuerySchema, updateTaskSchema } from "@/features/tasks/schemas/task.schema";
+import { listTasksQuerySchema } from "@/features/tasks/schemas/task.schema";
 import { ganttQuerySchema } from "@/features/gantt/schemas/gantt.schema";
 import {
   isTaskOverdue,
@@ -20,16 +20,6 @@ describe("milestone 9 schemas", () => {
       pageSize: "25",
     });
     expect(result.success).toBe(true);
-  });
-
-  it("accepts progressPercentage on update", () => {
-    const result = updateTaskSchema.safeParse({ progressPercentage: 40 });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects progressPercentage above 100", () => {
-    const result = updateTaskSchema.safeParse({ progressPercentage: 101 });
-    expect(result.success).toBe(false);
   });
 
   it("requires non-empty comment content", () => {

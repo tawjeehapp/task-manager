@@ -31,11 +31,18 @@ export const createTaskSchema = z.object({
     .transform((value) => (value === "" || value === undefined ? null : value)),
   startDate: optionalDate,
   dueDate: optionalDate,
-  estimatedHours: z
-    .number()
-    .nonnegative("الساعات المقدرة غير صالحة")
-    .optional()
-    .nullable(),
+  estimatedHours: z.preprocess(
+    (value) =>
+      value === "" || value === null || value === undefined ? undefined : value,
+    z
+      .coerce.number({
+        error: (iss) =>
+          iss.input === undefined
+            ? "الساعات المقدرة مطلوبة"
+            : "الساعات المقدرة غير صالحة",
+      })
+      .positive("الساعات المقدرة يجب أن تكون أكبر من صفر"),
+  ),
   dependsOnTaskIds: z
     .array(z.string().uuid("معرّف المهمة غير صالح"))
     .optional(),
@@ -85,16 +92,11 @@ export const updateTaskSchema = z
         }
         return value === "" ? null : value;
       }),
-    estimatedHours: z
-      .number()
-      .nonnegative("الساعات المقدرة غير صالحة")
-      .nullable()
-      .optional(),
-    progressPercentage: z
-      .number()
-      .int("نسبة التقدم غير صالحة")
-      .min(0, "نسبة التقدم غير صالحة")
-      .max(100, "نسبة التقدم غير صالحة")
+    estimatedHours: z.coerce
+      .number({
+        error: () => "الساعات المقدرة غير صالحة",
+      })
+      .positive("الساعات المقدرة يجب أن تكون أكبر من صفر")
       .optional(),
   })
   .refine(
@@ -106,8 +108,7 @@ export const updateTaskSchema = z
       data.assignedTo !== undefined ||
       data.startDate !== undefined ||
       data.dueDate !== undefined ||
-      data.estimatedHours !== undefined ||
-      data.progressPercentage !== undefined,
+      data.estimatedHours !== undefined,
     { message: "لا توجد بيانات للتحديث" },
   );
 

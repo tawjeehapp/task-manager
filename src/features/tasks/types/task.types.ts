@@ -46,8 +46,7 @@ export type Task = {
   createdByUser: TaskUserSummary | null;
   startDate: string | null;
   dueDate: string | null;
-  estimatedHours: number | null;
-  progressPercentage: number;
+  estimatedHours: number;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -74,8 +73,7 @@ export type TaskRow = {
   created_by: string;
   start_date: string | null;
   due_date: string | null;
-  estimated_hours: number | string | null;
-  progress_percentage: number;
+  estimated_hours: number | string;
   completed_at: string | null;
   created_at: string;
   updated_at: string;

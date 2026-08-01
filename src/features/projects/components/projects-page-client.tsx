@@ -285,7 +285,7 @@ export function ProjectsPageClient({
                 <form
                   className="space-y-4"
                   onSubmit={createForm.handleSubmit((values) =>
-                    createMutation.mutate(values),
+                    createMutation.mutate({ ...values, startDate: null }),
                   )}
                 >
                   {canManage ? (
@@ -354,14 +354,6 @@ export function ProjectsPageClient({
                         <option value="draft">{statusLabel("draft")}</option>
                         <option value="active">{statusLabel("active")}</option>
                       </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="startDate">{t("startDate")}</Label>
-                      <Input
-                        id="startDate"
-                        type="date"
-                        {...createForm.register("startDate")}
-                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="endDate">{t("endDate")}</Label>

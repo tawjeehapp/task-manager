@@ -65,7 +65,7 @@ type TaskWithRelations = TaskRow & {
 };
 
 const TASK_SELECT =
-  "id, project_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, progress_percentage, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number)";
+  "id, project_id, title, description, status, priority, assigned_to, created_by, start_date, due_date, estimated_hours, completed_at, created_at, updated_at, project:projects!project_id(id, name, department_id), assignee:users!assigned_to(id, full_name, employee_number), created_by_user:users!created_by(id, full_name, employee_number)";
 
 const SORT_COLUMN_MAP: Record<ListTasksQuery["sortBy"], string> = {
   title: "title",
@@ -107,11 +107,12 @@ function mapProject(
   };
 }
 
-function toHours(value: number | string | null): number | null {
+function toHours(value: number | string | null | undefined): number {
   if (value === null || value === undefined) {
-    return null;
+    return 1;
   }
-  return typeof value === "number" ? value : Number(value);
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
 type DependencyAggregate = {
@@ -162,7 +163,6 @@ export function mapTask(
       : null,
     dueDate: row.due_date ? String(row.due_date).slice(0, 10) : null,
     estimatedHours: toHours(row.estimated_hours),
-    progressPercentage: row.progress_percentage,
     completedAt: row.completed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -430,7 +430,7 @@ export async function createTask(
       created_by: viewer.id,
       start_date: input.startDate,
       due_date: input.dueDate,
-      estimated_hours: input.estimatedHours ?? null,
+      estimated_hours: input.estimatedHours,
       completed_at: completedAt,
     })
     .select("*")
@@ -525,7 +525,7 @@ export async function updateTask(
   const { data: existing, error: existingError } = await admin
     .from("tasks")
     .select(
-      "status, assigned_to, title, description, priority, start_date, due_date, estimated_hours, progress_percentage",
+      "status, assigned_to, title, description, priority, start_date, due_date, estimated_hours",
     )
     .eq("id", taskId)
     .maybeSingle();
@@ -559,9 +559,6 @@ export async function updateTask(
   }
   if (input.estimatedHours !== undefined) {
     patch.estimated_hours = input.estimatedHours;
-  }
-  if (input.progressPercentage !== undefined) {
-    patch.progress_percentage = input.progressPercentage;
   }
   if (input.status !== undefined) {
     if (input.status === "blocked" && existing.status !== "blocked") {
@@ -671,10 +668,7 @@ export async function updateTask(
         (existing.estimated_hours === null ||
         existing.estimated_hours === undefined
           ? null
-          : Number(existing.estimated_hours))) ||
-    (input.progressPercentage !== undefined &&
-      input.progressPercentage !==
-        Number(existing.progress_percentage ?? 0));
+          : Number(existing.estimated_hours)));
 
   if (otherChanged) {
     await logTaskActivity(viewer.id, taskId, "task.updated", {

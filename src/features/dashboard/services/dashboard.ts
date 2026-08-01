@@ -50,9 +50,15 @@ function emptyLeadershipBase(today: string): LeadershipDashboardBase {
     metrics: {
       activeProjectsCount: 0,
       avgProgressPercent: 0,
+      todoCount: 0,
       inProgressCount: 0,
+      blockedCount: 0,
+      completedCount: 0,
       overdueCount: 0,
       weekHours: 0,
+      weekHoursApproved: 0,
+      weekHoursPending: 0,
+      weekHoursRejected: 0,
     },
     attention: {
       overduePeople: [],
@@ -210,7 +216,7 @@ async function buildLeadershipDashboard(input: {
       : admin
           .from("tasks")
           .select(
-            "id, project_id, assigned_to, status, due_date, estimated_hours, progress_percentage",
+            "id, project_id, assigned_to, status, due_date, estimated_hours",
           )
           .in("project_id", projectIds);
 
@@ -219,7 +225,7 @@ async function buildLeadershipDashboard(input: {
       ? Promise.resolve({ data: [] as unknown[], error: null })
       : admin
           .from("attendance_records")
-          .select("user_id, date, clock_out, total_hours")
+          .select("user_id, date, clock_out, total_hours, status")
           .in("user_id", userIds)
           .gte("date", weekStart)
           .lte("date", weekEnd);
@@ -327,19 +333,18 @@ async function buildLeadershipDashboard(input: {
       status: string;
       due_date: string | null;
       estimated_hours: number | string | null;
-      progress_percentage: number;
     };
+    const hours =
+      r.estimated_hours === null || r.estimated_hours === undefined
+        ? 1
+        : Number(r.estimated_hours);
     return {
       id: r.id,
       projectId: r.project_id,
       assignedTo: r.assigned_to,
       status: r.status,
       dueDate: r.due_date,
-      estimatedHours:
-        r.estimated_hours === null || r.estimated_hours === undefined
-          ? null
-          : Number(r.estimated_hours),
-      progressPercentage: Number(r.progress_percentage ?? 0),
+      estimatedHours: Number.isFinite(hours) && hours > 0 ? hours : 1,
     };
   });
 
@@ -349,6 +354,7 @@ async function buildLeadershipDashboard(input: {
       date: string;
       clock_out: string | null;
       total_hours: number | string | null;
+      status: string;
     };
     return {
       userId: r.user_id,
@@ -358,6 +364,7 @@ async function buildLeadershipDashboard(input: {
         r.total_hours === null || r.total_hours === undefined
           ? null
           : Number(r.total_hours),
+      status: r.status,
     };
   });
 

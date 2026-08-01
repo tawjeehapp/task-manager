@@ -4,10 +4,12 @@ import { useTranslations } from "next-intl";
 
 import {
   timeRangeLabel,
+  uiStateBadgeVariant,
 } from "@/features/attendance/components/attendance-display-utils";
 import type { AttendanceRecord } from "@/features/attendance/types/attendance.types";
 import { formatDate } from "@/lib/dates";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,6 +26,8 @@ type AttendanceReviewDialogProps = {
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   isApproving?: boolean;
+  /** When false, hide approve/reject (view-only detail). Defaults to pending records. */
+  canDecide?: boolean;
 };
 
 export function AttendanceReviewDialog({
@@ -33,6 +37,7 @@ export function AttendanceReviewDialog({
   onApprove,
   onReject,
   isApproving = false,
+  canDecide,
 }: AttendanceReviewDialogProps) {
   const t = useTranslations("attendance");
 
@@ -42,16 +47,35 @@ export function AttendanceReviewDialog({
     .filter((row) => row.kind === "general")
     .reduce((sum, row) => sum + row.hours, 0);
   const showEligibleWarning = generalHours > 0 && snapshot.length > 0;
+  const showDecideActions =
+    canDecide ?? record?.uiState === "awaiting_approval";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[min(90vh,40rem)] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{t("reviewTitle")}</DialogTitle>
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            <span>{t("reviewTitle")}</span>
+            {record ? (
+              <Badge variant={uiStateBadgeVariant(record.uiState)}>
+                {t(`uiState_${record.uiState}`)}
+              </Badge>
+            ) : null}
+          </DialogTitle>
         </DialogHeader>
 
         {record ? (
           <div className="space-y-4">
+            {record.uiState === "rejected" ? (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  {record.rejectionReason
+                    ? t("rejectionReason", { reason: record.rejectionReason })
+                    : t("uiState_rejected")}
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
             <dl className="grid gap-2 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-muted-foreground">{t("employee")}</dt>
@@ -160,27 +184,31 @@ export function AttendanceReviewDialog({
           >
             {t("reviewClose")}
           </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={!record}
-            onClick={() => {
-              if (!record) return;
-              onReject(record.id);
-            }}
-          >
-            {t("reject")}
-          </Button>
-          <Button
-            type="button"
-            disabled={!record || isApproving}
-            onClick={() => {
-              if (!record) return;
-              onApprove(record.id);
-            }}
-          >
-            {t("approve")}
-          </Button>
+          {showDecideActions ? (
+            <>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={!record}
+                onClick={() => {
+                  if (!record) return;
+                  onReject(record.id);
+                }}
+              >
+                {t("reject")}
+              </Button>
+              <Button
+                type="button"
+                disabled={!record || isApproving}
+                onClick={() => {
+                  if (!record) return;
+                  onApprove(record.id);
+                }}
+              >
+                {t("approve")}
+              </Button>
+            </>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

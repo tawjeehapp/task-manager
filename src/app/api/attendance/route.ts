@@ -22,6 +22,8 @@ export async function GET(request: Request) {
       dateFrom: url.searchParams.get("dateFrom") ?? undefined,
       dateTo: url.searchParams.get("dateTo") ?? undefined,
       awaitingApproval: url.searchParams.get("awaitingApproval") ?? undefined,
+      includeAllocations:
+        url.searchParams.get("includeAllocations") ?? undefined,
     });
 
     if (!parsed.success) {

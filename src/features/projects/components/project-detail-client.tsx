@@ -21,6 +21,7 @@ import type {
   Project,
   ProjectMember,
 } from "@/features/projects/types/project.types";
+import { computeHoursWeightedProgress } from "@/features/projects/lib/project-progress";
 import type { Task } from "@/features/tasks/types/task.types";
 import { EmployeeProjectTasksTable } from "@/features/projects/components/employee-project-tasks-table";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
@@ -185,7 +186,6 @@ export function ProjectDetailClient({
           description: projectQuery.data.description,
           status: projectQuery.data.status,
           priority: projectQuery.data.priority,
-          startDate: projectQuery.data.startDate,
           endDate: projectQuery.data.endDate,
         }
       : undefined,
@@ -272,7 +272,6 @@ export function ProjectDetailClient({
       assignedTo: null,
       startDate: null,
       dueDate: null,
-      estimatedHours: null,
       dependsOnTaskIds: [],
     },
   });
@@ -304,7 +303,6 @@ export function ProjectDetailClient({
         assignedTo: null,
         startDate: null,
         dueDate: null,
-        estimatedHours: null,
         dependsOnTaskIds: [],
       });
       setTaskError(null);
@@ -348,8 +346,12 @@ export function ProjectDetailClient({
     (task) => task.status === "completed",
   ).length;
   const taskCount = tasks.length;
-  const progressPercent =
-    taskCount === 0 ? 0 : Math.round((completedTaskCount / taskCount) * 100);
+  const progressPercent = computeHoursWeightedProgress(
+    tasks.map((task) => ({
+      status: task.status,
+      estimatedHours: task.estimatedHours,
+    })),
+  );
 
   const createTaskAssigneeOptions: AssigneeOption[] = (() => {
     const byId = new Map<string, AssigneeOption>();
@@ -505,7 +507,7 @@ export function ProjectDetailClient({
       ) : null}
 
       {!isEmployee ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-lg border p-4">
             <p className="text-muted-foreground text-sm">{t("status")}</p>
             <Badge className="mt-2" variant="secondary">
@@ -517,10 +519,6 @@ export function ProjectDetailClient({
             <p className="mt-2 font-medium">
               {priorityLabel(project.priority)}
             </p>
-          </div>
-          <div className="rounded-lg border p-4">
-            <p className="text-muted-foreground text-sm">{t("startDate")}</p>
-            <p className="mt-2 font-medium">{project.startDate ?? "—"}</p>
           </div>
           <div className="rounded-lg border p-4">
             <p className="text-muted-foreground text-sm">{t("endDate")}</p>
@@ -659,9 +657,10 @@ export function ProjectDetailClient({
           </DialogHeader>
           <form
             className="space-y-4"
-            onSubmit={editForm.handleSubmit((values) =>
-              patchMutation.mutate(values),
-            )}
+            onSubmit={editForm.handleSubmit((values) => {
+              const { startDate: _ignored, ...rest } = values;
+              patchMutation.mutate(rest);
+            })}
           >
             <div className="space-y-2">
               <Label htmlFor="edit-name">{t("name")}</Label>
@@ -700,14 +699,6 @@ export function ProjectDetailClient({
                   <option value="medium">{priorityLabel("medium")}</option>
                   <option value="high">{priorityLabel("high")}</option>
                 </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-start">{t("startDate")}</Label>
-                <Input
-                  id="edit-start"
-                  type="date"
-                  {...editForm.register("startDate")}
-                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-end">{t("endDate")}</Label>
@@ -863,7 +854,7 @@ export function ProjectDetailClient({
             className="space-y-4"
             onSubmit={createTaskForm.handleSubmit((values) => {
               setTaskError(null);
-              createTaskMutation.mutate(values);
+              createTaskMutation.mutate({ ...values, startDate: null });
             })}
           >
             <div className="space-y-2">
@@ -924,20 +915,33 @@ export function ProjectDetailClient({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="task-start">{tTasks("startDate")}</Label>
-                <Input
-                  id="task-start"
-                  type="date"
-                  {...createTaskForm.register("startDate")}
-                />
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="task-due">{tTasks("dueDate")}</Label>
                 <Input
                   id="task-due"
                   type="date"
                   {...createTaskForm.register("dueDate")}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="task-hours">{tTasks("estimatedHours")}</Label>
+                <Input
+                  id="task-hours"
+                  type="number"
+                  step="0.5"
+                  min="0.5"
+                  required
+                  {...createTaskForm.register("estimatedHours", {
+                    setValueAs: (value) =>
+                      value === "" || value == null
+                        ? undefined
+                        : Number(value),
+                  })}
+                />
+                {createTaskForm.formState.errors.estimatedHours ? (
+                  <p className="text-destructive text-sm">
+                    {createTaskForm.formState.errors.estimatedHours.message}
+                  </p>
+                ) : null}
               </div>
             </div>
             <TaskDependencyPicker

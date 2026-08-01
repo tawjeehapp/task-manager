@@ -24,7 +24,6 @@ type TaskRow = {
   assigned_to: string | null;
   start_date: string | null;
   due_date: string | null;
-  progress_percentage: number;
   created_at: string;
   assignee: { full_name: string } | null;
 };
@@ -43,7 +42,7 @@ export async function getProjectGantt(
   let builder = admin
     .from("tasks")
     .select(
-      "id, title, status, priority, assigned_to, start_date, due_date, progress_percentage, created_at, assignee:users!assigned_to(full_name)",
+      "id, title, status, priority, assigned_to, start_date, due_date, created_at, assignee:users!assigned_to(full_name)",
     )
     .eq("project_id", projectId)
     .order("created_at", { ascending: true });
@@ -114,7 +113,7 @@ export async function getProjectGantt(
       dueDate: row.due_date,
       barStart,
       barEnd,
-      progressPercentage: Number(row.progress_percentage ?? 0),
+      progressPercentage: row.status === "completed" ? 100 : 0,
       overdue: isTaskOverdue({
         dueDate: row.due_date,
         status: row.status,

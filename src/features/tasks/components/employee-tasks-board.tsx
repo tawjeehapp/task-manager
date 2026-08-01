@@ -1,16 +1,24 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { Calendar, Lock, Search, TriangleAlert } from "lucide-react";
 
-import type { Task, TaskStatus } from "@/features/tasks/types/task.types";
+import type {
+  Task,
+  TaskPriority,
+  TaskStatus,
+} from "@/features/tasks/types/task.types";
 import { TASK_STATUSES } from "@/features/tasks/types/task.types";
 import type { TasksListResult } from "@/features/tasks/services/tasks";
 import { TaskRequestDialog } from "@/features/dashboard/components/task-request-dialog";
 import { TaskBlockerChips } from "@/features/tasks/components/task-blocker-summary";
+import {
+  AssigneeSelect,
+  type AssigneeOption,
+} from "@/features/tasks/components/assignee-select";
 import { useBoardStatusMutation } from "@/features/tasks/hooks/use-board-status-mutation";
 import { todayInOrgTimezone } from "@/lib/org-calendar";
 import { formatDate } from "@/lib/dates";
@@ -27,6 +35,10 @@ import { cn } from "@/lib/utils";
 type EmployeeTasksBoardProps = {
   viewerId: string;
   initialTasks: TasksListResult;
+  /** Personal = assignee-filtered board; team = department-wide board. */
+  mode?: "personal" | "team";
+  /** When true, parent owns the page header (e.g. list/board toggle). */
+  hideHeader?: boolean;
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -52,6 +64,24 @@ async function fetchMyTasks(viewerId: string): Promise<Task[]> {
     sortBy: "dueDate",
     sortDir: "asc",
     assignee: viewerId,
+  });
+  const response = await fetch(`/api/tasks?${params.toString()}`);
+  const payload = (await response.json()) as {
+    data?: TasksListResult;
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+  return payload.data?.items ?? [];
+}
+
+async function fetchTeamTasks(): Promise<Task[]> {
+  const params = new URLSearchParams({
+    page: "1",
+    pageSize: "100",
+    sortBy: "dueDate",
+    sortDir: "asc",
   });
   const response = await fetch(`/api/tasks?${params.toString()}`);
   const payload = (await response.json()) as {
@@ -97,6 +127,7 @@ export function filterEmployeeBoardTasks(
     search: string;
     status: string;
     priority: string;
+    assignee?: string;
     lateOnly: boolean;
     today: string;
   },
@@ -105,9 +136,15 @@ export function filterEmployeeBoardTasks(
   return tasks.filter((task) => {
     if (opts.status && task.status !== opts.status) return false;
     if (opts.priority && task.priority !== opts.priority) return false;
+    if (opts.assignee === "__unassigned__") {
+      if (task.assignedTo) return false;
+    } else if (opts.assignee && task.assignedTo !== opts.assignee) {
+      return false;
+    }
     if (opts.lateOnly && !isLateTask(task, opts.today)) return false;
     if (q) {
-      const hay = `${task.title} ${task.project?.name ?? ""}`.toLowerCase();
+      const hay =
+        `${task.title} ${task.project?.name ?? ""} ${task.assignee?.fullName ?? ""}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -138,30 +175,243 @@ function PriorityPill({
   );
 }
 
+const PRIORITIES: TaskPriority[] = ["low", "medium", "high"];
+
+const boardFieldClassName =
+  "border-input bg-background h-8 w-full rounded-md border px-2 text-xs";
+
+async function fetchAssigneeOptions(
+  projectId: string,
+  departmentId: string | null | undefined,
+): Promise<AssigneeOption[]> {
+  const requests: Promise<Response>[] = [
+    fetch(`/api/projects/${projectId}/members`),
+  ];
+  if (departmentId) {
+    requests.push(fetch(`/api/departments/${departmentId}/members`));
+  }
+
+  const responses = await Promise.all(requests);
+  const byId = new Map<string, AssigneeOption>();
+
+  for (const response of responses) {
+    const payload = (await response.json()) as {
+      data?: {
+        items: Array<{
+          user?: { id: string; fullName: string; employeeNumber?: string };
+        }>;
+      };
+    };
+    if (!response.ok) continue;
+    for (const member of payload.data?.items ?? []) {
+      const user = member.user;
+      if (!user) continue;
+      byId.set(user.id, {
+        id: user.id,
+        fullName: user.fullName,
+        employeeNumber: user.employeeNumber,
+      });
+    }
+  }
+
+  return [...byId.values()].sort((a, b) =>
+    a.fullName.localeCompare(b.fullName),
+  );
+}
+
+async function patchTask(
+  taskId: string,
+  body: Record<string, unknown>,
+): Promise<void> {
+  const response = await fetch(`/api/tasks/${taskId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json()) as {
+    error?: { message: string };
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message ?? "Failed");
+  }
+}
+
+function TeamBoardTaskCard({
+  task,
+  today,
+}: {
+  task: Task;
+  today: string;
+}) {
+  const t = useTranslations("tasks");
+  const tDashboard = useTranslations("dashboard");
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const late = isLateTask(task, today);
+  const dueToday = isDueTodayTask(task, today);
+  const isCompleted = task.status === "completed";
+
+  const membersQuery = useQuery({
+    queryKey: [
+      "task-assignees",
+      task.projectId,
+      task.project?.departmentId,
+    ],
+    queryFn: () =>
+      fetchAssigneeOptions(task.projectId, task.project?.departmentId),
+    staleTime: 60_000,
+  });
+
+  const patchMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) => patchTask(task.id, body),
+    onSuccess: async () => {
+      setError(null);
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (err: Error) => {
+      setError(err.message || t("inlineSaveFailed"));
+    },
+  });
+
+  function priorityLabel(priority: string) {
+    return t(`priority_${priority}` as "priority_low");
+  }
+
+  const assigneeOptions = useMemo(() => {
+    const options = [...(membersQuery.data ?? [])];
+    if (
+      task.assignedTo &&
+      !options.some((member) => member.id === task.assignedTo)
+    ) {
+      options.push({
+        id: task.assignedTo,
+        fullName: task.assignee?.fullName ?? task.assignedTo,
+      });
+    }
+    return options;
+  }, [membersQuery.data, task.assignedTo, task.assignee?.fullName]);
+
+  return (
+    <div
+      className={cn(
+        "rounded-md border bg-background p-3 shadow-sm",
+        late && "border-destructive/40",
+      )}
+    >
+      {task.project?.name ? (
+        <p className="text-xs text-muted-foreground">{task.project.name}</p>
+      ) : null}
+      <Link
+        href={`/tasks/${task.id}`}
+        className="mt-0.5 block font-medium underline-offset-4 hover:underline"
+      >
+        {task.title}
+      </Link>
+
+      <div className="mt-2 space-y-2">
+        <AssigneeSelect
+          className={boardFieldClassName}
+          value={task.assignedTo}
+          disabled={patchMutation.isPending || membersQuery.isLoading}
+          options={assigneeOptions}
+          onChange={(userId) => patchMutation.mutate({ assignedTo: userId })}
+        />
+        <select
+          className={boardFieldClassName}
+          value={task.priority}
+          disabled={patchMutation.isPending}
+          aria-label={t("priority")}
+          onChange={(event) =>
+            patchMutation.mutate({ priority: event.target.value })
+          }
+        >
+          {PRIORITIES.map((priority) => (
+            <option key={priority} value={priority}>
+              {priorityLabel(priority)}
+            </option>
+          ))}
+        </select>
+        <Input
+          type="date"
+          className={cn(boardFieldClassName, late || dueToday ? "text-destructive" : "")}
+          defaultValue={task.dueDate ?? ""}
+          disabled={patchMutation.isPending}
+          aria-label={t("dueDate")}
+          onBlur={(event) => {
+            const next = event.target.value || null;
+            if (next === task.dueDate) return;
+            patchMutation.mutate({ dueDate: next });
+          }}
+        />
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {isCompleted ? (
+          <Badge
+            variant="outline"
+            className="border-emerald-500/30 bg-emerald-500/10 font-normal text-emerald-700 dark:text-emerald-300"
+          >
+            {t("status_completed")}
+          </Badge>
+        ) : null}
+        {late && task.dueDate ? (
+          <span className="text-xs font-medium text-destructive">
+            {t("boardLateWithDate", {
+              date: formatCardDate(task.dueDate),
+            })}
+          </span>
+        ) : null}
+        {dueToday ? (
+          <span className="text-xs font-medium text-destructive">
+            {tDashboard("dueTodayLabel")}
+          </span>
+        ) : null}
+      </div>
+
+      <TaskBlockerChips
+        blockers={task.incompleteDependencies ?? []}
+        allowOpenTask={false}
+      />
+
+      {error ? (
+        <p className="mt-2 text-xs text-destructive">{error}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function EmployeeTasksBoard({
   viewerId,
   initialTasks,
+  mode = "personal",
+  hideHeader = false,
 }: EmployeeTasksBoardProps) {
   const t = useTranslations("tasks");
   const tDashboard = useTranslations("dashboard");
   const tCommon = useTranslations("common");
+  const isTeam = mode === "team";
   const [boardNotice, setBoardNotice] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
   const [lateOnly, setLateOnly] = useState(false);
   const [requestTask, setRequestTask] = useState<Pick<
     Task,
     "id" | "title" | "dueDate"
   > | null>(null);
   const today = todayInOrgTimezone();
-  const boardQueryKey = ["tasks", "employee-board", viewerId] as const;
+  const boardQueryKey = (
+    isTeam
+      ? (["tasks", "team-board"] as const)
+      : (["tasks", "employee-board", viewerId] as const)
+  );
 
   const tasksQuery = useQuery({
     queryKey: boardQueryKey,
-    queryFn: () => fetchMyTasks(viewerId),
+    queryFn: () => (isTeam ? fetchTeamTasks() : fetchMyTasks(viewerId)),
     ...withInitialData(initialTasks.items),
   });
 
@@ -172,6 +422,7 @@ export function EmployeeTasksBoard({
         search,
         status: statusFilter,
         priority: priorityFilter,
+        assignee: isTeam ? assigneeFilter : undefined,
         lateOnly,
         today,
       }),
@@ -180,10 +431,27 @@ export function EmployeeTasksBoard({
       search,
       statusFilter,
       priorityFilter,
+      assigneeFilter,
+      isTeam,
       lateOnly,
       today,
     ],
   );
+
+  const assigneeFilterOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const task of tasksQuery.data ?? []) {
+      if (task.assignedTo) {
+        byId.set(
+          task.assignedTo,
+          task.assignee?.fullName ?? task.assignedTo,
+        );
+      }
+    }
+    return [...byId.entries()]
+      .map(([id, fullName]) => ({ id, fullName }))
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, "ar"));
+  }, [tasksQuery.data]);
 
   const columns = useMemo(() => {
     return TASK_STATUSES.map((status) => ({
@@ -216,11 +484,21 @@ export function EmployeeTasksBoard({
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t("myTasksTitle")}
-        description={t("myTasksDescription")}
-      />
-      <p className="text-xs text-muted-foreground">{t("assignedToMeLabel")}</p>
+      {!hideHeader ? (
+        <>
+          <PageHeader
+            title={isTeam ? t("teamTasksTitle") : t("myTasksTitle")}
+            description={
+              isTeam ? t("teamTasksDescription") : t("myTasksDescription")
+            }
+          />
+          {!isTeam ? (
+            <p className="text-xs text-muted-foreground">
+              {t("assignedToMeLabel")}
+            </p>
+          ) : null}
+        </>
+      ) : null}
 
       {boardNotice ? (
         <Alert variant="destructive">
@@ -270,6 +548,22 @@ export function EmployeeTasksBoard({
           <option value="medium">{t("priority_medium")}</option>
           <option value="high">{t("priority_high")}</option>
         </select>
+        {isTeam ? (
+          <select
+            className="h-9 rounded-md border bg-background px-3 text-sm"
+            value={assigneeFilter}
+            onChange={(e) => setAssigneeFilter(e.target.value)}
+            aria-label={t("assignee")}
+          >
+            <option value="">{t("filterAllAssignees")}</option>
+            <option value="__unassigned__">{t("unassigned")}</option>
+            {assigneeFilterOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.fullName}
+              </option>
+            ))}
+          </select>
+        ) : null}
         <label
           className={cn(
             "flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm",
@@ -298,8 +592,9 @@ export function EmployeeTasksBoard({
       <div className="flex gap-3 overflow-x-auto pb-4">
         {columns.map((column) => {
           const isBlockedColumn = column.status === "blocked";
-          const isDropTarget = dropTarget === column.status;
-          const showBlockedHint = Boolean(draggingId) && isBlockedColumn;
+          const isDropTarget = !isTeam && dropTarget === column.status;
+          const showBlockedHint =
+            !isTeam && Boolean(draggingId) && isBlockedColumn;
 
           return (
           <div
@@ -314,36 +609,46 @@ export function EmployeeTasksBoard({
                 isBlockedColumn &&
                 "ring-2 ring-destructive/40 ring-offset-2 ring-offset-background",
             )}
-            onDragOver={(event) => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = isBlockedColumn ? "none" : "move";
-              setDropTarget(column.status);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              const taskId = draggingId;
-              setDraggingId(null);
-              setDropTarget(null);
-              if (!taskId) return;
+            onDragOver={
+              isTeam
+                ? undefined
+                : (event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = isBlockedColumn
+                      ? "none"
+                      : "move";
+                    setDropTarget(column.status);
+                  }
+            }
+            onDrop={
+              isTeam
+                ? undefined
+                : (event) => {
+                    event.preventDefault();
+                    const taskId = draggingId;
+                    setDraggingId(null);
+                    setDropTarget(null);
+                    if (!taskId) return;
 
-              if (isBlockedColumn) {
-                setBoardNotice(t("boardBlockedDropDenied"));
-                return;
-              }
+                    if (isBlockedColumn) {
+                      setBoardNotice(t("boardBlockedDropDenied"));
+                      return;
+                    }
 
-              const task = filtered.find((item) => item.id === taskId);
-              if (
-                task &&
-                task.status !== column.status &&
-                !(task.incompleteDependencyCount ?? 0)
-              ) {
-                setBoardNotice(null);
-                statusMutation.mutate({
-                  taskId,
-                  status: column.status,
-                });
-              }
-            }}
+                    const task = filtered.find((item) => item.id === taskId);
+                    if (
+                      task &&
+                      task.status !== column.status &&
+                      !(task.incompleteDependencyCount ?? 0)
+                    ) {
+                      setBoardNotice(null);
+                      statusMutation.mutate({
+                        taskId,
+                        status: column.status,
+                      });
+                    }
+                  }
+            }
           >
             <div className="mb-3 flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">
@@ -377,6 +682,16 @@ export function EmployeeTasksBoard({
                 </p>
               ) : null}
               {column.tasks.map((task) => {
+                if (isTeam) {
+                  return (
+                    <TeamBoardTaskCard
+                      key={task.id}
+                      task={task}
+                      today={today}
+                    />
+                  );
+                }
+
                 const statusLocked = (task.incompleteDependencyCount ?? 0) > 0;
                 const late = isLateTask(task, today);
                 const dueToday = isDueTodayTask(task, today);

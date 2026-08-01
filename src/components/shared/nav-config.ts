@@ -94,21 +94,6 @@ export const navSections: NavSection[] = [
         permission: "project.view",
       },
       {
-        key: "teamTasks",
-        href: "/tasks/team",
-        icon: ClipboardList,
-        enabled: true,
-        permission: "project.view",
-        showForRoles: ["department_manager"],
-      },
-      {
-        key: "attendanceLeave",
-        href: "/attendance",
-        icon: Clock3,
-        enabled: true,
-        anyOfPermissions: ["attendance.view", "leave.view"],
-      },
-      {
         key: "projects",
         href: "/projects",
         icon: FolderKanban,
@@ -128,6 +113,21 @@ export const navSections: NavSection[] = [
     key: "organization",
     items: [
       {
+        key: "teamTasks",
+        href: "/tasks/team",
+        icon: ClipboardList,
+        enabled: true,
+        permission: "project.view",
+        showForRoles: ["department_manager"],
+      },
+      {
+        key: "attendanceLeave",
+        href: "/attendance",
+        icon: Clock3,
+        enabled: true,
+        anyOfPermissions: ["attendance.view", "leave.view"],
+      },
+      {
         key: "departments",
         href: "/departments",
         icon: Building2,
@@ -142,11 +142,6 @@ export const navSections: NavSection[] = [
         enabled: true,
         anyOfPermissions: ["user.manage", "user.reset_password"],
       },
-    ],
-  },
-  {
-    key: "operations",
-    items: [
       {
         key: "requests",
         href: "/approvals",
@@ -157,6 +152,14 @@ export const navSections: NavSection[] = [
           "employee_request.approve",
           "attendance.approve",
         ],
+      },
+      {
+        key: "reports",
+        href: "/reports",
+        icon: FileText,
+        enabled: true,
+        permission: "report.view",
+        hideForRoles: ["employee"],
       },
     ],
   },
@@ -169,19 +172,6 @@ export const navSections: NavSection[] = [
         icon: Megaphone,
         enabled: true,
         permission: "announcement.view",
-      },
-    ],
-  },
-  {
-    key: "analytics",
-    items: [
-      {
-        key: "reports",
-        href: "/reports",
-        icon: FileText,
-        enabled: true,
-        permission: "report.view",
-        hideForRoles: ["employee"],
       },
     ],
   },

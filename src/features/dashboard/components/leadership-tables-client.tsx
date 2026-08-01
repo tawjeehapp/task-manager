@@ -5,10 +5,16 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Search } from "lucide-react";
 
+import {
+  MemberWeekHoursDialog,
+  MetricTasksDialog,
+  type MetricTasksQuery,
+} from "@/features/dashboard/components/employee-metric-dialogs";
 import type {
   LeadershipProjectRow,
   LeadershipTeamRow,
 } from "@/features/dashboard/types/dashboard.types";
+import { addCalendarDays, currentWeekBounds } from "@/lib/org-calendar";
 import { formatDate } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,12 +38,33 @@ type LeadershipTablesClientProps = {
   today: string;
   team: LeadershipTeamRow[];
   projects: LeadershipProjectRow[];
+  canApproveAttendance?: boolean;
 };
 
 type DepartmentOption = {
   id: string;
   name: string;
 };
+
+type OpenDetail =
+  | {
+      kind: "team-tasks";
+      subject: string;
+      metric: string;
+      query: MetricTasksQuery;
+    }
+  | {
+      kind: "project-tasks";
+      subject: string;
+      metric: string;
+      query: MetricTasksQuery;
+    }
+  | {
+      kind: "week-hours";
+      subject: string;
+      userId: string;
+      weekHours: number;
+    };
 
 function ProgressBar({
   value,
@@ -87,15 +114,46 @@ function matchesDepartment(
   return false;
 }
 
+function CountButton({
+  value,
+  onClick,
+  className,
+}: {
+  value: number | string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "mx-auto block min-w-8 rounded-md px-1.5 py-0.5 tabular-nums underline-offset-2 transition-colors hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        className,
+      )}
+    >
+      {value}
+    </button>
+  );
+}
+
 export function LeadershipTablesClient({
   today,
   team,
   projects,
+  canApproveAttendance = false,
 }: LeadershipTablesClientProps) {
   const t = useTranslations("dashboard");
   const [teamSearch, setTeamSearch] = useState("");
   const [projectSearch, setProjectSearch] = useState("");
   const [departmentId, setDepartmentId] = useState("");
+  const [detail, setDetail] = useState<OpenDetail | null>(null);
+
+  const { start: weekStart, end: weekEnd } = useMemo(
+    () => currentWeekBounds(today),
+    [today],
+  );
+  const yesterday = useMemo(() => addCalendarDays(today, -1), [today]);
 
   const departmentOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -142,6 +200,20 @@ export function LeadershipTablesClient({
     ...filteredTeam.map((row) => row.openTaskCount),
     0,
   );
+
+  const tasksDetailOpen =
+    detail?.kind === "team-tasks" || detail?.kind === "project-tasks";
+  const tasksTitle =
+    detail && (detail.kind === "team-tasks" || detail.kind === "project-tasks")
+      ? t("detailModalTitle", {
+          subject: detail.subject,
+          metric: detail.metric,
+        })
+      : "";
+  const tasksQuery =
+    detail && (detail.kind === "team-tasks" || detail.kind === "project-tasks")
+      ? detail.query
+      : null;
 
   return (
     <div className="space-y-6">
@@ -199,6 +271,9 @@ export function LeadershipTablesClient({
                     <TableHead>{t("colMember")}</TableHead>
                     <TableHead>{t("colWorkload")}</TableHead>
                     <TableHead className="text-center">
+                      {t("colTodo")}
+                    </TableHead>
+                    <TableHead className="text-center">
                       {t("colInProgress")}
                     </TableHead>
                     <TableHead className="text-center">
@@ -242,23 +317,114 @@ export function LeadershipTablesClient({
                           {t("openTasksCount", { count: row.openTaskCount })}
                         </span>
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">
-                        {row.inProgressCount}
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.todoCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "team-tasks",
+                              subject: row.fullName,
+                              metric: t("colTodo"),
+                              query: {
+                                assignee: row.userId,
+                                status: "todo",
+                              },
+                            })
+                          }
+                        />
                       </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-center tabular-nums",
-                          row.overdueCount > 0 &&
-                            "font-medium text-destructive",
-                        )}
-                      >
-                        {row.overdueCount}
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.inProgressCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "team-tasks",
+                              subject: row.fullName,
+                              metric: t("colInProgress"),
+                              query: {
+                                assignee: row.userId,
+                                status: "in_progress",
+                              },
+                            })
+                          }
+                        />
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">
-                        {row.dueTodayCount}
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.overdueCount}
+                          className={cn(
+                            row.overdueCount > 0 &&
+                              "font-medium text-destructive",
+                          )}
+                          onClick={() =>
+                            setDetail({
+                              kind: "team-tasks",
+                              subject: row.fullName,
+                              metric: t("colOverdue"),
+                              query: {
+                                assignee: row.userId,
+                                dueTo: yesterday,
+                                predicate: "overdue",
+                              },
+                            })
+                          }
+                        />
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">
-                        {row.weekHours}
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.dueTodayCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "team-tasks",
+                              subject: row.fullName,
+                              metric: t("colDueToday"),
+                              query: {
+                                assignee: row.userId,
+                                dueFrom: today,
+                                dueTo: today,
+                                predicate: "dueToday",
+                              },
+                            })
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <button
+                          type="button"
+                          className="mx-auto block min-w-[7.5rem] rounded-md px-1.5 py-0.5 text-start hover:bg-muted/60"
+                          onClick={() =>
+                            setDetail({
+                              kind: "week-hours",
+                              subject: row.fullName,
+                              userId: row.userId,
+                              weekHours: row.weekHours,
+                            })
+                          }
+                        >
+                          <span className="block text-sm font-medium tabular-nums">
+                            {t("hoursValue", { hours: row.weekHours })}
+                          </span>
+                          <span className="mt-1 block space-y-0.5 text-[11px] leading-snug text-muted-foreground">
+                            <span className="flex items-center justify-between gap-2">
+                              <span>{t("metricHoursApproved")}</span>
+                              <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
+                                {row.weekHoursApproved}
+                              </span>
+                            </span>
+                            <span className="flex items-center justify-between gap-2">
+                              <span>{t("metricHoursPending")}</span>
+                              <span className="tabular-nums text-amber-700 dark:text-amber-400">
+                                {row.weekHoursPending}
+                              </span>
+                            </span>
+                            <span className="flex items-center justify-between gap-2">
+                              <span>{t("metricHoursRejected")}</span>
+                              <span className="tabular-nums text-destructive">
+                                {row.weekHoursRejected}
+                              </span>
+                            </span>
+                          </span>
+                        </button>
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -348,19 +514,54 @@ export function LeadershipTablesClient({
                           tone={row.health === "overdue" ? "warn" : "default"}
                         />
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">
-                        {row.inProgressCount}
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.inProgressCount}
+                          onClick={() =>
+                            setDetail({
+                              kind: "project-tasks",
+                              subject: row.name,
+                              metric: t("colInProgress"),
+                              query: {
+                                projectId: row.id,
+                                status: "in_progress",
+                              },
+                            })
+                          }
+                        />
                       </TableCell>
-                      <TableCell
-                        className={cn(
-                          "text-center tabular-nums",
-                          row.overdueCount > 0 && "text-destructive",
-                        )}
-                      >
-                        {row.overdueCount}
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.overdueCount}
+                          className={cn(
+                            row.overdueCount > 0 && "text-destructive",
+                          )}
+                          onClick={() =>
+                            setDetail({
+                              kind: "project-tasks",
+                              subject: row.name,
+                              metric: t("colOverdue"),
+                              query: {
+                                projectId: row.id,
+                                dueTo: yesterday,
+                                predicate: "overdue",
+                              },
+                            })
+                          }
+                        />
                       </TableCell>
-                      <TableCell className="text-center tabular-nums">
-                        {row.estimatedHoursSum}
+                      <TableCell className="text-center">
+                        <CountButton
+                          value={row.estimatedHoursSum}
+                          onClick={() =>
+                            setDetail({
+                              kind: "project-tasks",
+                              subject: row.name,
+                              metric: t("colEstimated"),
+                              query: { projectId: row.id },
+                            })
+                          }
+                        />
                       </TableCell>
                       <TableCell className="tabular-nums text-muted-foreground">
                         {row.nearestDueDate
@@ -388,6 +589,37 @@ export function LeadershipTablesClient({
           )}
         </CardContent>
       </Card>
+
+      <MetricTasksDialog
+        open={tasksDetailOpen}
+        onOpenChange={(open) => {
+          if (!open) setDetail(null);
+        }}
+        title={tasksTitle}
+        today={today}
+        query={tasksQuery}
+      />
+
+      <MemberWeekHoursDialog
+        open={detail?.kind === "week-hours"}
+        onOpenChange={(open) => {
+          if (!open) setDetail(null);
+        }}
+        title={
+          detail?.kind === "week-hours"
+            ? t("detailModalTitle", {
+                subject: detail.subject,
+                metric: t("colWeekHours"),
+              })
+            : ""
+        }
+        userId={detail?.kind === "week-hours" ? detail.userId : null}
+        weekStart={weekStart}
+        weekEnd={weekEnd}
+        today={today}
+        weekHours={detail?.kind === "week-hours" ? detail.weekHours : 0}
+        canApproveAttendance={canApproveAttendance}
+      />
     </div>
   );
 }

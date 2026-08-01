@@ -9,6 +9,7 @@ import type {
 } from "@/features/dashboard/types/dashboard.types";
 import { ATTENTION_OVERDUE_PEOPLE_LIMIT } from "@/features/dashboard/types/dashboard.types";
 import { ACTIVE_TASK_STATUSES } from "@/features/tasks/types/task.types";
+import { computeHoursWeightedProgress } from "@/features/projects/lib/project-progress";
 
 export type AggregateTaskRow = {
   id: string;
@@ -16,8 +17,7 @@ export type AggregateTaskRow = {
   assignedTo: string | null;
   status: string;
   dueDate: string | null;
-  estimatedHours: number | null;
-  progressPercentage: number;
+  estimatedHours: number;
 };
 
 export type AggregateAttendanceRow = {
@@ -25,6 +25,7 @@ export type AggregateAttendanceRow = {
   date: string;
   clockOut: string | null;
   totalHours: number | null;
+  status: string;
 };
 
 export type AggregateUserMeta = {
@@ -70,12 +71,12 @@ export function deriveTodayStatus(
 export function computeProjectProgress(
   rootTasks: AggregateTaskRow[],
 ): number {
-  if (rootTasks.length === 0) return 0;
-  const sum = rootTasks.reduce(
-    (acc, task) => acc + (Number.isFinite(task.progressPercentage) ? task.progressPercentage : 0),
-    0,
+  return computeHoursWeightedProgress(
+    rootTasks.map((task) => ({
+      status: task.status,
+      estimatedHours: task.estimatedHours,
+    })),
   );
-  return Math.round((sum / rootTasks.length) * 10) / 10;
 }
 
 export function computeProjectEstimatedHours(
@@ -83,7 +84,7 @@ export function computeProjectEstimatedHours(
 ): number {
   let sum = 0;
   for (const task of rootTasks) {
-    if (task.estimatedHours != null && Number.isFinite(task.estimatedHours)) {
+    if (Number.isFinite(task.estimatedHours)) {
       sum += task.estimatedHours;
     }
   }
@@ -184,28 +185,52 @@ export function aggregateLeadershipFromRows(input: {
             10,
         ) / 10;
 
+  let todoCount = 0;
   let inProgressCount = 0;
+  let blockedCount = 0;
+  let completedCount = 0;
   let overdueCount = 0;
   for (const task of tasks) {
-    if (task.status === "in_progress") inProgressCount += 1;
+    if (task.status === "todo") todoCount += 1;
+    else if (task.status === "in_progress") inProgressCount += 1;
+    else if (task.status === "blocked") blockedCount += 1;
+    else if (task.status === "completed") completedCount += 1;
     if (isOverdueTask(task, today)) overdueCount += 1;
   }
 
-  const weekHoursByUser = new Map<string, number>();
+  const weekHoursByUser = new Map<
+    string,
+    { total: number; approved: number; pending: number; rejected: number }
+  >();
   const todayAttendanceByUser = new Map<
     string,
     { clockOut: string | null }
   >();
-  let weekHoursTotal = 0;
+  let weekHoursApproved = 0;
+  let weekHoursPending = 0;
+  let weekHoursRejected = 0;
   for (const row of attendance) {
     if (row.date >= weekStart && row.date <= weekEnd) {
       const hours = row.totalHours ?? 0;
       if (Number.isFinite(hours)) {
-        weekHoursTotal += hours;
-        weekHoursByUser.set(
-          row.userId,
-          (weekHoursByUser.get(row.userId) ?? 0) + hours,
-        );
+        const bucket = weekHoursByUser.get(row.userId) ?? {
+          total: 0,
+          approved: 0,
+          pending: 0,
+          rejected: 0,
+        };
+        bucket.total += hours;
+        if (row.status === "approved") {
+          weekHoursApproved += hours;
+          bucket.approved += hours;
+        } else if (row.status === "rejected") {
+          weekHoursRejected += hours;
+          bucket.rejected += hours;
+        } else {
+          weekHoursPending += hours;
+          bucket.pending += hours;
+        }
+        weekHoursByUser.set(row.userId, bucket);
       }
     }
     if (row.date === today) {
@@ -246,11 +271,13 @@ export function aggregateLeadershipFromRows(input: {
   const team: LeadershipTeamRow[] = users.map((user) => {
     const assigned = tasksByAssignee.get(user.userId) ?? [];
     const openTaskCount = assigned.filter((t) => isOpenTask(t.status)).length;
+    const todo = assigned.filter((t) => t.status === "todo").length;
     const inProgress = assigned.filter((t) => t.status === "in_progress").length;
     const overdue = assigned.filter((t) => isOverdueTask(t, today)).length;
     const dueToday = assigned.filter(
       (t) => t.status !== "completed" && t.dueDate === today,
     ).length;
+    const hours = weekHoursByUser.get(user.userId);
     return {
       userId: user.userId,
       fullName: user.fullName,
@@ -259,11 +286,14 @@ export function aggregateLeadershipFromRows(input: {
       departmentId: user.departmentId,
       departmentName: user.departmentName,
       openTaskCount,
+      todoCount: todo,
       inProgressCount: inProgress,
       overdueCount: overdue,
       dueTodayCount: dueToday,
-      weekHours:
-        Math.round((weekHoursByUser.get(user.userId) ?? 0) * 100) / 100,
+      weekHours: Math.round((hours?.total ?? 0) * 100) / 100,
+      weekHoursApproved: Math.round((hours?.approved ?? 0) * 100) / 100,
+      weekHoursPending: Math.round((hours?.pending ?? 0) * 100) / 100,
+      weekHoursRejected: Math.round((hours?.rejected ?? 0) * 100) / 100,
       todayStatus: deriveTodayStatus(todayAttendanceByUser.get(user.userId)),
       href: `/employees/${user.userId}`,
     };
@@ -279,9 +309,18 @@ export function aggregateLeadershipFromRows(input: {
   const metrics: LeadershipMetrics = {
     activeProjectsCount: activeProjects.length,
     avgProgressPercent,
+    todoCount,
     inProgressCount,
+    blockedCount,
+    completedCount,
     overdueCount,
-    weekHours: Math.round(weekHoursTotal * 100) / 100,
+    weekHours:
+      Math.round(
+        (weekHoursApproved + weekHoursPending + weekHoursRejected) * 100,
+      ) / 100,
+    weekHoursApproved: Math.round(weekHoursApproved * 100) / 100,
+    weekHoursPending: Math.round(weekHoursPending * 100) / 100,
+    weekHoursRejected: Math.round(weekHoursRejected * 100) / 100,
   };
 
   return {

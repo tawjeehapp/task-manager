@@ -846,7 +846,7 @@ export async function listAttendanceForViewer(
   }
 
   let items = (data ?? []).map((row) => mapRow(row));
-  if (query.awaitingApproval) {
+  if (query.awaitingApproval || query.includeAllocations) {
     items = await attachDayAllocations(items);
   }
   const total = count ?? 0;

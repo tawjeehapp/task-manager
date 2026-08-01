@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslations } from "next-intl";
-import { Plus } from "lucide-react";
+import { Columns3, List, Plus } from "lucide-react";
 
 import {
   createTaskSchema,
@@ -30,6 +30,7 @@ import { TablePagination } from "@/components/shared/table-pagination";
 import { TasksListTable } from "@/features/tasks/components/tasks-list-table";
 import { EmployeeTasksBoard } from "@/features/tasks/components/employee-tasks-board";
 import { TaskDependencyPicker } from "@/features/tasks/components/task-dependency-picker";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -158,6 +159,7 @@ export function TasksPageClient({
   const t = useTranslations("tasks");
   const tCommon = useTranslations("common");
   const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<"list" | "board">("list");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<TablePageSize>(DEFAULT_TABLE_PAGE_SIZE);
   const [sortBy] = useState<TaskSortBy>("createdAt");
@@ -252,7 +254,6 @@ export function TasksPageClient({
       assignedTo: null,
       startDate: null,
       dueDate: null,
-      estimatedHours: null,
       dependsOnTaskIds: [],
     },
   });
@@ -298,131 +299,178 @@ export function TasksPageClient({
   return (
     <div className="space-y-6">
       <PageHeader
-        title={t("title")}
-        description={t("description")}
+        title={t("teamTasksTitle")}
+        description={t("teamTasksDescription")}
         actions={
-          canCreate ? (
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger
-                render={<Button type="button" className="gap-2" />}
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="inline-flex rounded-lg border border-border p-0.5"
+              role="group"
+              aria-label={t("viewMode")}
+            >
+              <Button
+                type="button"
+                size="sm"
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                className={cn("gap-1.5", viewMode === "list" && "shadow-sm")}
+                onClick={() => setViewMode("list")}
               >
-                <Plus className="size-4" />
-                {t("create")}
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>{t("createTitle")}</DialogTitle>
-                </DialogHeader>
-                <form
-                  className="space-y-4"
-                  onSubmit={createForm.handleSubmit((values) =>
-                    createMutation.mutate(values),
-                  )}
+                <List className="size-3.5" />
+                {t("listView")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={viewMode === "board" ? "secondary" : "ghost"}
+                className={cn("gap-1.5", viewMode === "board" && "shadow-sm")}
+                onClick={() => setViewMode("board")}
+              >
+                <Columns3 className="size-3.5" />
+                {t("boardView")}
+              </Button>
+            </div>
+            {canCreate ? (
+              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+                <DialogTrigger
+                  render={<Button type="button" className="gap-2" />}
                 >
-                  <div className="space-y-2">
-                    <Label htmlFor="projectId">{t("project")}</Label>
-                    <select
-                      id="projectId"
-                      className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                      {...createForm.register("projectId")}
-                    >
-                      <option value="">{t("selectProject")}</option>
-                      {(projectsQuery.data ?? [])
-                        .filter((p) => p.status !== "archived")
-                        .map((project) => (
-                          <option key={project.id} value={project.id}>
-                            {project.name}
+                  <Plus className="size-4" />
+                  {t("create")}
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>{t("createTitle")}</DialogTitle>
+                  </DialogHeader>
+                  <form
+                    className="space-y-4"
+                    onSubmit={createForm.handleSubmit((values) =>
+                      createMutation.mutate({ ...values, startDate: null }),
+                    )}
+                  >
+                    <div className="space-y-2">
+                      <Label htmlFor="projectId">{t("project")}</Label>
+                      <select
+                        id="projectId"
+                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                        {...createForm.register("projectId")}
+                      >
+                        <option value="">{t("selectProject")}</option>
+                        {(projectsQuery.data ?? [])
+                          .filter((p) => p.status !== "archived")
+                          .map((project) => (
+                            <option key={project.id} value={project.id}>
+                              {project.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="title">{t("titleLabel")}</Label>
+                      <Input id="title" {...createForm.register("title")} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="description">
+                        {t("descriptionLabel")}
+                      </Label>
+                      <textarea
+                        id="description"
+                        className="border-input bg-background min-h-20 w-full rounded-md border px-3 py-2 text-sm"
+                        {...createForm.register("description")}
+                      />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="priority">{t("priority")}</Label>
+                        <select
+                          id="priority"
+                          className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                          {...createForm.register("priority")}
+                        >
+                          <option value="low">{priorityLabel("low")}</option>
+                          <option value="medium">
+                            {priorityLabel("medium")}
                           </option>
-                        ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="title">{t("titleLabel")}</Label>
-                    <Input id="title" {...createForm.register("title")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">{t("descriptionLabel")}</Label>
-                    <textarea
-                      id="description"
-                      className="border-input bg-background min-h-20 w-full rounded-md border px-3 py-2 text-sm"
-                      {...createForm.register("description")}
+                          <option value="high">{priorityLabel("high")}</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="status">{t("status")}</Label>
+                        <select
+                          id="status"
+                          className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                          {...createForm.register("status")}
+                        >
+                          <option value="todo">{statusLabel("todo")}</option>
+                          <option value="in_progress">
+                            {statusLabel("in_progress")}
+                          </option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="dueDate">{t("dueDate")}</Label>
+                        <Input
+                          id="dueDate"
+                          type="date"
+                          {...createForm.register("dueDate")}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="estimatedHours">
+                          {t("estimatedHours")}
+                        </Label>
+                        <Input
+                          id="estimatedHours"
+                          type="number"
+                          step="0.5"
+                          min="0.5"
+                          required
+                          {...createForm.register("estimatedHours", {
+                            setValueAs: (value) =>
+                              value === "" || value == null
+                                ? undefined
+                                : Number(value),
+                          })}
+                        />
+                        {createForm.formState.errors.estimatedHours ? (
+                          <p className="text-destructive text-sm">
+                            {createForm.formState.errors.estimatedHours.message}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                    <TaskDependencyPicker
+                      projectId={watchedProjectId || null}
+                      value={watchedDependsOn}
+                      onChange={(ids) =>
+                        createForm.setValue("dependsOnTaskIds", ids)
+                      }
                     />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="priority">{t("priority")}</Label>
-                      <select
-                        id="priority"
-                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                        {...createForm.register("priority")}
+                    {createMutation.isError ? (
+                      <Alert variant="destructive">
+                        <AlertDescription>
+                          {(createMutation.error as Error).message}
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
+                    <DialogFooter>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setCreateOpen(false)}
                       >
-                        <option value="low">{priorityLabel("low")}</option>
-                        <option value="medium">{priorityLabel("medium")}</option>
-                        <option value="high">{priorityLabel("high")}</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="status">{t("status")}</Label>
-                      <select
-                        id="status"
-                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                        {...createForm.register("status")}
-                      >
-                        <option value="todo">{statusLabel("todo")}</option>
-                        <option value="in_progress">
-                          {statusLabel("in_progress")}
-                        </option>
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="startDate">{t("startDate")}</Label>
-                      <Input
-                        id="startDate"
-                        type="date"
-                        {...createForm.register("startDate")}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="dueDate">{t("dueDate")}</Label>
-                      <Input
-                        id="dueDate"
-                        type="date"
-                        {...createForm.register("dueDate")}
-                      />
-                    </div>
-                  </div>
-                  <TaskDependencyPicker
-                    projectId={watchedProjectId || null}
-                    value={watchedDependsOn}
-                    onChange={(ids) =>
-                      createForm.setValue("dependsOnTaskIds", ids)
-                    }
-                  />
-                  {createMutation.isError ? (
-                    <Alert variant="destructive">
-                      <AlertDescription>
-                        {(createMutation.error as Error).message}
-                      </AlertDescription>
-                    </Alert>
-                  ) : null}
-                  <DialogFooter>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setCreateOpen(false)}
-                    >
-                      {tCommon("cancel")}
-                    </Button>
-                    <Button type="submit" disabled={createMutation.isPending}>
-                      {createMutation.isPending
-                        ? tCommon("saving")
-                        : tCommon("save")}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          ) : null
+                        {tCommon("cancel")}
+                      </Button>
+                      <Button type="submit" disabled={createMutation.isPending}>
+                        {createMutation.isPending
+                          ? tCommon("saving")
+                          : tCommon("save")}
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            ) : null}
+          </div>
         }
       />
 
@@ -432,6 +480,15 @@ export function TasksPageClient({
         </Alert>
       ) : null}
 
+      {viewMode === "board" ? (
+        <EmployeeTasksBoard
+          viewerId={viewerId}
+          initialTasks={initialTasks}
+          mode="team"
+          hideHeader
+        />
+      ) : (
+        <>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -599,6 +656,8 @@ export function TasksPageClient({
           />
         </>
       ) : null}
+        </>
+      )}
     </div>
   );
 }

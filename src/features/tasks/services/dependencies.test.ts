@@ -102,14 +102,14 @@ describe("computeEmployeeWorkload", () => {
     const result = computeEmployeeWorkload(TASK_A, [
       { status: "todo", estimatedHours: 4 },
       { status: "in_progress", estimatedHours: 6 },
-      { status: "blocked", estimatedHours: null },
+      { status: "blocked", estimatedHours: 2 },
       { status: "completed", estimatedHours: 99 },
     ]);
 
     expect(result).toEqual({
       userId: TASK_A,
       activeTaskCount: 3,
-      estimatedHours: 10,
+      estimatedHours: 12,
     });
   });
 

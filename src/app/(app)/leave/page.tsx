@@ -12,7 +12,7 @@ export default async function LeaveRedirectPage() {
   }
 
   if (user.role === "department_manager") {
-    redirect("/attendance?tab=mine");
+    redirect("/attendance?tab=mine&section=leave");
   }
   if (user.role === "employee") {
     redirect("/attendance?tab=leave");

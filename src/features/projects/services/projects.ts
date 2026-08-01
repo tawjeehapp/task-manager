@@ -8,6 +8,7 @@ import {
   assertCanCreateProject,
   assertCanManageProject,
 } from "@/features/projects/services/assert-can-access-project";
+import { computeHoursWeightedProgress } from "@/features/projects/lib/project-progress";
 import type {
   CreateProjectInput,
   ListProjectsQuery,
@@ -416,6 +417,7 @@ type TaskStatRow = {
   project_id: string;
   status: string;
   due_date: string | null;
+  estimated_hours: number | string;
 };
 
 async function loadDepartmentMemberCounts(
@@ -488,7 +490,7 @@ async function loadProjectTaskStats(
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("tasks")
-    .select("id, project_id, status, due_date")
+    .select("id, project_id, status, due_date, estimated_hours")
     .in("project_id", projectIds);
 
   if (error) {
@@ -513,10 +515,15 @@ async function loadProjectTaskStats(
       (task) => task.status === "completed",
     ).length;
     const taskCount = all.length;
-    const progressPercent =
-      taskCount === 0
-        ? 0
-        : Math.round((completedTaskCount / taskCount) * 100);
+    const progressPercent = computeHoursWeightedProgress(
+      all.map((task) => {
+        const hours = Number(task.estimated_hours);
+        return {
+          status: task.status,
+          estimatedHours: Number.isFinite(hours) && hours > 0 ? hours : 1,
+        };
+      }),
+    );
     const overdueCount = all.filter((task) =>
       isOverdueTask(
         {
