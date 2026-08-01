@@ -58,8 +58,9 @@ cp .env.example .env.local
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only; never expose to the browser |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Push placeholder (unused; Web Push deferred past M7) |
-| `VAPID_PRIVATE_KEY` | No | Server-only push placeholder (unused) |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | No | Web Push public key (`npx web-push generate-vapid-keys`) |
+| `VAPID_PRIVATE_KEY` | No | Web Push private key (server-only) |
+| `VAPID_SUBJECT` | No | VAPID contact (`mailto:` or `https:`); defaults to `mailto:admin@localhost` |
 
 Never commit `.env.local` or real secrets.
 
@@ -238,19 +239,21 @@ All user-facing text should come from translation files.
 
 # Progressive Web App
 
-Milestone 0 includes PWA foundation only:
+Milestone 0 includes PWA foundation:
 
 - Web manifest (`public/manifest.webmanifest`)
-- App icons
+- App icons generated from `public/brand/logo.png` (`npm run pwa:assets`)
+- Apple splash / startup images under `public/splash/`
 - Install metadata in the root layout
+- Push-only service worker (`public/sw.js`) for Web Push
 
-Service workers and offline caching are deferred until a dedicated PWA milestone. The unused `next-pwa` dependency was removed; revisit packaging then.
+Offline caching is still deferred. The unused `next-pwa` dependency was removed; revisit full PWA packaging when needed.
 
 ---
 
 # Current Milestone
 
-Milestones **0–9** core product scope is implemented (M0 PWA offline + Web Push still deferred; M7 announcement attachments deferred). See [06-roadmap.md](./06-roadmap.md) for accurate status.
+Milestones **0–9** core product scope is implemented (M0 offline caching still deferred; Web Push completed; M7 announcement attachments deferred). See [06-roadmap.md](./06-roadmap.md) for accurate status.
 
 ### Already applied (M1–M9)
 
@@ -273,15 +276,15 @@ Milestones **0–9** core product scope is implemented (M0 PWA offline + Web Pus
 - Finish-to-start dependencies, assignee workload hints, task activity history
 - Attendance manual submit, approval/rejection, daily hour totals, task work logs
 - Leave types/balances/requests, task extension/excusal, centralized `/approvals`
-- Announcements (company/department), read tracking, in-app notifications + header bell
+- Announcements (company/department), read tracking, in-app notifications + header bell + Web Push
 - Role dashboards on `/` and operational reports on `/reports` (`report.view`)
 - Advanced task filters; task comments; task attachments (`task-files` Storage)
 - Task statuses: `todo | in_progress | blocked | completed`
 
 ### Explicitly not included yet
 
-- Announcement file attachments / Web Push delivery (deferred from M7)
-- Service worker / offline PWA runtime
+- Announcement file attachments (deferred from M7)
+- Offline PWA caching (push-only service worker is shipped)
 - Global company-wide Gantt / drag-to-reschedule on Gantt
 
 ---

@@ -3,6 +3,7 @@ import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import { getLocale, getMessages, getTimeZone, setRequestLocale } from "next-intl/server";
 
 import { routing } from "@/i18n/routing";
+import { appleStartupImages } from "@/lib/pwa/apple-startup-images";
 import { AppProviders } from "@/providers/app-providers";
 
 import "./globals.css";
@@ -23,15 +24,20 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "إدارة العمل",
+    startupImage: [...appleStartupImages],
   },
   icons: {
     icon: [
+      { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
       { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+    shortcut: ["/icons/icon-192.png"],
   },
 };
 

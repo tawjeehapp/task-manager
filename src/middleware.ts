@@ -14,7 +14,10 @@ function isAuthAssetPath(pathname: string) {
   return (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/icons") ||
+    pathname.startsWith("/splash") ||
+    pathname.startsWith("/brand") ||
     pathname === "/manifest.webmanifest" ||
+    pathname === "/sw.js" ||
     pathname === "/favicon.ico"
   );
 }

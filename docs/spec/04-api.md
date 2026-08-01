@@ -700,6 +700,7 @@ Notable error codes:
 - `MANAGER_ALREADY_ASSIGNED` (409) — department already has a manager; replace not confirmed
 - `INVALID_MANAGER_ROLE` (409) — candidate is not `department_manager`
 - `MANAGER_ALREADY_HAS_DEPARTMENT` (409) — candidate already manages another department
+- `MANAGER_CLEAR_FORBIDDEN` (409) — cannot clear department manager; replace only
 - `HAS_CURRENT_MEMBERSHIP` (409) — user already belongs to a department
 - `DEPARTMENT_ARCHIVED` (409) — mutation not allowed on archived department
 - `DEPARTMENT_HAS_MEMBERS` (409) — cannot delete a department with current members
@@ -736,6 +737,7 @@ Notable error codes:
 
 - `PROJECT_NOT_FOUND` (404)
 - `PROJECT_ARCHIVED` (409) — cannot create tasks on archived project
+- `DEPARTMENT_HAS_NO_MANAGER` (409) — cannot create project without a department manager
 - `INVALID_PROJECT_MEMBER` (409) — member not in department
 - `ALREADY_PROJECT_MEMBER` (409)
 - `INVALID_ASSIGNEE` (409)
@@ -870,7 +872,10 @@ Notable error codes:
 - `INSUFFICIENT_LEAVE_BALANCE` (409) — submit or approve; approve leaves request pending
 - `LEAVE_OVERLAP` / `LEAVE_YEAR_MISMATCH` / `LEAVE_TYPE_INACTIVE` / `LEAVE_BALANCE_MISSING`
 - `CANNOT_APPROVE_OWN` / `NOT_TASK_ASSIGNEE` / `PENDING_REQUEST_EXISTS`
-- `EXTENSION_DATE_INVALID`
+- `EXTENSION_DATE_INVALID` / `TASK_DUE_AFTER_PROJECT_END`
+- `NO_DEPARTMENT_MANAGER` (409) — employee cannot submit when their department has no manager
+
+Excusal approve body requires a new `assignedTo` (tasks cannot be unassigned). Admin may approve employee requests even when not notified; department managers are the default notification recipients for employee submissions.
 
 Submit/approve leave and approve employee requests use Postgres RPCs for atomicity.
 
@@ -889,12 +894,15 @@ Permissions: `announcement.view`, `announcement.manage`, `notification.view`.
 | GET | `/api/notifications/unread-count` | Badge count |
 | POST | `/api/notifications/[id]/read` | Mark one read |
 | POST | `/api/notifications/read-all` | Mark all read |
+| POST | `/api/push/subscribe` | Upsert browser Web Push subscription |
+| DELETE | `/api/push/subscribe` | Remove subscription (by endpoint or all for user) |
+| GET | `/api/push/status` | Whether the current user has a stored subscription |
 
 Publish rules: admin may create company or any department announcement; department managers create for their managed department only.
 
-Event producers insert in-app notifications (best-effort) for task assign/complete, approval request/result (leave, employee request, attendance), and announcement publish.
+Event producers insert in-app notifications (best-effort) and send Web Push to subscribed browsers for the same events (task assign/complete, approval request/result, announcement publish).
 
-Deferred: announcement file attachments, Web Push delivery (VAPID env remains unused).
+Deferred: announcement file attachments. Offline PWA caching remains deferred (push-only service worker is shipped).
 
 ---
 
@@ -933,7 +941,7 @@ Task list filters (server-side): `projectId`, `departmentId`, `status`, `assigne
 | DELETE | `/api/tasks/[id]/attachments/[attachmentId]` | Uploader or admin/manager | Removes Storage object + row |
 | GET | `/api/tasks/[id]/attachments/[attachmentId]/download` | Task access | `{ url, fileName }` signed URL |
 
-Task PATCH accepts `progressPercentage` (0–100).
+Task PATCH does **not** accept `progressPercentage`. Progress is derived: project list/dashboard use hours-weighted completed estimates; Gantt bars use task status.
 
 UI: `/projects/[id]/gantt`; `/tasks` advanced filters; task detail tabs Comments + Attachments.
 

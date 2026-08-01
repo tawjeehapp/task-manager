@@ -39,8 +39,9 @@ Never run `make seed` after `make use-prod`.
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Optional |
-| `VAPID_PRIVATE_KEY` | Optional |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | For Web Push (`npx web-push generate-vapid-keys`) |
+| `VAPID_PRIVATE_KEY` | For Web Push (server-only) |
+| `VAPID_SUBJECT` | Optional; defaults to `mailto:admin@localhost` |
 | `NEXT_PUBLIC_FEATURE_GANTT` | Optional |
 | `NEXT_PUBLIC_FEATURE_KANBAN` | Optional |
 

@@ -260,7 +260,7 @@ Constraints (Milestone 2):
 - At most one managed department per manager (unique partial index on `manager_id WHERE manager_id IS NOT NULL`).
 - Assigning `manager_id` does **not** change `users.role`. The user must already have role `department_manager`.
 - Replacing an existing manager requires an explicit replace flag in the API (no silent overwrite).
-- Clearing `manager_id` does not change the user’s role.
+- Clearing `manager_id` is **forbidden** (`MANAGER_CLEAR_FORBIDDEN`); replace only. Create department requires a manager.
 
 ---
 
@@ -353,6 +353,8 @@ high
 Constraints (Milestone 3):
 
 - Projects belong to one department.
+- `end_date` is **required**; `start_date` is optional (`end_date >= start_date` when start is set).
+- Creating a project requires the owning department to have a manager.
 - Archive via `status = archived` (no permanent delete API in M3).
 - RLS helper: `can_access_project(project_id)` — admin, department manager of owning department, or project member.
 
@@ -417,10 +419,12 @@ updated_at
 Notes:
 
 - Flat hierarchy: Project → Task only (no `parent_task_id` / subtasks).
-- Any task can be assigned; `estimated_hours` is editable on every task.
+- `assigned_to` is **required** (NOT NULL); tasks cannot be unassigned. Excusal approval reassigns to another user.
+- `estimated_hours` is **required** and must be `> 0`. Set by admin/manager; assignees cannot edit estimates.
+- Task `due_date` must be on or before the project `end_date` when set.
 - Tasks belong to one project.
 - Priority: `low | medium | high`
-- `progress_percentage` exists (default 0). Writable via task update API; displayed on Gantt bars (Milestone 9).
+- `progress_percentage` column exists (legacy default 0) but is **not** the live progress model. Project progress = hours-weighted share of completed task estimates. Gantt bars use status (`completed` = 100%, else 0).
 - RLS helper: `can_access_task(task_id)` — project access or assignee.
 
 ---
@@ -430,9 +434,9 @@ Notes:
 Statuses:
 
 ```
-todo          — Not Started (task hasn't begun yet)
+todo          — New (task hasn't begun yet)
 in_progress   — In Progress (someone is actively working on it)
-blocked       — Blocked (cannot proceed; a dependency isn't ready)
+blocked       — Blocked (system-managed when a dependency isn't ready; not set manually)
 completed     — Done (completed)
 ```
 
@@ -740,7 +744,11 @@ excusal
 
 Status: `pending | approved | rejected`.
 
-Atomic RPC: `approve_employee_request` (request + task side effect + activity log).
+Rules:
+
+- Extension approve updates task `due_date` (must remain ≤ project `end_date`).
+- Excusal approve **reassigns** the task (`assigned_to` required; cannot clear).
+- Atomic RPC: `approve_employee_request` (request + task side effect + activity log).
 
 ---
 
@@ -808,7 +816,7 @@ Unique `(announcement_id, user_id)`.
 
 # Notifications
 
-In-app notifications (Web Push deferred).
+In-app notifications with Web Push delivery to subscribed browsers.
 
 Table:
 
@@ -841,6 +849,33 @@ announcement
 ```
 
 `entity_type` / `entity_id` support deep links (`task`, `leave_request`, `employee_request`, `attendance_record`, `announcement`).
+
+---
+
+# Push subscriptions
+
+Browser Web Push endpoints (one row per browser/device subscription).
+
+Table:
+
+```
+push_subscriptions
+```
+
+Fields:
+
+```
+id
+user_id
+endpoint
+p256dh
+auth
+user_agent
+created_at
+updated_at
+```
+
+Unique on `endpoint`. Writes use service role; authenticated users may `SELECT` their own rows.
 
 ---
 

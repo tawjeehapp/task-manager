@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AppHeader } from "@/components/shared/app-header";
 import { AppSidebar } from "@/components/shared/app-sidebar";
 import { MobileNav } from "@/components/shared/mobile-nav";
+import { PushOptInBanner } from "@/features/notifications/components/push-opt-in-banner";
 import type { AuthMeResponse } from "@/features/auth/types/auth.types";
 
 type AppShellProps = {
@@ -14,6 +15,7 @@ export function AppShell({ children, initialMe }: AppShellProps) {
   return (
     <div className="flex min-h-full flex-col bg-background">
       <AppHeader initialMe={initialMe} />
+      <PushOptInBanner />
       <div className="flex min-h-0 flex-1">
         <div className="hidden border-s border-border lg:block">
           <AppSidebar

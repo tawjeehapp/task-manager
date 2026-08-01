@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 
 import type { Notification } from "@/features/notifications/types/notification.types";
 import { notificationHref } from "@/features/notifications/lib/notification-href";
+import { usePushSubscription } from "@/features/notifications/hooks/use-push-subscription";
 import { useMarkSeenOnView } from "@/lib/hooks/use-mark-seen-on-view";
 import { formatDateTime } from "@/lib/dates";
 import { Button } from "@/components/ui/button";
@@ -40,8 +41,16 @@ async function readApi<T>(response: Response): Promise<T> {
 
 export function NotificationBell() {
   const t = useTranslations("notifications");
+  const tPush = useTranslations("notifications.push");
   const tHeader = useTranslations("header");
   const [open, setOpen] = useState(false);
+  const {
+    status,
+    isSupported,
+    enable,
+    isEnabling,
+    isLoading: pushLoading,
+  } = usePushSubscription();
 
   const unreadQuery = useQuery({
     queryKey: ["notifications", "unread-count"],
@@ -74,6 +83,12 @@ export function NotificationBell() {
     invalidateQueryKey: ["notifications"],
   });
 
+  const showPushCta =
+    !pushLoading &&
+    isSupported &&
+    status !== "unsupported" &&
+    status !== "subscribed";
+
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
@@ -105,6 +120,39 @@ export function NotificationBell() {
             ) : null}
           </DropdownMenuLabel>
         </DropdownMenuGroup>
+        {showPushCta ? (
+          <>
+            <DropdownMenuSeparator />
+            <div className="px-3 py-2">
+              {status === "denied" ? (
+                <p className="text-xs text-muted-foreground">
+                  {tPush("deniedHint")}{" "}
+                  <Link
+                    href="/notifications"
+                    className="font-medium text-foreground underline-offset-2 hover:underline"
+                    onClick={() => setOpen(false)}
+                  >
+                    {tPush("manageLink")}
+                  </Link>
+                </p>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="w-full"
+                  disabled={isEnabling}
+                  onClick={() => {
+                    void enable().catch(() => {
+                      /* page/banner surfaces errors */
+                    });
+                  }}
+                >
+                  {isEnabling ? tPush("enabling") : tPush("enableBell")}
+                </Button>
+              )}
+            </div>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         {items.length === 0 ? (
           <div className="px-2 py-3 text-sm text-muted-foreground">

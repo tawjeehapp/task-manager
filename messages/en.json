@@ -244,7 +244,28 @@
     "colType": "Type",
     "colTitle": "Title",
     "colMessage": "Message",
-    "colTime": "Time"
+    "colTime": "Time",
+    "push": {
+      "title": "Browser notifications",
+      "description": "Get push alerts even when the app is in the background.",
+      "optInTitle": "Enable browser notifications",
+      "optInDescription": "Stay informed about tasks, approvals, and announcements.",
+      "enable": "Enable",
+      "enableBell": "Enable browser notifications",
+      "reEnable": "Re-enable",
+      "disable": "Disable",
+      "enabling": "Enabling…",
+      "disabling": "Disabling…",
+      "notNow": "Not now",
+      "statusSubscribed": "On",
+      "statusOff": "Off",
+      "statusDenied": "Blocked",
+      "deniedHint": "Notifications are blocked in your browser settings. Allow them for this site, then re-enable here.",
+      "unsupported": "Browser notifications are not supported in this browser.",
+      "enableError": "Could not enable browser notifications. Try again.",
+      "disableError": "Could not disable browser notifications. Try again.",
+      "manageLink": "Manage"
+    }
   },
   "announcements": {
     "title": "Announcements",

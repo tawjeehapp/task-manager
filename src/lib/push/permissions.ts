@@ -1,6 +1,5 @@
 /**
  * Browser Notification permission helpers.
- * Push delivery is implemented in later milestones.
  */
 
 export type NotificationPermissionState =

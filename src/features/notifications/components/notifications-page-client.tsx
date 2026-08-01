@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 
 import type { Notification } from "@/features/notifications/types/notification.types";
 import { notificationHref } from "@/features/notifications/lib/notification-href";
+import { PushSubscriptionControls } from "@/features/notifications/components/push-subscription-controls";
 import { useMarkSeenOnView } from "@/lib/hooks/use-mark-seen-on-view";
 import {
   DEFAULT_TABLE_PAGE_SIZE,
@@ -82,6 +83,8 @@ export function NotificationsPageClient() {
   return (
     <div className="space-y-4">
       <PageHeader title={t("title")} description={t("description")} />
+
+      <PushSubscriptionControls />
 
       {listQuery.isLoading ? <LoadingState /> : null}
       {listQuery.isError ? (

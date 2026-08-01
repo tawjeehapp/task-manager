@@ -10,6 +10,47 @@ The platform focuses on operational simplicity, clarity, and productivity rather
 
 ---
 
+# Product summary (client review)
+
+One-page overview for stakeholder walkthroughs. Canonical detail: [Major product decisions](#major-product-decisions) and the project [README](../../README.md#product-summary-for-client-review).
+
+The platform runs **one organization** with hierarchy:
+
+**Company → Department → Project → Task** (flat tasks; no subtasks).
+
+| Role | Responsibility |
+|---|---|
+| **Admin** | Users, departments, department heads, projects and project due dates, leave types, company announcements, reports, override approvals |
+| **Department manager** | One department: create employees, manage project members and tasks, approve team requests, department announcements, request project due-date extensions |
+| **Employee** | Assigned work (status + work logs), attendance, leave, task extension/excusal |
+
+**Planning:** Admin creates departments (each must have a manager) and projects with a required due date. Managers/admins create tasks with required assignee and estimated hours. Employees update status and log work only. Project progress = hours-weighted share of completed task estimates.
+
+**Flow:** Statuses New / In progress / Blocked / Completed; blocked is system-managed via dependencies. Tasks cannot be unassigned (excusal reassigns). Employee requests notify the department manager; manager requests notify admins. Admin may override. No self-approval.
+
+---
+
+# Major product decisions
+
+Locked rules as implemented:
+
+1. **Three roles** — `admin`, `department_manager`, `employee`.
+2. **Admin owns structure** — users (any role), departments, department heads, project entities and due dates.
+3. **Managers own department operations** — create employees in their department; manage project members and tasks; cannot create/edit/archive the project entity or change its due date directly (extension request → admin).
+4. **Flat hierarchy under projects** — Department → Project → Task; **no subtasks**.
+5. **Project due date required; start date optional** — admin-only due date edits; managers request extensions.
+6. **Tasks require assignee + estimated hours** — set by admin/manager; employees change status and log work only.
+7. **Four task statuses** — `todo` (New), `in_progress`, `blocked`, `completed`. `blocked` is forced by incomplete finish-to-start dependencies (same project); not set manually.
+8. **Project progress** — completed estimated hours ÷ total estimated hours. No separate project budget/estimate field.
+9. **Notification routing** — employee → department manager; department manager → admin. Admin may approve employee requests without being notified. Submitting employee requests requires an active department manager.
+10. **Department always has a manager** — required on create; cannot clear (replace only); projects cannot be created without a manager.
+11. **No unassigned tasks** — assignee required; excusal approves only with a new assignee.
+12. **Project members stay in-department** — members must be current members of the project’s department.
+13. **No self-approval** on leave, attendance, employee requests, or project requests.
+14. **Authorization** is enforced in application services (mutations use the service role; RLS is primarily SELECT-scoped).
+
+---
+
 # Goals
 
 The platform enables organizations to:
@@ -35,7 +76,8 @@ The MVP intentionally does not include:
 - CRM
 - Payroll
 - Accounting
-- Budget management
+- Budget management (no separate project budget/estimate field)
+- Subtasks / nested tasks
 - Sprint planning
 - Agile story points
 - Epics
@@ -327,33 +369,41 @@ Responsible for the entire organization.
 
 Can:
 
-- Manage departments
-- Manage users
-- Assign department managers
-- Create, edit, archive, and view all projects
-- Assign project members across departments
-- Create and assign tasks on any project
-- View all employees
-- View company-wide reports
+- Manage departments (create requires a manager; replace manager only — cannot clear)
+- Manage users of any role; assign department memberships
+- Assign department managers (candidate must already be `department_manager`)
+- Create, edit, archive, and view all projects; set project due dates (`end_date` required)
+- Assign project members within the project’s department
+- Create and assign tasks on any project (assignee + estimated hours required)
+- Approve any leave / attendance / employee / project request (except self)
+- View all employees and company-wide reports
 - Publish company announcements
-- Configure application settings
+- Manage leave types and allocations
 
 ---
 
 ## Department Manager
 
-Responsible only for their department.
+Responsible only for their department (at most one).
 
 Can:
 
-- Manage department project members
-- Assign tasks within department projects
-- Review attendance
-- Review work logs
-- Approve leave requests
-- Approve employee requests
+- Create employees in their managed department (employee role only; auto-membership)
+- Manage department project members and tasks (estimates, dates, assignee, dependencies)
+- Request project due-date extensions (admin approves); cannot edit project due date directly
+- Review attendance and work logs for department members
+- Approve leave and employee requests for department members
 - Publish department announcements
 - View department reports
+- Also has a personal employee-style workspace for their own assigned work
+
+Cannot:
+
+- Create/edit/archive departments or the project entity
+- Create admins or other managers
+- Move members across departments
+- Manage leave types/allocations
+- Approve project extension requests
 
 ---
 
@@ -362,12 +412,11 @@ Can:
 Can:
 
 - View assigned tasks
-- Update task status
+- Update task status only (not estimates, dates, or assignee)
 - Record attendance
 - Log work hours
 - Submit leave requests
-- Submit task extension requests
-- Submit task excusal requests
+- Submit task extension and excusal requests (excusal requires reassignment on approve)
 - View announcements
 - Receive notifications
 
@@ -377,11 +426,11 @@ Can:
 
 Company
 
-└── Department
+└── Department (must have a manager)
 
-  └── Project
+  └── Project (`end_date` required; optional `start_date`)
 
-    └── Task
+    └── Task (flat; no subtasks; assignee + estimated hours required)
 
 ---
 

@@ -7,8 +7,10 @@ import type {
   NotificationType,
 } from "@/features/notifications/types/notification.types";
 import type { ListNotificationsQuery } from "@/features/notifications/schemas/notification.schema";
+import { notificationHref } from "@/features/notifications/lib/notification-href";
 import { ApiError } from "@/lib/api/errors";
 import type { AppUser } from "@/lib/auth/types";
+import { sendWebPushToUsers } from "@/lib/push/send";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 type NotificationRow = {
@@ -37,6 +39,26 @@ function mapNotificationRow(row: NotificationRow): Notification {
   };
 }
 
+function pushUrlFor(
+  input: Pick<CreateNotificationInput, "entityType" | "entityId">,
+): string {
+  return (
+    notificationHref(input.entityType ?? null, input.entityId ?? null) ??
+    "/notifications"
+  );
+}
+
+async function dispatchWebPush(
+  userIds: string[],
+  input: Omit<CreateNotificationInput, "userId">,
+): Promise<void> {
+  await sendWebPushToUsers(userIds, {
+    title: input.title,
+    message: input.message,
+    url: pushUrlFor(input),
+  });
+}
+
 export async function createNotification(
   input: CreateNotificationInput,
 ): Promise<Notification | null> {
@@ -60,6 +82,7 @@ export async function createNotification(
       return null;
     }
 
+    await dispatchWebPush([input.userId], input);
     return mapNotificationRow(data as NotificationRow);
   } catch (error) {
     console.error("[notifications] create failed", error);
@@ -90,7 +113,10 @@ export async function createNotificationsForUsers(
     const { error } = await admin.from("notifications").insert(rows);
     if (error) {
       console.error("[notifications] bulk create failed", error);
+      return;
     }
+
+    await dispatchWebPush(uniqueIds, input);
   } catch (error) {
     console.error("[notifications] bulk create failed", error);
   }

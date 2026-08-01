@@ -18,7 +18,7 @@ The application is built incrementally. Each milestone should produce a usable w
 
 ### Current project status
 
-**Milestones 0–9 core product scope is implemented** (M0 PWA offline + Web Push still deferred).
+**Milestones 0–9 core product scope is implemented** (M0 PWA offline caching still deferred; Web Push completed).
 
 ---
 
@@ -82,15 +82,15 @@ Create the application foundation and development environment.
 | App shell (sidebar, header, mobile nav) | **Completed** | Future nav items present but disabled |
 | Loading / error / empty states | **Completed** | Shared components |
 | Web manifest + icons + install metadata | **Completed** | `public/manifest.webmanifest`, layout metadata |
-| Service worker / offline PWA runtime | **Deferred** | Manifest + icons only; unused `next-pwa` dependency **removed** — revisit when PWA milestone arrives |
-| Notifications DB + API + real center | **Completed (M7)** | In-app persistence + bell + `/notifications`; Web Push still deferred |
-| Push (VAPID env + subscribe stub) | **Deferred** | Env keys documented; delivery deferred past M7 |
+| Service worker / offline PWA runtime | **Partial** | Push-only `public/sw.js` shipped; offline caching still deferred (`next-pwa` not reintroduced) |
+| Notifications DB + API + real center | **Completed (M7)** | In-app persistence + bell + `/notifications` |
+| Push (VAPID + Web Push delivery) | **Completed** | `push_subscriptions`, subscribe APIs, `web-push` send on `notifySafe` |
 | Dashboard home (`/`) | **Completed (M8)** | Role-specific operational dashboards |
 
 ## Differences from original plan
 
-- Full PWA runtime (service worker, offline caching) was deferred rather than completed in M0.
-- Notification “foundation” is stubs only; persistence was deferred until auth (and remains deferred to Milestone 7).
+- Offline PWA caching was deferred; a push-only service worker (`public/sw.js`) ships for Web Push.
+- Notification persistence and Web Push delivery were completed in Milestone 7+ (in-app + browser push).
 - English locale files exist for future use; the app does not switch locales yet.
 
 ---
@@ -194,7 +194,7 @@ Introduce core work management functionality.
 |---|---|---|
 | Projects CRUD-ish (archive via status) | **Completed** | No permanent project delete API |
 | Project members (dept members only) | **Completed** | |
-| Flat tasks (Project → Task) | **Completed** | Any task assignable; estimated hours editable on every task |
+| Flat tasks (Project → Task) | **Completed** | Assignee + estimated hours **required**; no subtasks |
 | Task list / detail / project Kanban | **Completed** | Kanban at `/projects/[id]/board`; flat cards (no subtask expand) |
 | Permissions | **Completed** | `project.view` all roles (scoped); `project.manage` **admin only**; managers get `task.create` / `task.assign` |
 | RLS helpers | **Completed** | `can_access_project`, `can_access_task`, `is_project_member` |
@@ -205,7 +205,7 @@ Introduce core work management functionality.
 - Priority enum: `low | medium | high`.
 - Project statuses: `draft | active | completed | archived`.
 - Task statuses originally included `review` and `cancelled` in the M3 migration; simplified in M4 follow-up to `todo | in_progress | blocked | completed`.
-- `progress_percentage` exists on `tasks` and is writable in UI (Milestone 9 Gantt).
+- `progress_percentage` column remains on `tasks` but is not the live progress model (hours-weighted project progress; Gantt uses status).
 - Activity logs, dependencies, and workload were **Deferred to Milestone 4** (as noted during M3).
 - Comments and attachments remain **Out of scope** for M3–M4 (future).
 
@@ -321,7 +321,7 @@ Employee requests a new deadline; manager approves or rejects.
 
 ### Task Excusal Request
 
-Employee requests removal from a task; manager approves or rejects.
+Employee requests removal from a task; manager/admin approves with **reassignment** to another user (tasks cannot be left unassigned).
 
 ## Implementation status
 
@@ -351,7 +351,7 @@ Employee requests removal from a task; manager approves or rejects.
 
 # Milestone 7 — Communication
 
-**Status: Completed** (in-app; attachments + Web Push deferred)
+**Status: Completed** (in-app + Web Push; announcement attachments deferred)
 
 ## Goal
 
@@ -382,7 +382,7 @@ Events:
 Channels:
 
 - In-app notifications — **Completed**
-- Push notifications — **Deferred** (VAPID stubs retained)
+- Push notifications — **Completed** (VAPID + service worker + `web-push`)
 
 ## Implementation status
 
@@ -397,7 +397,7 @@ Channels:
 | Seed-dev M7 scenarios | **Completed** | Company/dept/expired announcements + sample notifications |
 | Vitest | **Completed** | Schemas, permission codes, href helper |
 | Announcement attachments | **Deferred** | Roadmap asked for files; Storage table deferred |
-| Web Push delivery | **Deferred** | Keep VAPID env; no SW / `web-push` |
+| Web Push delivery | **Completed** | `push_subscriptions` + `/api/push/*` + send on notify |
 
 ## Migrations
 
@@ -406,7 +406,7 @@ Channels:
 ## Differences / notes
 
 - File attachments for announcements deferred (document + roadmap).
-- Web Push deferred; in-app channel fulfills M7 notification product for now.
+- Web Push delivers the same payload as in-app notifications to subscribed browsers.
 - Notification failures never roll back the primary business action.
 
 ---
@@ -522,7 +522,7 @@ Support:
 | `departmentId` list filter | **Completed** | Server-side via projects in department |
 | Task comments | **Completed** | Tabs on task detail; CRUD APIs |
 | Task attachments | **Completed** | Upload/list/delete/download signed URL |
-| `progress_percentage` writable | **Completed** | Shown on Gantt bars |
+| `progress_percentage` writable | **Superseded** | Column retained; progress derived from hours/status (not editable PATCH field) |
 | Charts drag-reschedule / global Gantt | **Out of scope** | View-only; project-scoped |
 
 ## Migrations
@@ -533,7 +533,7 @@ Support:
 
 - Goal originally listed comments/attachments on a stray line; included in M9 along with Gantt/filters.
 - No new permission codes; access via `project.view` + `can_access_task`.
-- Announcement attachments and Web Push remain deferred.
+- Announcement attachments remain deferred; Web Push is completed.
 
 ---
 
@@ -586,8 +586,8 @@ Redesign admin and department-manager home dashboards into an operational leader
 - Admin: company-wide active users and non-archived projects on `/`
 - Department manager: managed-department members and projects on `/` (Department dashboard); personal view at `/me` (My dashboard)
 - Team / week hours from `attendance_records.total_hours`
-- Project progress = average root-task `progress_percentage`; health derived from overdue tasks
-- Estimated hours column = sum of root-task `estimated_hours` (not a budget field)
+- Project progress = hours-weighted share of completed task `estimated_hours`; health derived from overdue tasks
+- Estimated hours column = sum of task `estimated_hours` (not a budget field)
 - No job titles (no schema field); no migration
 - Employee dashboard unchanged (Milestone 10)
 
@@ -643,13 +643,13 @@ Treat department managers as employees who also lead a department: personal empl
 
 | Item | Originally in | Deferred to |
 |---|---|---|
-| Service worker / offline caching | M0 PWA | Later PWA milestone (`next-pwa` removed until then) |
-| Notifications table, APIs, real center, push | M0 foundation | Milestone 7 (in-app **Completed**; Web Push still deferred) |
+| Offline caching | M0 PWA | Later PWA milestone (`next-pwa` removed until then) |
+| Notifications table, APIs, real center, push | M0 foundation | Milestone 7 (in-app **Completed**; Web Push **Completed**) |
 | Announcement file attachments | Milestone 7 roadmap | Later / Storage |
-| Web Push delivery + service worker | Milestone 7 roadmap | Later PWA milestone |
+| Offline PWA caching | Milestone 7 / M0 PWA | Later PWA milestone (push-only SW shipped) |
 | Dashboard content | Shell in M0 | **Completed in Milestone 8** |
 | Task comments / attachments | DB design (not M3/M4 scope) | **Completed in Milestone 9** |
-| `progress_percentage` UI | Schema present | **Completed in Milestone 9** (writable + Gantt display) |
+| `progress_percentage` UI | Schema present | **Superseded** — hours-weighted project progress; Gantt uses status |
 | Playwright E2E | After workflows exist | After M5+ workflows |
 | Locale switcher (`en`) | Localization future | Future |
 

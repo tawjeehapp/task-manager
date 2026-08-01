@@ -8,16 +8,70 @@ Arabic-first, RTL work management platform for organizations. Built with Next.js
 
 | Milestone | Status |
 |---|---|
-| 0 — Foundation | Partial (core done; full PWA offline + Web Push still deferred) |
+| 0 — Foundation | Partial (core done; push-only SW shipped; offline caching still deferred) |
 | 1 — Auth & users | Completed |
 | 2 — Departments | Completed |
 | 3 — Projects & tasks | Completed |
 | 4 — Dependencies, workload, activity | Completed |
 | 5 — Attendance & work logs | Completed |
 | 6 — Leave & employee requests | Completed |
-| 7 — Communication | Completed (attachments + Web Push deferred) |
+| 7 — Communication | Completed (attachments deferred; Web Push completed) |
 | 8 — Dashboards & reports | Completed |
 | 9 — Advanced views | Completed |
+
+---
+
+## Product summary (for client review)
+
+One-page overview of how the system is organized and who does what — useful before a stakeholder walkthrough.
+
+The platform runs **one organization** with a clear hierarchy:
+
+**Company → Department → Project → Task** (flat tasks only; no subtasks).
+
+### Who uses it
+
+| Role | Responsibility |
+|---|---|
+| **Admin** | Org-wide setup: users, departments, department heads, projects and project due dates, leave types, company announcements, reports, and override approvals |
+| **Department manager** | One department: create employees, manage project members and tasks, approve team requests, publish department announcements, request project due-date extensions |
+| **Employee** | Own assigned work (status + work logs), attendance, leave, and task extension/excusal requests |
+
+### How work is planned
+
+- **Admin** creates departments (each must have a manager) and projects, and sets the project **due date** (required). Project start date is optional.
+- **Department managers** (and admins) create tasks on department projects: every task needs an **assignee** and **estimated hours**; due dates are set by managers/admins.
+- **Employees** do not edit estimates or reassign tasks — they update status and log work.
+- Task hour estimates feed **project progress** (hours-weighted share of completed tasks). There is no separate project budget field.
+
+### How work moves
+
+- Task statuses: **New** → **In progress** → **Completed**, plus **Blocked** when a dependency is incomplete (system-managed; cannot be set manually).
+- Tasks cannot be left unassigned. Excusal from a task requires **reassignment** to someone else.
+- Approvals flow by role: employee requests notify the **department manager**; manager requests notify **admins**. Admins can still approve employee requests when needed (override). No self-approval. Submitting employee requests requires an active department manager.
+
+Full decision list: [Major product decisions](#major-product-decisions). Detailed rules: [How the product works](#how-the-product-works-client-overview) and [Product spec](docs/spec/00-product.md).
+
+---
+
+## Major product decisions
+
+Locked product rules as implemented (source of truth for reviews and docs):
+
+1. **Three roles** — `admin`, `department_manager`, `employee`.
+2. **Admin owns structure** — creates users (any role), departments, department heads, and project entities (including due dates).
+3. **Managers own department operations** — create employees in their department; manage project members and tasks; cannot create/edit/archive the project entity or change its due date directly.
+4. **Hierarchy is flat under projects** — Department → Project → Task; **no subtasks**.
+5. **Project due date required; start date optional** — only admin edits the due date; department managers request an **extension** for admin approval.
+6. **Tasks require assignee + estimated hours** — set by admin/manager; employees update **status** and log work only.
+7. **Four task statuses** — `todo` (New), `in_progress`, `blocked`, `completed`. `blocked` is forced by incomplete finish-to-start dependencies (same project).
+8. **Project progress** — `completed estimated hours ÷ total estimated hours` (no separate project estimate field).
+9. **Notification routing** — employee → department manager; department manager → admin. Admin may approve employee requests without being notified.
+10. **Department always has a manager** — required on create; cannot clear (replace only); projects cannot be created on a manager-less department.
+11. **No unassigned tasks** — assignee required on create; excusal approves only with a new assignee.
+12. **Project members stay in-department** — members must be current members of the project’s department.
+
+Canonical copy also lives in [`docs/spec/00-product.md`](docs/spec/00-product.md#major-product-decisions).
 
 ---
 
@@ -28,7 +82,7 @@ This section explains the live business rules as implemented — useful when wal
 ### Organization model
 
 - **One organization** per deployment (no multi-tenant org switcher).
-- Hierarchy: **Company → Department → Project → Task**.
+- Hierarchy: **Company → Department → Project → Task** (no subtasks).
 - Roles:
   - **Admin** — org-wide configuration and overrides
   - **Department manager** — scoped to the department they manage
@@ -43,16 +97,20 @@ This section explains the live business rules as implemented — useful when wal
 
 ### Departments & memberships (M2)
 
-- Departments have at most **one manager**.
-- A manager manages **at most one** department; their role must already be `department_manager` (no auto-promotion).
+- Departments have at most **one manager**, and a manager manages **at most one** department.
+- Creating a department **requires** a manager; clearing the manager is forbidden (replace only). Role must already be `department_manager` (no auto-promotion).
+- Admins assign/move memberships. Department managers may **create employees** in their managed department (auto-membership); they cannot create other roles or move people across departments.
 - Membership history is preserved (`is_current` / end dates). Employees have at most one current department.
 
 ### Projects & tasks (M3–M4)
 
-- **Admins** create/edit/archive projects and assign project members (members must belong to the project’s department).
-- **Managers** manage members and tasks on department projects; they do **not** create/archive the project entity.
-- Tasks: status `todo | in_progress | blocked | completed`, priority `low | medium | high`, optional dates and estimated hours. Any task can be assigned; estimated hours are editable on every task.
-- **Finish-to-start dependencies**: a task cannot progress while incomplete dependencies block it (status can lock to `blocked`). Dependencies are same-project only.
+- **Admins** create/edit/archive projects and set project dates (`end_date` **required**, `start_date` optional). Members must belong to the project’s department.
+- **Managers** manage members and tasks on department projects; they do **not** create/archive the project entity or edit its due date — they file a **project extension request** for admin approval.
+- Creating a project requires the department to already have a manager.
+- Tasks: status `todo | in_progress | blocked | completed`, priority `low | medium | high`. **Assignee and estimated hours are required**; dates are optional. Task due date cannot exceed the project end date.
+- Assignees may change **status only**; admins/managers set estimates, dates, assignee, and dependencies.
+- **Finish-to-start dependencies**: incomplete deps force `blocked` (cannot be set manually); when deps complete, dependents return to `todo`. Same-project only.
+- **Project progress** = hours-weighted share of completed task estimates (sum of task hours in dashboards; no project budget field).
 - Assignee **workload hint** (active task count + estimated hours) appears when assigning — not a separate workload page.
 - Task **activity history** records create/assign/status/update/dependency events.
 
@@ -82,12 +140,14 @@ This section explains the live business rules as implemented — useful when wal
 ### Task extension & excusal (M6)
 
 - Only the **current assignee** can request:
-  - **Extension** — propose a new due date (≥ today in Riyadh; must be **strictly after** current due date if one exists).
-  - **Excusal** — request removal from the task.
+  - **Extension** — propose a new due date (≥ today in Riyadh; must be **strictly after** current due date if one exists; cannot exceed project end date).
+  - **Excusal** — request removal from the task (approval requires **reassignment** to another user).
 - One **pending** request per person / task / type.
 - Approvers: **requester’s department manager** or **admin**; no self-approval; approver does **not** need extra project access.
+- Notifications go to the department manager for employee requests (admins are not notified but can still override). Manager requests notify admins.
+- Submitting fails if the requester’s department has no manager.
 - On **extension approve**: task `due_date` is updated to the requested date (even if the original due date already passed while waiting).
-- On **excusal approve**: `assigned_to` is cleared **only if** the requester is still the assignee; otherwise the request is still approved without changing the assignee.
+- On **excusal approve**: task is **reassigned** to the chosen user (tasks cannot be unassigned).
 - Request status, task change, and activity log are updated in **one atomic transaction**.
 
 ### Approvals UX (M6)
@@ -95,7 +155,7 @@ This section explains the live business rules as implemented — useful when wal
 | Page | Purpose |
 |---|---|
 | `/leave` | My leave requests, balances; admins also manage types/allocations |
-| `/approvals` | Central queue: Leave · Task extensions · Task excusals (extensible for future types) |
+| `/approvals` | Central queue: Leave · Task extensions · Task excusals · Project extensions |
 | Task detail | Create extension/excusal when you are the assignee |
 | `/attendance` | Attendance clocking + attendance-specific approvals (unchanged) |
 
@@ -110,11 +170,11 @@ This section explains the live business rules as implemented — useful when wal
   - **No file attachments** in M7 (deferred).
 - **In-app notifications** at `/notifications` and the header **bell** (unread badge):
   - Types: `task_assigned`, `task_completed`, `approval_request`, `approval_result`, `announcement`.
-  - Fired (best-effort) when: a task is assigned or completed; leave / task extension-excusal / attendance is submitted for approval or decided; an announcement is published.
-  - Recipients: assignee (assign); task creator (complete); department manager + admins (approval requests); requester (approval results); announcement audience (publish). Actor is excluded where applicable.
+  - Fired (best-effort) when: a task is assigned or completed; leave / task extension-excusal / attendance / project extension is submitted for approval or decided; an announcement is published.
+  - Recipients: assignee (assign); task creator (complete); **department manager only** for employee approval requests (admins can still approve); **admins** for manager requests; requester (approval results); announcement audience (publish). Actor is excluded where applicable.
   - Deep links via `entity_type` / `entity_id` → task, leave, approvals, attendance, or announcements pages.
   - Users can mark one or all as read. Notification insert failures **never** roll back the primary business action.
-- **Web Push** is **not** delivered in M7 (VAPID env keys remain unused stubs).
+- **Web Push** delivers browser alerts for the same events as in-app notifications (requires VAPID keys + user opt-in).
 
 ### Dashboards & reports (M8)
 
@@ -132,13 +192,15 @@ This section explains the live business rules as implemented — useful when wal
 - **Gantt** at `/projects/[id]/gantt` — timeline bars, dependency lines, overdue highlighting; linked from project detail.
 - **Advanced filters** on `/tasks` — department, assignee, priority, due date range (plus status/project/mine).
 - **Task comments** and **attachments** on task detail tabs; files in private Storage bucket `task-files` (signed download URLs).
-- Task **progress %** is editable and shown on Gantt bars.
+- Gantt bar completion is derived from task **status** (`completed` = 100%; otherwise 0). Project progress uses hours-weighted completed estimates.
 
 ### What is intentionally not built yet
 
-- Announcement **file attachments** and **Web Push** → deferred past M7
-- Offline PWA service worker → deferred
+- Announcement **file attachments** → deferred past M7
+- Offline PWA caching → deferred (push-only service worker is shipped)
 - Global company-wide Gantt / drag-to-reschedule on Gantt
+- Subtasks / nested tasks
+- Separate project budget or estimate field (progress uses task hour weights)
 
 ---
 
@@ -176,7 +238,7 @@ See [docs/spec/07-development-setup.md](docs/spec/07-development-setup.md) for f
 
 | Spec | Description |
 |---|---|
-| [Product](docs/spec/00-product.md) | Goals and principles |
+| [Product](docs/spec/00-product.md) | Goals, principles, client summary, major decisions |
 | [Architecture](docs/spec/01-architecture.md) | System design |
 | [Database](docs/spec/02-database.md) | Schema |
 | [UI](docs/spec/03-ui.md) | RTL and interface |

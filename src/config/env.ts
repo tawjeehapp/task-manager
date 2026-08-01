@@ -11,6 +11,8 @@ const publicEnvSchema = z.object({
 const serverEnvSchema = publicEnvSchema.extend({
   SUPABASE_SERVICE_ROLE_KEY: z.string(),
   VAPID_PRIVATE_KEY: z.string(),
+  /** mailto: or https: contact for web-push VAPID details */
+  VAPID_SUBJECT: z.string(),
 });
 
 export type PublicEnv = z.infer<typeof publicEnvSchema>;
@@ -29,6 +31,7 @@ function readServerEnv(): ServerEnv {
     ...readPublicEnv(),
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
     VAPID_PRIVATE_KEY: process.env.VAPID_PRIVATE_KEY ?? "",
+    VAPID_SUBJECT: process.env.VAPID_SUBJECT ?? "mailto:admin@localhost",
   });
 }
 
