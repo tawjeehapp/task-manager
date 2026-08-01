@@ -9,8 +9,8 @@ import { Copy, ExternalLink, GitBranch, Pencil, Trash2 } from "lucide-react";
 import type {
   Task,
   TaskPriority,
-  TaskStatus,
 } from "@/features/tasks/types/task.types";
+import { selectableTaskStatuses } from "@/features/tasks/types/task.types";
 import { AssigneeSelect } from "@/features/tasks/components/assignee-select";
 import type { AssigneeOption } from "@/features/tasks/components/assignee-select";
 import { TaskDependenciesPanel } from "@/features/tasks/components/task-dependencies-panel";
@@ -42,13 +42,6 @@ type TasksListTableProps = {
   showProject?: boolean;
   className?: string;
 };
-
-const STATUSES: TaskStatus[] = [
-  "todo",
-  "in_progress",
-  "blocked",
-  "completed",
-];
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high"];
 
@@ -395,7 +388,7 @@ function TaskInlineFields({
           }
           aria-label={t("status")}
         >
-          {STATUSES.map((status) => (
+          {selectableTaskStatuses(task.status).map((status) => (
             <option key={status} value={status}>
               {statusLabel(status)}
             </option>

@@ -27,9 +27,11 @@ import type {
   UpdateTaskInput,
 } from "@/features/tasks/schemas/task.schema";
 import type {
+  IncompleteDependencySummary,
   Task,
   TaskProjectSummary,
   TaskRow,
+  TaskStatus,
   TaskUserSummary,
 } from "@/features/tasks/types/task.types";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -107,12 +109,32 @@ function toHours(value: number | string | null): number | null {
   return typeof value === "number" ? value : Number(value);
 }
 
+type DependencyAggregate = {
+  count: number;
+  incompleteCount: number;
+  incompleteTitles: string[];
+  incompleteDependencies: IncompleteDependencySummary[];
+};
+
+type DependsOnTaskJoin = {
+  id: string;
+  status: string;
+  title: string;
+  due_date: string | null;
+  assignee: {
+    id: string;
+    full_name: string;
+    employee_number: string;
+  } | null;
+};
+
 export function mapTask(
   row: TaskWithRelations,
   extras?: {
     dependencyCount?: number;
     incompleteDependencyCount?: number;
     incompleteDependencyTitles?: string[];
+    incompleteDependencies?: IncompleteDependencySummary[];
   },
 ): Task {
   return {
@@ -139,21 +161,26 @@ export function mapTask(
     dependencyCount: extras?.dependencyCount,
     incompleteDependencyCount: extras?.incompleteDependencyCount,
     incompleteDependencyTitles: extras?.incompleteDependencyTitles,
+    incompleteDependencies: extras?.incompleteDependencies,
+  };
+}
+
+function mapIncompleteDependency(
+  dep: DependsOnTaskJoin,
+): IncompleteDependencySummary {
+  return {
+    id: dep.id,
+    title: dep.title,
+    status: dep.status as TaskStatus,
+    dueDate: dep.due_date ? String(dep.due_date).slice(0, 10) : null,
+    assignee: mapUserSummary(dep.assignee),
   };
 }
 
 async function getDependencyAggregates(
   taskIds: string[],
-): Promise<
-  Map<
-    string,
-    { count: number; incompleteCount: number; incompleteTitles: string[] }
-  >
-> {
-  const aggregates = new Map<
-    string,
-    { count: number; incompleteCount: number; incompleteTitles: string[] }
-  >();
+): Promise<Map<string, DependencyAggregate>> {
+  const aggregates = new Map<string, DependencyAggregate>();
   if (taskIds.length === 0) {
     return aggregates;
   }
@@ -162,7 +189,7 @@ async function getDependencyAggregates(
   const { data, error } = await admin
     .from("task_dependencies")
     .select(
-      "task_id, depends_on_task:tasks!depends_on_task_id(status, title)",
+      "task_id, depends_on_task:tasks!depends_on_task_id(id, status, title, due_date, assignee:users!assigned_to(id, full_name, employee_number))",
     )
     .in("task_id", taskIds);
 
@@ -176,19 +203,18 @@ async function getDependencyAggregates(
 
   for (const row of data ?? []) {
     const id = row.task_id as string;
-    const dep = row.depends_on_task as unknown as {
-      status: string;
-      title: string;
-    } | null;
+    const dep = row.depends_on_task as unknown as DependsOnTaskJoin | null;
     const current = aggregates.get(id) ?? {
       count: 0,
       incompleteCount: 0,
       incompleteTitles: [],
+      incompleteDependencies: [],
     };
     current.count += 1;
-    if (dep?.status !== "completed") {
+    if (dep && dep.status !== "completed") {
       current.incompleteCount += 1;
-      if (dep?.title) {
+      current.incompleteDependencies.push(mapIncompleteDependency(dep));
+      if (dep.title) {
         current.incompleteTitles.push(dep.title);
       }
     }
@@ -246,6 +272,7 @@ async function loadTaskById(id: string): Promise<Task> {
     dependencyCount: deps?.count ?? 0,
     incompleteDependencyCount: deps?.incompleteCount ?? 0,
     incompleteDependencyTitles: deps?.incompleteTitles ?? [],
+    incompleteDependencies: deps?.incompleteDependencies ?? [],
   });
 }
 
@@ -298,7 +325,8 @@ export async function createTask(
     ...new Set(input.dependsOnTaskIds ?? []),
   ];
 
-  let createStatus = input.status;
+  let createStatus: TaskStatus =
+    input.status === "blocked" ? "todo" : input.status;
   let completedAt =
     createStatus === "completed" ? new Date().toISOString() : null;
 
@@ -487,6 +515,13 @@ export async function updateTask(
     patch.progress_percentage = input.progressPercentage;
   }
   if (input.status !== undefined) {
+    if (input.status === "blocked" && existing.status !== "blocked") {
+      throw new ApiError(
+        "لا يمكن تعيين الحالة إلى معلّقة يدوياً؛ تُحدَّد تلقائياً من التبعيات.",
+        400,
+        "MANUAL_BLOCKED_STATUS_FORBIDDEN",
+      );
+    }
     if (statusLocked) {
       if (input.status !== "blocked" && input.status !== existing.status) {
         await assertStatusNotLockedByDependencies(taskId);
@@ -785,6 +820,7 @@ export async function listTasksForViewer(
         dependencyCount: deps?.count ?? 0,
         incompleteDependencyCount: deps?.incompleteCount ?? 0,
         incompleteDependencyTitles: deps?.incompleteTitles ?? [],
+        incompleteDependencies: deps?.incompleteDependencies ?? [],
       });
     }),
     total,

@@ -14,6 +14,7 @@ import {
 import type { EmployeeDashboard } from "@/features/dashboard/types/dashboard.types";
 import type { TaskStatus } from "@/features/tasks/types/task.types";
 import { EmployeeTaskCalendar } from "@/features/dashboard/components/employee-task-calendar";
+import { EmployeeOpenTasksSnippet } from "@/features/dashboard/components/employee-open-tasks-snippet";
 import { EmployeeAttendanceWidget } from "@/features/dashboard/components/employee-attendance-widget";
 import {
   EmployeeStatusTasksDialog,
@@ -44,12 +45,14 @@ function MetricCard({
   icon,
   tone,
   onClick,
+  footer,
 }: {
   label: string;
   value: number | string;
   icon: ReactNode;
   tone?: MetricTone;
   onClick?: () => void;
+  footer?: ReactNode;
 }) {
   const toneClass =
     tone === "success"
@@ -72,13 +75,14 @@ function MetricCard({
       )}
     >
       <CardHeader className="flex flex-row items-start justify-between gap-2 pb-0">
-        <div>
+        <div className="min-w-0 space-y-1">
           <CardDescription>{label}</CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums text-primary">
             {value}
           </CardTitle>
+          {footer}
         </div>
-        <span className={cn("mt-1", toneClass)}>{icon}</span>
+        <span className={cn("mt-1 shrink-0", toneClass)}>{icon}</span>
       </CardHeader>
     </Card>
   );
@@ -158,14 +162,47 @@ export function EmployeeDashboardClient({
           icon={<Clock3 className="size-5" />}
           tone="info"
           onClick={() => setOpenMetric("hours")}
+          footer={
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              <span className="text-emerald-700 tabular-nums">
+                {data.metrics.weekHoursApproved}
+              </span>{" "}
+              {t("metricHoursApproved")}
+              {" · "}
+              <span className="text-amber-700 tabular-nums">
+                {data.metrics.weekHoursPending}
+              </span>{" "}
+              {t("metricHoursPending")}
+              {" · "}
+              <span className="text-destructive tabular-nums">
+                {data.metrics.weekHoursRejected}
+              </span>{" "}
+              {t("metricHoursRejected")}
+            </p>
+          }
         />
       </div>
 
-      <EmployeeTaskCalendar
-        viewerId={viewerId}
-        today={data.today}
-        initialTodayTasks={data.todayTasks}
-      />
+      <div className="grid gap-4 xl:grid-cols-5">
+        <div className="min-w-0 xl:col-span-3">
+          <EmployeeTaskCalendar
+            viewerId={viewerId}
+            today={data.today}
+            initialTodayTasks={data.todayTasks}
+          />
+        </div>
+        <div className="min-w-0 xl:col-span-2">
+          <EmployeeOpenTasksSnippet
+            tasks={data.openTasks}
+            today={data.today}
+            openCount={
+              data.metrics.todo +
+              data.metrics.inProgress +
+              data.metrics.blocked
+            }
+          />
+        </div>
+      </div>
 
       <EmployeeAttendanceWidget
         viewerId={viewerId}

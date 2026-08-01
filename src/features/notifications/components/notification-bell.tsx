@@ -1,12 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 import { Bell } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import type { Notification } from "@/features/notifications/types/notification.types";
 import { notificationHref } from "@/features/notifications/lib/notification-href";
+import { useMarkSeenOnView } from "@/lib/hooks/use-mark-seen-on-view";
 import { formatDateTime } from "@/lib/dates";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,7 +41,7 @@ async function readApi<T>(response: Response): Promise<T> {
 export function NotificationBell() {
   const t = useTranslations("notifications");
   const tHeader = useTranslations("header");
-  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
 
   const unreadQuery = useQuery({
     queryKey: ["notifications", "unread-count"],
@@ -61,21 +63,19 @@ export function NotificationBell() {
     refetchOnWindowFocus: true,
   });
 
-  const markReadMutation = useMutation({
-    mutationFn: (id: string) =>
-      fetch(`/api/notifications/${id}/read`, { method: "POST" }).then((res) =>
-        readApi<Notification>(res),
-      ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
-  });
-
   const unreadCount = unreadQuery.data?.count ?? 0;
   const items = (listQuery.data?.items ?? []).slice(0, 8);
+  const unreadIds = items.filter((item) => !item.readAt).map((item) => item.id);
+
+  useMarkSeenOnView({
+    enabled: open && listQuery.isSuccess,
+    unreadIds,
+    endpoint: "/api/notifications/mark-read",
+    invalidateQueryKey: ["notifications"],
+  });
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
           <Button
@@ -123,9 +123,7 @@ export function NotificationBell() {
                       unread ? "bg-primary/5" : ""
                     }`}
                     onClick={() => {
-                      if (unread) {
-                        markReadMutation.mutate(item.id);
-                      }
+                      setOpen(false);
                       if (href) {
                         window.location.href = href;
                       }
@@ -151,6 +149,7 @@ export function NotificationBell() {
           <Link
             href="/notifications"
             className="flex h-7 w-full items-center justify-center rounded-lg text-[0.8rem] font-medium hover:bg-muted"
+            onClick={() => setOpen(false)}
           >
             {t("viewAll")}
           </Link>

@@ -96,6 +96,17 @@ describe("filterEmployeeBoardTasks", () => {
       status: "blocked",
       priority: "medium",
       dueDate: "2026-07-10",
+      incompleteDependencyCount: 1,
+      incompleteDependencyTitles: ["Alpha"],
+      incompleteDependencies: [
+        {
+          id: "1",
+          title: "Alpha",
+          status: "todo",
+          dueDate: "2026-07-20",
+          assignee: null,
+        },
+      ],
     }),
   ];
 

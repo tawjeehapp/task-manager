@@ -897,7 +897,6 @@ export function ProjectDetailClient({
                   <option value="in_progress">
                     {tTasks("status_in_progress")}
                   </option>
-                  <option value="blocked">{tTasks("status_blocked")}</option>
                 </select>
               </div>
               <div className="space-y-2">

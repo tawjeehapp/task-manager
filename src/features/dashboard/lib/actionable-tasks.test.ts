@@ -2,16 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import {
   isIncludedInTodayList,
+  sortOpenListTasks,
   sortTodayListTasks,
 } from "@/features/dashboard/lib/actionable-tasks";
 
 function task(overrides: {
   status?: string;
   dueDate?: string | null;
+  priority?: string;
 } = {}) {
   return {
     status: "todo",
     dueDate: "2026-07-31",
+    priority: "medium",
     ...overrides,
   };
 }
@@ -77,6 +80,51 @@ describe("actionable-tasks", () => {
         today,
       );
       expect(sorted.map((t) => t.id)).toEqual(["b", "c", "a", "d"]);
+    });
+  });
+
+  describe("sortOpenListTasks", () => {
+    it("orders overdue, today, upcoming, then no due date", () => {
+      const sorted = sortOpenListTasks(
+        [
+          { id: "none", ...task({ dueDate: null }) },
+          { id: "future", ...task({ dueDate: "2026-08-05" }) },
+          { id: "today", ...task({ dueDate: today }) },
+          { id: "late", ...task({ dueDate: "2026-07-20" }) },
+        ],
+        today,
+      );
+      expect(sorted.map((t) => t.id)).toEqual([
+        "late",
+        "today",
+        "future",
+        "none",
+      ]);
+    });
+
+    it("breaks ties by priority then status", () => {
+      const sorted = sortOpenListTasks(
+        [
+          {
+            id: "low-todo",
+            ...task({ dueDate: today, priority: "low", status: "todo" }),
+          },
+          {
+            id: "high-todo",
+            ...task({ dueDate: today, priority: "high", status: "todo" }),
+          },
+          {
+            id: "high-blocked",
+            ...task({ dueDate: today, priority: "high", status: "blocked" }),
+          },
+        ],
+        today,
+      );
+      expect(sorted.map((t) => t.id)).toEqual([
+        "high-blocked",
+        "high-todo",
+        "low-todo",
+      ]);
     });
   });
 });

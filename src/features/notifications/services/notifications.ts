@@ -225,6 +225,37 @@ export async function markAllNotificationsRead(
   return { updated: data?.length ?? 0 };
 }
 
+export async function markNotificationsRead(
+  viewer: AppUser,
+  ids: string[],
+): Promise<{ updated: number }> {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length === 0) {
+    return { updated: 0 };
+  }
+
+  const admin = createAdminClient();
+  const now = new Date().toISOString();
+
+  const { data, error } = await admin
+    .from("notifications")
+    .update({ read_at: now })
+    .eq("user_id", viewer.id)
+    .in("id", uniqueIds)
+    .is("read_at", null)
+    .select("id");
+
+  if (error) {
+    throw new ApiError(
+      "تعذر تحديث الإشعارات.",
+      500,
+      "MARK_NOTIFICATIONS_READ_FAILED",
+    );
+  }
+
+  return { updated: data?.length ?? 0 };
+}
+
 /** @deprecated Use named exports — kept for gradual stub migration */
 export const notificationService = {
   list: async () => {

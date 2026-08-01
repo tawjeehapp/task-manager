@@ -84,8 +84,15 @@ export const listAnnouncementsQuerySchema = z.object({
     .transform((value) => value === "true"),
 });
 
+export const markAnnouncementsReadSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(100),
+});
+
 export type CreateAnnouncementInput = z.infer<typeof createAnnouncementSchema>;
 export type UpdateAnnouncementInput = z.infer<typeof updateAnnouncementSchema>;
 export type ListAnnouncementsQuery = z.infer<
   typeof listAnnouncementsQuerySchema
+>;
+export type MarkAnnouncementsReadInput = z.infer<
+  typeof markAnnouncementsReadSchema
 >;

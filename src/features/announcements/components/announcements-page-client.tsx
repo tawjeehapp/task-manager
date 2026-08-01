@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 
 import type { Announcement } from "@/features/announcements/types/announcement.types";
 import type { Role } from "@/lib/permissions";
+import { useMarkSeenOnView } from "@/lib/hooks/use-mark-seen-on-view";
 import {
   DEFAULT_TABLE_PAGE_SIZE,
   type TablePageSize,
@@ -161,23 +162,6 @@ export function AnnouncementsPageClient({
     },
   });
 
-  const markReadMutation = useMutation({
-    mutationFn: (id: string) =>
-      fetch(`/api/announcements/${id}/read`, { method: "POST" }).then((res) =>
-        readApi<Announcement>(res),
-      ),
-    onSuccess: async (item) => {
-      setSuccessMessage(t("markReadSuccess"));
-      setActionError(null);
-      setDetail(item);
-      await queryClient.invalidateQueries({ queryKey: ["announcements"] });
-    },
-    onError: (error: Error) => {
-      setActionError(error.message);
-      setSuccessMessage(null);
-    },
-  });
-
   const expireMutation = useMutation({
     mutationFn: (id: string) =>
       fetch(`/api/announcements/${id}`, { method: "DELETE" }).then((res) =>
@@ -206,6 +190,23 @@ export function AnnouncementsPageClient({
 
   const items = listQuery.data?.items ?? [];
   const total = listQuery.data?.total ?? 0;
+  const unreadIds = items.filter((item) => !item.isRead).map((item) => item.id);
+  const detailUnreadIds =
+    detail && !detail.isRead ? [detail.id] : ([] as string[]);
+
+  useMarkSeenOnView({
+    enabled: listQuery.isSuccess,
+    unreadIds,
+    endpoint: "/api/announcements/mark-read",
+    invalidateQueryKey: ["announcements"],
+  });
+
+  useMarkSeenOnView({
+    enabled: Boolean(detail && !detail.isRead),
+    unreadIds: detailUnreadIds,
+    endpoint: "/api/announcements/mark-read",
+    invalidateQueryKey: ["announcements"],
+  });
 
   return (
     <div className="space-y-4">
@@ -272,7 +273,6 @@ export function AnnouncementsPageClient({
                       <TableHead>{t("colPriority")}</TableHead>
                       <TableHead>{t("colPublish")}</TableHead>
                       <TableHead>{t("colExpires")}</TableHead>
-                      <TableHead>{t("colRead")}</TableHead>
                       <TableHead />
                     </TableRow>
                   </TableHeader>
@@ -308,9 +308,6 @@ export function AnnouncementsPageClient({
                             : t("noExpiry")}
                         </TableCell>
                         <TableCell>
-                          {item.isRead ? t("readYes") : t("readNo")}
-                        </TableCell>
-                        <TableCell>
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="button"
@@ -320,17 +317,6 @@ export function AnnouncementsPageClient({
                             >
                               {t("view")}
                             </Button>
-                            {!item.isRead ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                disabled={markReadMutation.isPending}
-                                onClick={() => markReadMutation.mutate(item.id)}
-                              >
-                                {t("markRead")}
-                              </Button>
-                            ) : null}
                             {canManage && item.isActive ? (
                               <Button
                                 type="button"
@@ -491,15 +477,6 @@ export function AnnouncementsPageClient({
                   : ` · ${t("noExpiry")}`}
               </p>
               <div className="flex flex-wrap gap-2">
-                {!detail.isRead ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => markReadMutation.mutate(detail.id)}
-                  >
-                    {t("markRead")}
-                  </Button>
-                ) : null}
                 {canManage && detail.isActive ? (
                   <Button
                     type="button"

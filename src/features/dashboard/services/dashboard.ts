@@ -25,6 +25,7 @@ import {
   calendarDateOnly,
   countEmployeeTaskMetrics,
   isIncludedInTodayList,
+  sortOpenListTasks,
   sortTodayListTasks,
 } from "@/features/dashboard/lib/actionable-tasks";
 import { aggregateLeadershipFromRows } from "@/features/dashboard/services/leadership-aggregates";
@@ -523,6 +524,41 @@ function mapTaskRow(row: {
   };
 }
 
+async function attachIncompleteDependencyCounts(
+  items: DashboardTaskItem[],
+): Promise<DashboardTaskItem[]> {
+  if (items.length === 0) {
+    return items;
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("task_dependencies")
+    .select("task_id, depends_on_task:tasks!depends_on_task_id(status)")
+    .in(
+      "task_id",
+      items.map((item) => item.id),
+    );
+
+  if (error) {
+    return items;
+  }
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    const dep = row.depends_on_task as unknown as { status: string } | null;
+    if (dep && dep.status !== "completed") {
+      const taskId = row.task_id as string;
+      counts.set(taskId, (counts.get(taskId) ?? 0) + 1);
+    }
+  }
+
+  return items.map((item) => ({
+    ...item,
+    incompleteDependencyCount: counts.get(item.id) ?? 0,
+  }));
+}
+
 async function getEmployeeMetrics(
   userId: string,
   today: string,
@@ -537,7 +573,7 @@ async function getEmployeeMetrics(
       .eq("assigned_to", userId),
     admin
       .from("attendance_records")
-      .select("total_hours")
+      .select("total_hours, status")
       .eq("user_id", userId)
       .gte("date", weekStart)
       .lte("date", weekEnd),
@@ -566,15 +602,28 @@ async function getEmployeeMetrics(
     today,
   );
 
-  let weekHours = 0;
+  let weekHoursApproved = 0;
+  let weekHoursPending = 0;
+  let weekHoursRejected = 0;
   for (const row of weekAttRes.data ?? []) {
     const hours = Number(row.total_hours ?? 0);
-    if (Number.isFinite(hours)) weekHours += hours;
+    if (!Number.isFinite(hours)) continue;
+    const status = row.status as string;
+    if (status === "approved") weekHoursApproved += hours;
+    else if (status === "rejected") weekHoursRejected += hours;
+    else weekHoursPending += hours;
   }
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
 
   return {
     ...counts,
-    weekHours: Math.round(weekHours * 100) / 100,
+    weekHours: round2(
+      weekHoursApproved + weekHoursPending + weekHoursRejected,
+    ),
+    weekHoursApproved: round2(weekHoursApproved),
+    weekHoursPending: round2(weekHoursPending),
+    weekHoursRejected: round2(weekHoursRejected),
   };
 }
 
@@ -606,7 +655,37 @@ async function listTodayTasks(
     .map(mapTaskRow)
     .filter((task) => isIncludedInTodayList(task, today));
 
-  return sortTodayListTasks(items, today).slice(0, 50);
+  return attachIncompleteDependencyCounts(
+    sortTodayListTasks(items, today).slice(0, 50),
+  );
+}
+
+async function listOpenTasks(
+  userId: string,
+  today: string,
+): Promise<DashboardTaskItem[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("tasks")
+    .select(
+      "id, title, status, due_date, priority, project:projects!project_id(id, name)",
+    )
+    .eq("assigned_to", userId)
+    .in("status", ["todo", "in_progress", "blocked"])
+    .limit(100);
+
+  if (error) {
+    throw new ApiError(
+      "تعذر جلب المهام المفتوحة.",
+      500,
+      "DASHBOARD_OPEN_TASKS_FAILED",
+    );
+  }
+
+  const items = (data ?? []).map(mapTaskRow);
+  return attachIncompleteDependencyCounts(
+    sortOpenListTasks(items, today).slice(0, DASHBOARD_LIST_LIMIT),
+  );
 }
 
 async function listWeekAttendance(
@@ -788,20 +867,28 @@ export async function getPersonalDashboard(
   viewer: AppUser,
 ): Promise<EmployeeDashboard> {
   const today = calendarDateInOrgTimezone(new Date(), ATTENDANCE_TIMEZONE);
-  const [metrics, todayTasks, weekAttendance, attendanceSummary, myRequests] =
-    await Promise.all([
-      getEmployeeMetrics(viewer.id, today),
-      listTodayTasks(viewer.id, today),
-      listWeekAttendance(viewer.id, today),
-      getAttendanceSummary(viewer.id, today),
-      listMyRequests(viewer.id),
-    ]);
+  const [
+    metrics,
+    todayTasks,
+    openTasks,
+    weekAttendance,
+    attendanceSummary,
+    myRequests,
+  ] = await Promise.all([
+    getEmployeeMetrics(viewer.id, today),
+    listTodayTasks(viewer.id, today),
+    listOpenTasks(viewer.id, today),
+    listWeekAttendance(viewer.id, today),
+    getAttendanceSummary(viewer.id, today),
+    listMyRequests(viewer.id),
+  ]);
 
   return {
     role: "employee",
     today,
     metrics,
     todayTasks,
+    openTasks,
     weekAttendance,
     attendanceSummary,
     myRequests,

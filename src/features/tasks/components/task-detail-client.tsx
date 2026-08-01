@@ -13,6 +13,7 @@ import {
   type UpdateTaskInput,
 } from "@/features/tasks/schemas/task.schema";
 import type { Task } from "@/features/tasks/types/task.types";
+import { selectableTaskStatuses } from "@/features/tasks/types/task.types";
 import { AssigneeSelect } from "@/features/tasks/components/assignee-select";
 import { TaskActivityPanel } from "@/features/tasks/components/task-activity-panel";
 import { TaskAttachmentsPanel } from "@/features/tasks/components/task-attachments-panel";
@@ -66,13 +67,6 @@ type ProjectMemberRow = {
     employeeNumber: string;
   };
 };
-
-const TASK_STATUSES = [
-  "todo",
-  "in_progress",
-  "blocked",
-  "completed",
-] as const;
 
 async function fetchTask(id: string): Promise<Task> {
   const response = await fetch(`/api/tasks/${id}`);
@@ -567,7 +561,7 @@ export function TaskDetailClient({
                         }
                         {...editForm.register("status")}
                       >
-                        {TASK_STATUSES.map((status) => (
+                        {selectableTaskStatuses(editForm.watch("status") ?? task.status).map((status) => (
                           <option key={status} value={status}>
                             {statusLabel(status)}
                           </option>
@@ -691,7 +685,7 @@ export function TaskDetailClient({
                           statusMutation.mutate(event.target.value)
                         }
                       >
-                        {TASK_STATUSES.map((status) => (
+                        {selectableTaskStatuses(task.status).map((status) => (
                           <option key={status} value={status}>
                             {statusLabel(status)}
                           </option>

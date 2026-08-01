@@ -10,7 +10,10 @@ import type {
   ProjectMember,
 } from "@/features/projects/types/project.types";
 import type { Task, TaskStatus } from "@/features/tasks/types/task.types";
-import { TASK_STATUSES } from "@/features/tasks/types/task.types";
+import {
+  selectableTaskStatuses,
+  TASK_STATUSES,
+} from "@/features/tasks/types/task.types";
 import {
   formatTaskDateRange,
   isLateTask,
@@ -237,7 +240,7 @@ function EmployeeTaskRow({
                 statusMutation.mutate(event.target.value as TaskStatus)
               }
             >
-              {TASK_STATUSES.map((status) => (
+              {selectableTaskStatuses(task.status).map((status) => (
                 <option key={status} value={status}>
                   {statusLabel(status)}
                 </option>

@@ -18,6 +18,15 @@ export type TaskProjectSummary = {
   departmentId: string;
 };
 
+/** Incomplete finish-to-start prerequisite shown on boards. */
+export type IncompleteDependencySummary = {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  dueDate: string | null;
+  assignee: TaskUserSummary | null;
+};
+
 export type Task = {
   id: string;
   projectId: string;
@@ -43,6 +52,8 @@ export type Task = {
   incompleteDependencyCount?: number;
   /** Titles of incomplete finish-to-start prerequisites. */
   incompleteDependencyTitles?: string[];
+  /** Structured incomplete finish-to-start prerequisites. */
+  incompleteDependencies?: IncompleteDependencySummary[];
 };
 
 export type TaskRow = {
@@ -69,6 +80,21 @@ export const TASK_STATUSES: TaskStatus[] = [
   "blocked",
   "completed",
 ];
+
+/** Statuses users may set manually; blocked is dependency-driven only. */
+export const MANUAL_TASK_STATUSES: TaskStatus[] = [
+  "todo",
+  "in_progress",
+  "completed",
+];
+
+/** Options for a status control, including blocked only when it is the current value. */
+export function selectableTaskStatuses(current: TaskStatus): TaskStatus[] {
+  if (current === "blocked") {
+    return ["blocked", ...MANUAL_TASK_STATUSES];
+  }
+  return [...MANUAL_TASK_STATUSES];
+}
 
 /** Statuses that count toward employee workload (active work). */
 export const ACTIVE_TASK_STATUSES: TaskStatus[] = [

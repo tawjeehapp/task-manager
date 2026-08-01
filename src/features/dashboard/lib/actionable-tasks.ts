@@ -32,6 +32,47 @@ export function sortTodayListTasks<T extends { dueDate: string | null; status: s
   });
 }
 
+const OPEN_PRIORITY_RANK: Record<string, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+const OPEN_STATUS_RANK: Record<string, number> = {
+  blocked: 0,
+  in_progress: 1,
+  todo: 2,
+};
+
+/** overdue → due today → upcoming → no due; then priority, then status. */
+export function sortOpenListTasks<
+  T extends { dueDate: string | null; status: string; priority: string },
+>(tasks: T[], today: string): T[] {
+  function dueBucket(dueDate: string | null): number {
+    if (!dueDate) return 3;
+    if (dueDate < today) return 0;
+    if (dueDate === today) return 1;
+    return 2;
+  }
+
+  return [...tasks].sort((a, b) => {
+    const aDue = calendarDateOnly(a.dueDate);
+    const bDue = calendarDateOnly(b.dueDate);
+    const aBucket = dueBucket(aDue);
+    const bBucket = dueBucket(bDue);
+    if (aBucket !== bBucket) return aBucket - bBucket;
+    if (aDue && bDue && aDue !== bDue) return aDue.localeCompare(bDue);
+
+    const aPri = OPEN_PRIORITY_RANK[a.priority] ?? 9;
+    const bPri = OPEN_PRIORITY_RANK[b.priority] ?? 9;
+    if (aPri !== bPri) return aPri - bPri;
+
+    const aStatus = OPEN_STATUS_RANK[a.status] ?? 9;
+    const bStatus = OPEN_STATUS_RANK[b.status] ?? 9;
+    return aStatus - bStatus;
+  });
+}
+
 export type EmployeeTaskMetricCounts = {
   todo: number;
   inProgress: number;

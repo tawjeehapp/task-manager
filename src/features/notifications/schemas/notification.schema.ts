@@ -50,8 +50,15 @@ export const listNotificationsQuerySchema = z.object({
     .transform((value) => value === "true"),
 });
 
+export const markNotificationsReadSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(100),
+});
+
 export type NotificationSchema = z.infer<typeof notificationSchema>;
 export type CreateNotificationSchema = z.infer<typeof createNotificationSchema>;
 export type ListNotificationsQuery = z.infer<
   typeof listNotificationsQuerySchema
+>;
+export type MarkNotificationsReadInput = z.infer<
+  typeof markNotificationsReadSchema
 >;

@@ -459,3 +459,49 @@ export async function markAnnouncementRead(
 
   return mapAnnouncementRow(row, true);
 }
+
+export async function markAnnouncementsRead(
+  viewer: AppUser,
+  ids: string[],
+): Promise<{ updated: number }> {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length === 0) {
+    return { updated: 0 };
+  }
+
+  const readableIds: string[] = [];
+  for (const id of uniqueIds) {
+    try {
+      const row = await getAnnouncementRow(id);
+      await assertCanViewAnnouncement(viewer, row);
+      readableIds.push(id);
+    } catch {
+      // Skip IDs the viewer cannot access.
+    }
+  }
+
+  if (readableIds.length === 0) {
+    return { updated: 0 };
+  }
+
+  const admin = createAdminClient();
+  const now = new Date().toISOString();
+  const { error } = await admin.from("announcement_reads").upsert(
+    readableIds.map((announcementId) => ({
+      announcement_id: announcementId,
+      user_id: viewer.id,
+      read_at: now,
+    })),
+    { onConflict: "announcement_id,user_id" },
+  );
+
+  if (error) {
+    throw new ApiError(
+      "تعذر تسجيل القراءة.",
+      500,
+      "MARK_ANNOUNCEMENTS_READ_FAILED",
+    );
+  }
+
+  return { updated: readableIds.length };
+}

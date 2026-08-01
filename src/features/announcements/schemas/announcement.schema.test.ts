@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   createAnnouncementSchema,
   listAnnouncementsQuerySchema,
+  markAnnouncementsReadSchema,
 } from "@/features/announcements/schemas/announcement.schema";
 import {
   listNotificationsQuerySchema,
+  markNotificationsReadSchema,
   notificationTypeSchema,
 } from "@/features/notifications/schemas/notification.schema";
 import { notificationHref } from "@/features/notifications/lib/notification-href";
@@ -37,6 +39,19 @@ describe("announcement schemas", () => {
     expect(query.pageSize).toBe(25);
     expect(query.status).toBe("active");
   });
+
+  it("accepts mark-read id list", () => {
+    const parsed = markAnnouncementsReadSchema.parse({
+      ids: ["a1000001-0000-4000-8000-000000000001"],
+    });
+    expect(parsed.ids).toHaveLength(1);
+  });
+
+  it("rejects empty mark-read id list", () => {
+    expect(markAnnouncementsReadSchema.safeParse({ ids: [] }).success).toBe(
+      false,
+    );
+  });
 });
 
 describe("notification schemas", () => {
@@ -48,6 +63,19 @@ describe("notification schemas", () => {
   it("parses unreadOnly flag", () => {
     const query = listNotificationsQuerySchema.parse({ unreadOnly: "true" });
     expect(query.unreadOnly).toBe(true);
+  });
+
+  it("accepts mark-read id list", () => {
+    const parsed = markNotificationsReadSchema.parse({
+      ids: ["a1000001-0000-4000-8000-000000000001"],
+    });
+    expect(parsed.ids).toHaveLength(1);
+  });
+
+  it("rejects empty mark-read id list", () => {
+    expect(markNotificationsReadSchema.safeParse({ ids: [] }).success).toBe(
+      false,
+    );
   });
 });
 

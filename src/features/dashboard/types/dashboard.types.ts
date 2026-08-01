@@ -44,6 +44,9 @@ export type EmployeeDashboardMetrics = {
   blocked: number;
   completed: number;
   weekHours: number;
+  weekHoursApproved: number;
+  weekHoursPending: number;
+  weekHoursRejected: number;
   overdue: number;
   dueToday: number;
 };
@@ -149,6 +152,8 @@ export type EmployeeDashboard = {
   today: string;
   metrics: EmployeeDashboardMetrics;
   todayTasks: DashboardTaskItem[];
+  /** Open tasks (todo / in_progress / blocked), sorted for a compact dashboard snippet. */
+  openTasks: DashboardTaskItem[];
   weekAttendance: DashboardAttendanceItem[];
   attendanceSummary: DashboardAttendanceSummary;
   myRequests: DashboardRequestItem[];

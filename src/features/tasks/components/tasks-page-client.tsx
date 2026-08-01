@@ -372,7 +372,6 @@ export function TasksPageClient({
                         <option value="in_progress">
                           {statusLabel("in_progress")}
                         </option>
-                        <option value="blocked">{statusLabel("blocked")}</option>
                       </select>
                     </div>
                     <div className="space-y-2">

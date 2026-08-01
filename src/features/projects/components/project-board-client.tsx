@@ -1,19 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Lock } from "lucide-react";
 
 import type { Task, TaskStatus } from "@/features/tasks/types/task.types";
 import { TASK_STATUSES } from "@/features/tasks/types/task.types";
 import type { Project } from "@/features/projects/types/project.types";
+import { useBoardStatusMutation } from "@/features/tasks/hooks/use-board-status-mutation";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { PageHeader } from "@/components/shared/page-header";
 import { ErrorState } from "@/components/shared/error-state";
 import { LoadingState } from "@/components/shared/loading-state";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TaskBlockerChips } from "@/features/tasks/components/task-blocker-summary";
 import { cn } from "@/lib/utils";
 
 type ProjectBoardClientProps = {
@@ -65,9 +68,10 @@ export function ProjectBoardClient({
   const t = useTranslations("tasks");
   const tProjects = useTranslations("projects");
   const tCommon = useTranslations("common");
-  const queryClient = useQueryClient();
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [boardNotice, setBoardNotice] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
+  const boardQueryKey = ["tasks", "board", projectId] as const;
 
   const projectQuery = useQuery({
     queryKey: ["projects", projectId],
@@ -75,36 +79,11 @@ export function ProjectBoardClient({
   });
 
   const tasksQuery = useQuery({
-    queryKey: ["tasks", "board", projectId],
+    queryKey: boardQueryKey,
     queryFn: () => fetchBoardTasks(projectId),
   });
 
-  const statusMutation = useMutation({
-    mutationFn: async ({
-      taskId,
-      status,
-    }: {
-      taskId: string;
-      status: TaskStatus;
-    }) => {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      const payload = (await response.json()) as {
-        error?: { message: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? t("updateFailed"));
-      }
-    },
-    onSuccess: async () => {
-      setSuccessMessage(t("statusUpdateSuccess"));
-      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
-  });
-
+  const statusMutation = useBoardStatusMutation(boardQueryKey);
   const boardTasks = tasksQuery.data ?? [];
 
   const columns = useMemo(() => {
@@ -157,9 +136,9 @@ export function ProjectBoardClient({
         />
       </div>
 
-      {successMessage ? (
-        <Alert>
-          <AlertDescription>{successMessage}</AlertDescription>
+      {boardNotice ? (
+        <Alert variant="destructive">
+          <AlertDescription>{boardNotice}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -172,35 +151,56 @@ export function ProjectBoardClient({
       ) : null}
 
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {columns.map((column) => (
+        {columns.map((column) => {
+          const isBlockedColumn = column.status === "blocked";
+          const isDropTarget = dropTarget === column.status;
+          const showBlockedHint = Boolean(draggingId) && isBlockedColumn;
+
+          return (
           <div
             key={column.status}
             className={cn(
-              "min-w-[220px] flex-1 rounded-lg border p-3",
+              "min-w-[220px] flex-1 rounded-lg border p-3 transition-shadow",
               STATUS_COLORS[column.status],
+              canUpdateStatus &&
+                isDropTarget &&
+                !isBlockedColumn &&
+                "ring-2 ring-primary/40 ring-offset-2 ring-offset-background",
+              canUpdateStatus &&
+                isDropTarget &&
+                isBlockedColumn &&
+                "ring-2 ring-destructive/40 ring-offset-2 ring-offset-background",
             )}
             onDragOver={(event) => {
-              if (canUpdateStatus) {
-                event.preventDefault();
-              }
+              if (!canUpdateStatus) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = isBlockedColumn ? "none" : "move";
+              setDropTarget(column.status);
             }}
             onDrop={(event) => {
               event.preventDefault();
-              if (!canUpdateStatus || !draggingId) {
+              const taskId = draggingId;
+              setDraggingId(null);
+              setDropTarget(null);
+              if (!canUpdateStatus || !taskId) {
                 return;
               }
-              const task = boardTasks.find((item) => item.id === draggingId);
+              if (isBlockedColumn) {
+                setBoardNotice(t("boardBlockedDropDenied"));
+                return;
+              }
+              const task = boardTasks.find((item) => item.id === taskId);
               if (
                 task &&
                 task.status !== column.status &&
                 !(task.incompleteDependencyCount ?? 0)
               ) {
+                setBoardNotice(null);
                 statusMutation.mutate({
-                  taskId: draggingId,
+                  taskId,
                   status: column.status,
                 });
               }
-              setDraggingId(null);
             }}
           >
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -209,6 +209,17 @@ export function ProjectBoardClient({
               </h3>
               <Badge variant="secondary">{column.tasks.length}</Badge>
             </div>
+            {isBlockedColumn ? (
+              <p
+                className={cn(
+                  "mb-2 flex items-start gap-1.5 text-xs text-muted-foreground",
+                  showBlockedHint && "font-medium text-destructive",
+                )}
+              >
+                <Lock className="mt-0.5 size-3 shrink-0" aria-hidden />
+                <span>{t("boardBlockedColumnHint")}</span>
+              </p>
+            ) : null}
             <div className="space-y-2">
               {column.tasks.map((task) => {
                 const statusLocked = (task.incompleteDependencyCount ?? 0) > 0;
@@ -219,10 +230,14 @@ export function ProjectBoardClient({
                     draggable={canDrag}
                     onDragStart={() => {
                       if (canDrag) {
+                        setBoardNotice(null);
                         setDraggingId(task.id);
                       }
                     }}
-                    onDragEnd={() => setDraggingId(null)}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setDropTarget(null);
+                    }}
                     title={
                       statusLocked
                         ? t("statusLockedByDependencies")
@@ -251,12 +266,16 @@ export function ProjectBoardClient({
                         {task.assignee?.fullName ?? t("unassigned")}
                       </p>
                     </div>
+                    <TaskBlockerChips
+                      blockers={task.incompleteDependencies ?? []}
+                    />
                   </div>
                 );
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

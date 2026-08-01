@@ -1,15 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { Calendar, Lock, Search, TriangleAlert } from "lucide-react";
 
 import type { Task, TaskStatus } from "@/features/tasks/types/task.types";
 import { TASK_STATUSES } from "@/features/tasks/types/task.types";
 import type { TasksListResult } from "@/features/tasks/services/tasks";
 import { TaskRequestDialog } from "@/features/dashboard/components/task-request-dialog";
+import { TaskBlockerChips } from "@/features/tasks/components/task-blocker-summary";
+import { useBoardStatusMutation } from "@/features/tasks/hooks/use-board-status-mutation";
 import { todayInOrgTimezone } from "@/lib/org-calendar";
 import { formatDate } from "@/lib/dates";
 import { withInitialData } from "@/lib/query/initial-data";
@@ -143,9 +145,9 @@ export function EmployeeTasksBoard({
   const t = useTranslations("tasks");
   const tDashboard = useTranslations("dashboard");
   const tCommon = useTranslations("common");
-  const queryClient = useQueryClient();
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [boardNotice, setBoardNotice] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
@@ -155,39 +157,15 @@ export function EmployeeTasksBoard({
     "id" | "title" | "dueDate"
   > | null>(null);
   const today = todayInOrgTimezone();
+  const boardQueryKey = ["tasks", "employee-board", viewerId] as const;
 
   const tasksQuery = useQuery({
-    queryKey: ["tasks", "employee-board", viewerId],
+    queryKey: boardQueryKey,
     queryFn: () => fetchMyTasks(viewerId),
     ...withInitialData(initialTasks.items),
   });
 
-  const statusMutation = useMutation({
-    mutationFn: async ({
-      taskId,
-      status,
-    }: {
-      taskId: string;
-      status: TaskStatus;
-    }) => {
-      const response = await fetch(`/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-      const payload = (await response.json()) as {
-        error?: { message: string };
-      };
-      if (!response.ok) {
-        throw new Error(payload.error?.message ?? t("updateFailed"));
-      }
-    },
-    onSuccess: async () => {
-      setSuccessMessage(t("statusUpdateSuccess"));
-      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    },
-  });
-
+  const statusMutation = useBoardStatusMutation(boardQueryKey);
   const filtered = useMemo(
     () =>
       filterEmployeeBoardTasks(tasksQuery.data ?? [], {
@@ -244,9 +222,9 @@ export function EmployeeTasksBoard({
       />
       <p className="text-xs text-muted-foreground">{t("assignedToMeLabel")}</p>
 
-      {successMessage ? (
-        <Alert>
-          <AlertDescription>{successMessage}</AlertDescription>
+      {boardNotice ? (
+        <Alert variant="destructive">
+          <AlertDescription>{boardNotice}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -318,31 +296,53 @@ export function EmployeeTasksBoard({
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {columns.map((column) => (
+        {columns.map((column) => {
+          const isBlockedColumn = column.status === "blocked";
+          const isDropTarget = dropTarget === column.status;
+          const showBlockedHint = Boolean(draggingId) && isBlockedColumn;
+
+          return (
           <div
             key={column.status}
             className={cn(
-              "min-w-[260px] flex-1 rounded-lg border p-3",
+              "min-w-[260px] flex-1 rounded-lg border p-3 transition-shadow",
               STATUS_COLORS[column.status],
+              isDropTarget &&
+                !isBlockedColumn &&
+                "ring-2 ring-primary/40 ring-offset-2 ring-offset-background",
+              isDropTarget &&
+                isBlockedColumn &&
+                "ring-2 ring-destructive/40 ring-offset-2 ring-offset-background",
             )}
             onDragOver={(event) => {
               event.preventDefault();
+              event.dataTransfer.dropEffect = isBlockedColumn ? "none" : "move";
+              setDropTarget(column.status);
             }}
             onDrop={(event) => {
               event.preventDefault();
-              if (!draggingId) return;
-              const task = filtered.find((item) => item.id === draggingId);
+              const taskId = draggingId;
+              setDraggingId(null);
+              setDropTarget(null);
+              if (!taskId) return;
+
+              if (isBlockedColumn) {
+                setBoardNotice(t("boardBlockedDropDenied"));
+                return;
+              }
+
+              const task = filtered.find((item) => item.id === taskId);
               if (
                 task &&
                 task.status !== column.status &&
                 !(task.incompleteDependencyCount ?? 0)
               ) {
+                setBoardNotice(null);
                 statusMutation.mutate({
-                  taskId: draggingId,
+                  taskId,
                   status: column.status,
                 });
               }
-              setDraggingId(null);
             }}
           >
             <div className="mb-3 flex items-center justify-between gap-2">
@@ -359,6 +359,17 @@ export function EmployeeTasksBoard({
                 {column.tasks.length}
               </Badge>
             </div>
+            {isBlockedColumn ? (
+              <p
+                className={cn(
+                  "mb-2 flex items-start gap-1.5 text-xs text-muted-foreground",
+                  showBlockedHint && "font-medium text-destructive",
+                )}
+              >
+                <Lock className="mt-0.5 size-3 shrink-0" aria-hidden />
+                <span>{t("boardBlockedColumnHint")}</span>
+              </p>
+            ) : null}
             <div className="space-y-2">
               {column.tasks.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
@@ -376,9 +387,15 @@ export function EmployeeTasksBoard({
                     key={task.id}
                     draggable={!statusLocked}
                     onDragStart={() => {
-                      if (!statusLocked) setDraggingId(task.id);
+                      if (!statusLocked) {
+                        setBoardNotice(null);
+                        setDraggingId(task.id);
+                      }
                     }}
-                    onDragEnd={() => setDraggingId(null)}
+                    onDragEnd={() => {
+                      setDraggingId(null);
+                      setDropTarget(null);
+                    }}
                     title={
                       statusLocked
                         ? t("statusLockedByDependencies")
@@ -421,12 +438,6 @@ export function EmployeeTasksBoard({
                     </p>
 
                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {statusLocked ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          <Lock className="size-3 shrink-0" aria-hidden />
-                          {t("boardWaitingOnDependencies")}
-                        </span>
-                      ) : null}
                       <PriorityPill
                         priority={task.priority}
                         label={priorityLabel(task.priority)}
@@ -453,6 +464,10 @@ export function EmployeeTasksBoard({
                       ) : null}
                     </div>
 
+                    <TaskBlockerChips
+                      blockers={task.incompleteDependencies ?? []}
+                    />
+
                     {!isCompleted ? (
                       <Button
                         type="button"
@@ -476,7 +491,8 @@ export function EmployeeTasksBoard({
               })}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <TaskRequestDialog

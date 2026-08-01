@@ -61,9 +61,6 @@ export function navItemIsVisible(
   return true;
 }
 
-/** Sidebar items hidden from the simplified employee shell (routes stay open). */
-const HIDE_FROM_EMPLOYEE: Role[] = ["employee"];
-
 export const navSections: NavSection[] = [
   {
     key: "main",
@@ -122,7 +119,6 @@ export const navSections: NavSection[] = [
         icon: Building2,
         enabled: true,
         permission: "department.view",
-        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "employees",
@@ -165,7 +161,6 @@ export const navSections: NavSection[] = [
         icon: Megaphone,
         enabled: true,
         permission: "announcement.view",
-        hideForRoles: HIDE_FROM_EMPLOYEE,
       },
       {
         key: "notifications",
